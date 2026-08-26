@@ -6,7 +6,11 @@ name = "Digimon World"
 id = "SLUS-01032"
 players = 1
 exe = "disc/SLUS_010.32"
-disc = "C:/path/to/your/disc/Digimon World (USA).cue"
+# Relative to the project root. Players pick their own dump with the
+# launcher's "Change Disc" button, which records the choice in
+# settings.toml and overrides this default -- so an absolute path here
+# would only ever be right on one machine.
+disc = "disc/Digimon World (USA).cue"
 load_address = "0x80090800"
 entry_pc = "0x800A4240"
 # Header t_size is sector-rounded past the BSS memfill start (0x80134C4C);
