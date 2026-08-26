@@ -90,3 +90,6 @@ starvation_dump.jsonl
 # Local run logs
 /run_stdout.txt
 /run_stderr.txt
+
+# Generated Vice mod embeds bytes from the Vice hack -- never commit it.
+/mods/packages/dw.vanilla.vice/
