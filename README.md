@@ -92,7 +92,25 @@ another project's bytes and must not be redistributed. The framework working
 tree can also carry stray `.mcd` memory cards holding someone's saves. Both
 were present the first time this was packaged.
 
-## Rebuilding
+## Rebuilding (developers)
+
+This repo does not vendor the framework. Get it first:
+
+```
+bash tools/bootstrap.sh
+```
+
+That clones two things: [Ethan4love/psxrecomp](https://github.com/Ethan4love/psxrecomp)
+(branch `fix/bss-memfill-overlap`) and [mstan/recomp-ui](https://github.com/mstan/recomp-ui).
+
+The psxrecomp checkout is a **fork**, and it has to be. Upstream will not build
+this project: it rejects this game's executable outright, because the header's
+BSS memfill overlaps the sector-rounded code tail. The fork also carries the SDL
+joystick-hint ordering fix that keeps controllers working through the launcher,
+a cap on freeze-dump size, the GameShark cheat engine, and the widescreen
+activation plugin. Six commits, all on that branch.
+
+Then:
 
 ```
 cmake -S psxrecomp/recompiler -B psxrecomp/recompiler/build -G Ninja -DCMAKE_BUILD_TYPE=Release
