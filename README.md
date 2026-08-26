@@ -6,7 +6,7 @@ high-resolution rendering, save states, rewind, and a mod menu.
 
 ### ▶ [**Download the latest version**](https://github.com/Ethan4love/Digimon-world-PSX-RECOMP/releases/latest)
 
-Grab `digimon-world-0.1.4-win-x64.zip` from that page.
+Grab `digimon-world-0.1.5-win-x64.zip` from that page.
 
 ---
 
@@ -114,7 +114,7 @@ instead of the `.cue`, or your copy is a different release.
 **The game is running too fast?** Open the Mods panel and make sure
 **Fast Loading** is off. It accelerates real time during loads, and on this game
 it stays on permanently, running everything at 4x speed. It is off by default
-from 0.1.4 onward.
+from 0.1.5 onward.
 
 **Controller does nothing** — the Analog/D-Pad toggle is on Analog. Switch it to
 **D-Pad**. This is the single most common problem.
