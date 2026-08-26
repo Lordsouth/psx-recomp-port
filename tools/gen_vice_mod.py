@@ -123,6 +123,28 @@ def diff_runs(a, b, merge_gap=MERGE_GAP):
     return runs
 
 
+def chunk(runs, limit, boundary=0, base=0):
+    """Split runs so no patch exceeds `limit` bytes, and -- when `boundary` is
+    set -- so none straddles a boundary.
+
+    The runtime refuses a disc patch that crosses a sector ("disc patch may not
+    cross a sector boundary"), and one bad patch throws out the whole manifest,
+    silently: the package simply never applies. So the splitting happens here.
+    """
+    out = []
+    for off, n in runs:
+        pos = 0
+        while pos < n:
+            take = min(limit, n - pos)
+            if boundary:
+                abs_off = base + off + pos
+                room = boundary - (abs_off % boundary)
+                take = min(take, room)
+            out.append((off + pos, take))
+            pos += take
+    return out
+
+
 def hexs(bs):
     return " ".join("%02x" % x for x in bs)
 
@@ -142,7 +164,7 @@ def main():
               "patching does not apply" % (len(van_exe), len(vice_exe)))
         return 1
 
-    exe_runs = diff_runs(van_exe, vice_exe)
+    exe_runs = chunk(diff_runs(van_exe, vice_exe), 256)
     exe_bytes = sum(n for _o, n in exe_runs)
     print("%-16s %6d patches  %7d bytes" % (EXE, len(exe_runs), exe_bytes))
 
@@ -165,7 +187,8 @@ def main():
             print("  SKIP %s: not in the vanilla ISO directory" % name)
             continue
         lba, size = catalog[name]
-        runs = diff_runs(a, b)
+        runs = chunk(diff_runs(a, b), USER_DATA,
+                     boundary=USER_DATA, base=lba * USER_DATA)
         ov.append((name, lba, runs, a, b))
         ov_patches += len(runs)
         ov_bytes += sum(n for _o, n in runs)
