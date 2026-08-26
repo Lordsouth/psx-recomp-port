@@ -62,6 +62,36 @@ and their tables are not interchangeable. Regenerate with
 `cheats.txt` holds GameShark-style codes; flip `[ ]` to `[x]` and restart.
 Those are per-frame RAM writes, applied on top of whatever the Mods panel does.
 
+## Installing (for players)
+
+You do **not** need a compiler toolchain. Download the setup package, extract
+it anywhere, and run `Digimon_World_Recompiled.exe`. A first-run wizard offers
+to fetch a portable cmake/clang pack, asks for your own disc, generates the
+port on your machine and builds it. After that the same exe takes you straight
+into the game.
+
+You need Python 3 installed, and your own dump — see [DISC.md](DISC.md).
+
+Nothing game-related is in that download. The port is produced from your disc
+on your machine, which is why there is a build step at all.
+
+### Producing the setup package
+
+```
+cmake -S . -B build-setup -G Ninja -DCMAKE_BUILD_TYPE=Release   -DPSX_RECOMP_UI=ON -DRECOMP_UI_ENABLE_MODS=ON   -DPSXRECOMP_FORCE_SETUP_HOST=ON -DPSX_SETUP_WIZARD=ON
+cmake --build build-setup --target psx-runtime
+psxrecomp/tools/package_setup_host.sh --build-dir build-setup   --artifact win-x64 --zip-prefix digimon-world   --exe-name Digimon_World_Recompiled --display-name "Digimon World Recompiled"   --recompiler-build psxrecomp/recompiler/build   --project-dir mods --project-dir tools --project-dir seeds   --project-file cheats.txt --project-file DISC.md   # ...and the rest
+```
+
+`PSXRECOMP_FORCE_SETUP_HOST` links the host **without** the generated game C,
+which is what keeps game code out of the download.
+
+**Before zipping, check the staged tree.** `--project-dir mods` sweeps in
+everything under `mods/packages`, including generated manifests that embed
+another project's bytes and must not be redistributed. The framework working
+tree can also carry stray `.mcd` memory cards holding someone's saves. Both
+were present the first time this was packaged.
+
 ## Rebuilding
 
 ```
