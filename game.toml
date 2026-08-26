@@ -1,0 +1,78 @@
+# Autofilled by tools/new_project_layout/probe_disc.py from your legal dump.
+# Review before shipping. Runtime quirks / overlay seeds still need hand work.
+
+[game]
+name = "Digimon World"
+id = "SLUS-01032"
+players = 1
+exe = "disc/SLUS_010.32"
+disc = "C:/path/to/your/disc/Digimon World (USA).cue"
+load_address = "0x80090800"
+entry_pc = "0x800A4240"
+# Header t_size is sector-rounded past the BSS memfill start (0x80134C4C);
+# bound analysis below it -- same fix as the Vice build (framework patch
+# makes the overlap a warning, this keeps the sweep clean).
+text_size = "0x000A4000"
+stack_base = "0x801FFFF0"
+
+# Digests are for data Track 01 (first BINARY FILE / TRACK 01).
+[prepare_disc]
+out_dir = "disc"
+bin_name = "Digimon World (USA).bin"
+cue_name = "Digimon World (USA).cue"
+boot_exe = "SLUS_010.32"
+known_sizes = [381771936]
+known_md5 = [
+  "8520edac0f7f1454f8a008ac5e599c1a",
+]
+known_sha1 = [
+  "5611645da66183e30d11fb6c11a2784ff47e1fdb",
+]
+
+[recompiler]
+seeds = "seeds/ghidra_funcs.txt"
+out_dir = "generated"
+strict = true
+
+[runtime]
+window_title = "Digimon World Recompiled"
+memcard_dir = "saves"
+
+# Tier-2 overlays: capture + background-compile to native DLLs (gcc on PATH
+# via the launcher bat). py -3.12 pinned: py -3 is 3.8 here, no tomllib.
+overlay_cache = true
+overlay_autocompile_cmd = "py -3.12 psxrecomp/tools/compile_overlays.py --game-toml game.toml --recompiler psxrecomp/recompiler/build/psxrecomp-game.exe --runtime-include psxrecomp/runtime/include --out-dir cache"
+
+[video]
+renderer = "opengl"
+# Widescreen is mod-owned (psx.enhancement.widescreen in the Mods panel);
+# this stays 4:3 and is clamped anyway.
+aspect_ratio = "4:3"
+supersampling = 4
+antialiasing = true
+texture_filtering = "nearest"
+crt_filter = "trinitron"
+# geometry_correction stays OFF: framework-withdrawn, 0.2% coverage measured.
+perspective_texturing = true
+
+[audio]
+spu_hq = true
+
+# Same widescreen tuning proven on the Vice build: fully-3D title needs the
+# GTE-activity detector; native-wide shows stale side strips, boundary void
+# and torn menus on this game, so squash mode.
+[widescreen]
+gte_game_mode = true
+clear_reveal = true
+native_wide = false
+
+[controller]
+default_mode = "digital"
+
+# Online mount gate: digests + track count + optional TOC fingerprint
+# (see docs/NETPLAY.md).
+[netplay]
+require_cue = true
+required_tracks = 1
+# required_disc_fp: intentionally unset -- the Vice value does not describe
+# this disc, and require_cue + required_tracks already gate the mount.

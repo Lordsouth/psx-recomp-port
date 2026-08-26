@@ -1,0 +1,302 @@
+# Digimon World Vice -- GameShark / PEC cheat codes
+#
+# HOW TO USE: flip [ ] to [x] to turn a cheat on, then start the game.
+#             Flip it back to [ ] to turn it off. Nothing else to do.
+#
+# These are per-frame RAM pokes, exactly like a real GameShark: the runtime
+# rewrites the target values every frame on guest VBlank. That is different
+# from the Digimon World Trainer in the launcher's Mods panel, which patches
+# the executable once before boot. Both can be used at the same time.
+#
+# Addresses below were cross-checked against the dw_decomp field map, and the
+# `<- field` comments name the actual struct member each code writes:
+#   PARTNER_PARA   @ 0x80138460  (raise-sim state: hunger, tiredness, ...)
+#   PARTNER_ENTITY @ 0x801557A8  (stats, moves, lives)
+# Two published codes had an off-by-one and are corrected here -- see
+# "Weight Modifier" and "Age Modifier".
+#
+# Supported code types: 30 (write byte), 80 (write halfword),
+#                       D0/D1/D2/D3 (halfword ==, !=, <, > gate next line),
+#                       E0/E1/E2/E3 (byte     ==, !=, <, > gate next line).
+# Unsupported types are listed at the bottom with an explanation.
+
+
+# ---------------------------------------------------------------- movies ----
+# MOVIE_COMPLETED @ 0x80135304 -- the flag the movie player itself sets when a
+# stream reaches its last frame (MOV_readFrame: `if (header->frameCount >=
+# movie->frameCount) MOVIE_COMPLETED = 1;`). Holding it at 1 makes every movie
+# finish on its first decoded frame, so the game tears the player down its own
+# way instead of being interrupted.
+#
+# This is why it is a cheat and not a Mods-panel patch: this port is a STATIC
+# recompilation, so patching an instruction in RAM does nothing -- the code was
+# already compiled to native at build time. Per-frame DATA writes still work,
+# which is what the GameShark engine does.
+#
+# Verified live: writing 01 here while the intro was playing ended it instantly.
+
+[x] Skip all movies (boot straight to the title screen)
+30135304 0001         # <- MOVIE_COMPLETED = 1
+
+# ---------------------------------------------------------------- stats ----
+# PARTNER_ENTITY + 0x38.. -- Stats.base / Stats.current in dw_decomp.
+
+[ ] Max Offense (999)
+801557E0 03E7          # <- stats.base.off
+
+[ ] Max Defense (999)
+801557E2 03E7          # <- stats.base.def
+
+[ ] Max Speed (999)
+801557E4 03E7          # <- stats.base.speed
+
+[ ] Max Brains (999)
+801557E6 03E7          # <- stats.base.brain
+
+[ ] Brains 549 (keeps tech learning, avoids the high-brain MP glitch)
+801557E6 0225          # <- stats.base.brain
+
+[ ] Max HP (9999)
+801557F0 270F          # <- stats.base.hp
+
+[ ] Max MP (9999)
+801557F2 270F          # <- stats.base.mp
+
+[ ] Infinite HP
+801557F4 270F          # <- stats.current.currentHP
+
+[ ] Infinite MP
+801557F6 270F          # <- stats.current.currentMP
+
+[ ] Have All Attacks
+30155800 00FF          # <- learnedMoves[0] byte 0
+30155801 00FF
+30155802 00FF
+30155803 00FF
+30155804 00FF          # <- learnedMoves[1]
+30155805 00FF
+30155806 00FF
+30155807 00FF
+
+[ ] Infinite Lives (3 hearts)
+80155824 0003          # <- PartnerEntity.lives
+
+
+# ------------------------------------------------------------ care state ----
+# PARTNER_PARA @ 0x80138460.
+
+[ ] Best Happiness
+8013848A 00AA          # <- happiness  (+0x2A)
+
+[ ] Best Discipline
+80138488 00AA          # <- discipline (+0x28)
+
+[ ] No Eating And No Pooping
+80138478 00FF          # <- poopLevel  (+0x18)
+8013849E 00FF          # <- foodLevel  (+0x3E)
+
+[ ] Show tiredness in the virus bar
+D0138482 0000          # if tiredness (+0x22) == 0
+8013847E 0000          #   virusBar (+0x1E) = 0
+D3138482 000A          # if tiredness > 10
+8013847E 0002
+D3138482 0014
+8013847E 0004
+D3138482 001E
+8013847E 0006
+D3138482 0028
+8013847E 0008
+D3138482 0032
+8013847E 000A
+D3138482 003C
+8013847E 000C
+D3138482 0046
+8013847E 000E
+
+[ ] Age 15 extends life by 300 hours
+E01384AA 000F          # if age (+0x4A) == 15
+801384A8 012C          #   remainingLifetime (+0x48) = 300
+
+[ ] Weight Modifier -- 40
+801384A2 0028          # <- weight (+0x42). CORRECTED: the published code
+                       # writes 0x801384A3, the HIGH byte of this 16-bit
+                       # field, so it never sets the weight you asked for.
+
+[ ] Age Modifier -- 0
+801384AA 0000          # <- age (+0x4A). CORRECTED for the same reason
+                       # (published code targets 0x801384AB).
+
+
+# -------------------------------------------------------------- training ----
+
+[ ] Training foods give double results
+801384AE 0014          # <- trainBoostValue (+0x4E)
+
+[ ] Always have the Digipine effect
+801384AC 003F          # <- trainBoostFlag (+0x4C)
+
+[ ] All gyms upgraded with baby bonus (+20%)
+801384C6 000A
+801384C8 000A
+801384CA 000A
+801384CE 000A
+801384D0 000A
+
+
+# ---------------------------------------------------------------- world ----
+
+[ ] Max Bits (money)
+80134EB8 E0FF
+80134EBA 05F5
+
+[ ] Max Merit Points
+80134FC4 03E7
+
+[ ] Inventory size max (30 slots)
+8013D4CE 001E
+
+[ ] Can pick meat every hour
+E0134EBE 0001
+801BE050 0002
+
+[ ] Smaller aggro radius (enemies notice you late)
+8012CECC 0000
+
+[ ] Speed up the game
+80115A4C 0000
+
+[ ] Auto-kill most enemies
+80155874 0000
+801559AC 0000
+80155A14 0000
+80155944 0000
+80155AE4 0000
+80155B4C 0000
+801558DC 0000
+80155A7C 0000
+
+[ ] Have all cards
+301BDFAC 00FF
+301BDFAD 00FF
+301BDFAE 00FF
+301BDFAF 00FF
+301BDFB0 00FF
+301BDFB1 00FF
+301BDFB2 00FF
+301BDFB3 00FF
+301BDFB4 00FF
+301BDFB5 00FF
+301BDFB6 00FF
+301BDFB7 00FF
+301BDFB8 00FF
+301BDFB9 00FF
+301BDFBA 00FF
+301BDFBB 00FF
+301BDFBC 00FF
+301BDFBD 00FF
+301BDFBE 00FF
+301BDFBF 00FF
+301BDFC0 00FF
+301BDFC1 00FF
+301BDFC2 00FF
+301BDFC3 00FF
+301BDFC4 00FF
+301BDFC5 00FF
+301BDFC6 00FF
+301BDFC7 00FF
+301BDFC8 00FF
+301BDFC9 00FF
+301BDFCA 00FF
+301BDFCB 00FF
+301BDFCC 00FF
+
+[ ] Have all medals
+801BDFFA FFFF
+801BDFFC FFFF
+
+[ ] Have key items
+301BDFD2 00FF
+301BDFD3 00FF
+
+[ ] All Digimon on the chart / all evolved
+301BE00D 00FF
+801BE00E FFFF
+801BE010 FFFF
+801BE012 FFFF
+301BE014 00FF
+
+[ ] All Digimon in city
+301557C5 0037
+801557C6 0037
+
+[ ] Monochromon shop points (3908)
+8013500C 0F44
+
+
+# ----------------------------------------------------------- known gaps ----
+# These published codes use operations this engine does not implement. They
+# are listed so nothing is silently lost -- enabling them prints a warning and
+# skips only the unsupported lines.
+#
+# "HAPPY = DISCIPLINE" and "ENEMY GIVES MONEY = HP" open with type C2, and
+# "Have All Cards (short form)" / "All Digimon Raised" use type 50 repeat
+# blocks. C2 and 50 are vendor extensions whose exact semantics vary between
+# GameShark revisions and PEC; implementing them from a guess would poke the
+# wrong addresses. The long-form equivalents above cover the same ground.
+#
+# [ ] HAPPY = DISCIPLINE (unsupported: C2)
+# C213848A 0002
+# 80138488 0000
+# D2138488 0032
+# 80138488 0032
+# D0138488 0064
+# 80138488 0063
+# E3138488 0064
+# 80138488 0000
+
+
+# ------------------------------------------------- more published codes ----
+# Sourced from public GameShark lists for SLUS-01032 and cross-checked against
+# the dw_decomp field map like everything above.
+
+[ ] No Virus
+8013847E 0000          # <- virusBar (+0x1E)
+
+[ ] Perfect balance of happiness and discipline
+8013848A 0065          # <- happiness  (+0x2A) = 101
+80138488 0030          # <- discipline (+0x28) = 48
+
+[ ] Always have Finish available
+8013D65A 0AF1
+
+[ ] Max quantity in all 10 item slots
+50000A01 0000          # repeat 10x, address +1 each
+3013D492 0063          #   <- inventory counts, slots 1..10 = 99
+
+[ ] Max quantity of every storage item
+50003801 0000          # repeat 56x, address +1 each
+301BDF58 0063          #   <- storage counts (Digimushrm .. Metal Banana)
+
+[ ] Press O to beat the game
+D0135450 FFDF          # if pad (0x80135450) has Circle held
+80134EB4 0003          #   set the ending flag
+
+[ ] Press Square to lay a pile of poop
+D0135450 FF7F          # if pad has Square held
+80138460 FFFF          #   <- PartnerPara.condition (+0x00)
+
+# ------------------------------------------------------------ new digimon ----
+# Requires the "New Digimon" mod (Mods panel) so slot 114 exists. Enable the
+# cheat, then the body appears when the partner model next LOADS: quit to the
+# title and Continue, or start a new game. (Saving in this game happens ONLY
+# through Sleep -- menu -> Sleep when the partner shows the ZZZ bubble; the
+# option is greyed out otherwise. There is no other way to save.) While the
+# cheat is enabled the type is held, so disable it afterwards if you want
+# evolution to work. Do not load savestates made before the mod was enabled --
+# they restore the old tables.
+
+[ ] Partner becomes Mugendramon (new, slot 114)
+801557A8 0072          # <- PARTNER_ENTITY.entity.type
+
+[ ] Partner becomes Machinedramon (the boss, 115)
+801557A8 0073          # <- same mechanism, the original boss entry
