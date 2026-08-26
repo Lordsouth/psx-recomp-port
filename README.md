@@ -6,7 +6,7 @@ high-resolution rendering, save states, rewind, and a mod menu.
 
 ### ▶ [**Download the latest version**](https://github.com/Ethan4love/Digimon-world-PSX-RECOMP/releases/latest)
 
-Grab `digimon-world-0.1.3-win-x64.zip` from that page.
+Grab `digimon-world-0.1.4-win-x64.zip` from that page.
 
 ---
 
@@ -89,8 +89,8 @@ Click **Mods** in the launcher. Everything is off by default; tick what you want
 | **Quality of Life** | Make your partner live longer than the stock 15 in-game days; slow the world clock so hunger, tiredness and ageing all relax together |
 | **Gameplay** | Better odds of learning techniques in battle; lower the stat requirements for evolutions |
 | **Trainer** | Immortality, no pooping, no lifespan loss, stat-gain multipliers |
-| **Widescreen** | 16:9 (on by default) |
-| **Fast Loading** | Much shorter loads (on by default) |
+| **Widescreen** | 16:9 (the one mod that is on by default) |
+| **Fast Loading** | Shorter loads. **Off by default and best left off on this game** -- it speeds up real time whenever it thinks a load is happening, and on Digimon World it stays engaged, running the whole game at 4x. |
 
 Turning a mod off restores the original game exactly — every change is a guarded
 patch, nothing is permanent.
@@ -110,6 +110,11 @@ Python to PATH" tickbox. Reinstall it with that box ticked.
 **"Disc not recognised", or setup rejects your file** — you picked the `.bin`
 instead of the `.cue`, or your copy is a different release.
 [DISC.md](DISC.md) lists the file size and checksums to compare against.
+
+**The game is running too fast?** Open the Mods panel and make sure
+**Fast Loading** is off. It accelerates real time during loads, and on this game
+it stays on permanently, running everything at 4x speed. It is off by default
+from 0.1.4 onward.
 
 **Controller does nothing** — the Analog/D-Pad toggle is on Analog. Switch it to
 **D-Pad**. This is the single most common problem.
