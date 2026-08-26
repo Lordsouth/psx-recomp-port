@@ -6,7 +6,7 @@ high-resolution rendering, save states, rewind, and a mod menu.
 
 ### ▶ [**Download the latest version**](https://github.com/Ethan4love/Digimon-world-PSX-RECOMP/releases/latest)
 
-Grab `digimon-world-0.1.1-win-x64.zip` from that page.
+Grab `digimon-world-0.1.2-win-x64.zip` from that page.
 
 ---
 
@@ -40,7 +40,7 @@ code-signing certificate.
 It will offer to download build tools (about 100 MB). Leave the box ticked and
 click **Next**.
 
-**4. Point it at your game.** Click **Change Disc** and select your **`.cue`**
+**4. Point it at your game.** Click **Browse Disc** and select your **`.cue`**
 file — the small one, not the big `.bin`.
 
 **5. Wait.** It now builds your copy of the game. **This takes 10–30 minutes**
