@@ -6,7 +6,7 @@ high-resolution rendering, save states, rewind, and a mod menu.
 
 ### ▶ [**Download the latest version**](https://github.com/Ethan4love/Digimon-world-PSX-RECOMP/releases/latest)
 
-Grab `digimon-world-0.1.0-win-x64.zip` from that page.
+Grab `digimon-world-0.1.1-win-x64.zip` from that page.
 
 ---
 
