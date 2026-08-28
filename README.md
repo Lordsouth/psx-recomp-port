@@ -6,9 +6,12 @@ high-resolution rendering, save states, rewind, and a mod menu.
 
 ### Getting it
 
-There is no prebuilt download: the port is generated from **your own disc**, on
-your machine. See [Installing](#installing) below, or [DEVELOPING.md](DEVELOPING.md)
-to build from source.
+Check the [Releases](https://gitlab.com/ethan4love/psx-recomp-port/-/releases)
+page for a setup package (`digimon-world-*-win-x64.zip`). If none is attached,
+build one yourself — see [DEVELOPING.md](DEVELOPING.md).
+
+Either way there is **no playable download**: the port is generated from your
+own disc, on your machine. Nothing game-related is distributed here.
 
 ---
 
@@ -20,18 +23,17 @@ to build from source.
 Run the installer and **tick "Add Python to PATH"** on the first screen — this
 matters, the setup won't find it otherwise.
 
-**Your own copy of the game**, as a `.bin` + `.cue` pair on your PC. This
-download contains no game data at all. See [DISC.md](DISC.md) for the exact
+**Your own copy of the game**, as a `.bin` + `.cue` pair on your PC. Nothing
+here includes game data. See [DISC.md](DISC.md) for the exact
 version and how to check yours is right.
 
 ---
 
 ## Installing
 
-These steps assume you have the **setup package** (`digimon-world-*-win-x64.zip`).
-If no release is attached to this project, build it yourself — see
-"Producing the setup package" in [DEVELOPING.md](DEVELOPING.md). It contains no
-game data either way.
+These steps assume you have the **setup package**
+(`digimon-world-*-win-x64.zip`) from Releases, or one you built yourself per
+[DEVELOPING.md](DEVELOPING.md). It contains no game data either way.
 
 **1. Extract the zip.** Right-click → Extract All. Put it somewhere you'll keep
 it, like `C:\Games\Digimon World`. Don't run it from inside the zip.
