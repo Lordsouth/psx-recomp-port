@@ -10,7 +10,7 @@ This repo does not vendor the framework. Get it first:
 bash tools/bootstrap.sh
 ```
 
-That clones two things: [Ethan4love/psxrecomp](https://github.com/Ethan4love/psxrecomp)
+That clones two things: [ethan4love/psxrecomp](https://gitlab.com/ethan4love/psxrecomp)
 (branch `fix/bss-memfill-overlap`) and [mstan/recomp-ui](https://github.com/mstan/recomp-ui).
 
 The psxrecomp checkout is a **fork**, and it has to be. Upstream will not build

@@ -14,7 +14,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PSXRECOMP_URL="https://github.com/Ethan4love/psxrecomp.git"
+PSXRECOMP_URL="https://gitlab.com/ethan4love/psxrecomp.git"
 PSXRECOMP_REF="fix/bss-memfill-overlap"
 RECOMP_UI_URL="https://github.com/mstan/recomp-ui.git"
 
