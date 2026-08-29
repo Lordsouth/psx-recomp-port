@@ -104,19 +104,33 @@ static void roster_fill(void) {
 }
 
 static int roster_live = 0;
+static int roster_filled = 0;
 
-static void roster_hook(struct CPUState* cpu, uint32_t address) {
-    static int checked = 0;
-    (void)cpu;
-    (void)address;
-    if (checked || !roster_arena)
+/* Fill once per process, but only when the manifest's retarget patches are
+ * actually present in guest RAM (patches applied <=> feature enabled). */
+static void roster_ensure_filled(void) {
+    if (roster_filled || !roster_arena)
         return;
-    checked = 1;
-    /* engage only when the manifest's retarget patches actually applied */
     if ((psx_mod_read_word(DETECT_LUI_VADDR) & 0xFFFFu) != 0x9F00u)
         return;
+    roster_filled = 1;
     roster_live = 1;
     roster_fill();
+}
+
+static void roster_hook(struct CPUState* cpu, uint32_t address) {
+    (void)cpu;
+    (void)address;
+    roster_ensure_filled();
+}
+
+/* A session resumed from a savestate at boot never runs initializeHeap, so
+ * the entry hook alone leaves the arena unfilled (the crash mode: retargeted
+ * reads hit zeros). The framework reapplies the mod plan on restore, so the
+ * patch-detect gate holds; this per-VBlank check closes the gap. */
+static void roster_vblank(void) {
+    if (!roster_filled && psx_mod_game_started())
+        roster_ensure_filled();
 }
 
 /* Model + texture remap: slot 114 has no MMD file or ALLTIM slot of its own
@@ -148,6 +162,7 @@ PSX_MOD_CONSTRUCTOR(dw_roster_register) {
     psx_mod_register_activation_plugin("dw.roster", roster_activate);
     psx_mod_register_function_entry_plugin("dw.roster", ROSTER_HOOK_VADDR,
                                            roster_hook);
+    psx_mod_register_vblank_plugin("dw.roster", roster_vblank);
     psx_mod_register_function_entry_plugin("dw.roster", ROSTER_LOADMMD_VADDR,
                                            roster_remap_hook);
     psx_mod_register_function_entry_plugin("dw.roster",
