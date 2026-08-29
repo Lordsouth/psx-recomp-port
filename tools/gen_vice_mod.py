@@ -47,8 +47,33 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 VANILLA_DIR = os.path.normpath(os.path.join(ROOT, "..", "game-vanilla", "extracted"))
 VICE_DIR = os.path.normpath(os.path.join(ROOT, "..", "game", "extracted"))
-VANILLA_BIN = (r"C:\path\to\your\disc"
-               r"\Windows\x86_64\Digimon World (USA).bin")
+
+
+def _vanilla_bin():
+    """The vanilla disc's .bin, from --vanilla-bin or the project's game.toml.
+
+    game.toml points at the .cue; the .bin is read out of the cue's FILE line
+    (relative to the cue) rather than guessed by swapping the extension.
+    """
+    for i, a in enumerate(sys.argv):
+        if a == "--vanilla-bin" and i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+    try:
+        import tomllib
+    except ImportError:  # 3.10
+        import tomli as tomllib
+    with open(os.path.join(ROOT, "game.toml"), "rb") as f:
+        cue = tomllib.load(f)["game"]["disc"]
+    if not os.path.isabs(cue):
+        cue = os.path.join(ROOT, cue)
+    with open(cue, "r", encoding="ascii", errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if line.upper().startswith("FILE "):
+                name = line.split('"')[1]
+                return os.path.join(os.path.dirname(cue), name)
+    raise SystemExit("no FILE line in %s -- pass --vanilla-bin <path>" % cue)
+
 
 PKG_ID = "dw.vanilla.vice"
 PKG_VER = "1.0.0"
@@ -170,7 +195,7 @@ def main():
 
     # Overlays: every shared file that differs, addressed by its LBA on the
     # VANILLA disc (that is the image this mod is applied to).
-    catalog = iso_files(VANILLA_BIN)
+    catalog = iso_files(_vanilla_bin())
     ov = []
     ov_patches = ov_bytes = 0
     for name in sorted(set(os.listdir(VANILLA_DIR)) & set(os.listdir(VICE_DIR))):

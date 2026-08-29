@@ -25,7 +25,7 @@ ordering that keeps controllers alive through the launcher, a Windows `os.utime`
 crash that killed every rebuild, a `Path.write_text` call that broke setup on
 Python 3.8/3.9, the dllexport-on-redeclaration fix without which no overlay
 compiles under clang, a frame-pacing guard for monitors where vsync does not
-actually throttle, the GameShark cheat engine, and the widescreen plugin.
+actually throttle, the GameShark cheat engine, and the widescreen plugin. The fork also pins the downloaded build toolchain to a fixed release tag and SHA-256 and no longer edits the user's PATH.
 
 ## 2. Build
 
