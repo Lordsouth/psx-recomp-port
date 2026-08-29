@@ -28,10 +28,12 @@ include("${PSXRECOMP_ROOT}/runtime/runtime.cmake")
 # psxrecomp/host/psxrecomp_codegen_host.c, and runtime.cmake only compiles that
 # host for PSX_RECOMP_UI builds. Offering it on a UI-less build (e.g. the
 # TCP-drivable debug build) links a caller with no callee.
-set(_dw_codegen_setup "")
+# dw_ws_backdrop.c (deep-widescreen backdrop alignment) uses only the always-
+# compiled mod runtime, so it is unconditional.
+set(_dw_codegen_setup
+    CODEGEN_SETUP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/dw_ws_backdrop.c")
 if(PSX_RECOMP_UI)
-    set(_dw_codegen_setup
-        CODEGEN_SETUP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/codegen_setup.c")
+    list(APPEND _dw_codegen_setup "${CMAKE_CURRENT_SOURCE_DIR}/codegen_setup.c")
 endif()
 
 psxrecomp_add_game_runtime(psx-runtime

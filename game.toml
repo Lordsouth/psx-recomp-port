@@ -34,6 +34,10 @@ known_sha1 = [
 ]
 
 [recompiler]
+# Deep widescreen: emit a plugin entry hook in setPosDataPolyFT4 (the shared
+# FT4 positioner). dw_ws_backdrop.c filters by return address to the two
+# world-anchored callers and squashes backdrop X like the GTE squashes 3D.
+mod_function_entry_funcs = ["0x800E56EC"]
 seeds = "seeds/ghidra_funcs.txt"
 out_dir = "generated"
 strict = true
@@ -67,7 +71,6 @@ spu_hq = true
 # and torn menus on this game, so squash mode.
 [widescreen]
 gte_game_mode = true
-clear_reveal = true
 native_wide = false
 
 [controller]

@@ -63,7 +63,7 @@ psxrecomp/tools/package_setup_host.sh \
   --recompiler-build psxrecomp/recompiler/build \
   --runtime-bin /c/msys64/mingw64/bin \
   --project-file CMakeLists.txt --project-file game.toml --project-file VERSION \
-  --project-file codegen_setup.c --project-file codegen_setup.h \
+  --project-file codegen_setup.c --project-file codegen_setup.h \n  --project-file dw_ws_backdrop.c \
   --project-file README.md --project-file DISC.md --project-file cheats.txt \
   --project-dir seeds --project-dir mods --project-dir tools
 ```

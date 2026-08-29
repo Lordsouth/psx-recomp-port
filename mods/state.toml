@@ -1,13 +1,3 @@
+# Launcher-owned mod state. Shipped empty on purpose: every mod starts at
+# its manifest default (all off), and the launcher records choices here.
 format_version = 2
-
-[[package]]
-id = "psx.enhancement.widescreen"
-version = "1.0.0"
-enabled = true
-
-[[feature]]
-package_id = "psx.enhancement.widescreen"
-id = "widescreen"
-enabled = true
-[feature.values]
-aspect = "16:9"

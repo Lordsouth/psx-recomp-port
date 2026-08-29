@@ -91,14 +91,14 @@ arrow keys = D-Pad. Rebind them in the launcher's Controls page.
 
 ## Mods
 
-Click **Mods** in the launcher. Everything is off by default; tick what you want.
+Click **Mods** in the launcher. Everything is off by default — including widescreen from 0.1.7 on; tick what you want.
 
 | Mod | What it does |
 |---|---|
 | **Quality of Life** | Make your partner live longer than the stock 15 in-game days; slow the world clock so hunger, tiredness and ageing all relax together |
 | **Gameplay** | Better odds of learning techniques in battle; lower the stat requirements for evolutions |
 | **Trainer** | Immortality, no pooping, no lifespan loss, stat-gain multipliers |
-| **Widescreen** | 16:9 (the one mod that is on by default) |
+| **Widescreen (experimental)** | 16:9. Off by default: 3D proportions are correct and, new in 0.1.7, the pre-rendered backdrops stay aligned with the 3D — but menus and HUD still render stretched. Turn it on if the trade-off suits you |
 | **Fast Loading** | Shorter loads. **Off by default and best left off on this game** -- it speeds up real time whenever it thinks a load is happening, and on Digimon World it stays engaged, running the whole game at 4x. |
 
 Turning a mod off restores the original game exactly — every change is a guarded
