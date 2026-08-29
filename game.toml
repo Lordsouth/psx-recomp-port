@@ -71,6 +71,15 @@ spu_hq = true
 # and torn menus on this game, so squash mode.
 [widescreen]
 gte_game_mode = true
+# Counter-squash the UI layer so menus/HUD render 4:3-correct instead of
+# stretched. The UI layer starts at the game's own DR_OFFSET reset packet,
+# identified by its static address: DRAW_OFFSETS @0x8015DB90, one 12-byte
+# packet per framebuffer (pauseFrame, utils.c -- AddPrim at OT index 32).
+# DORMANT until the stale-frame issue is resolved (research/
+# widescreen-w2-dossier.md): flip to true to test UI counter-squash.
+ui_offset_squash = false
+ui_offset_packet_addr = "0x8015DB90"
+ui_offset_packet_span = 24
 native_wide = false
 
 [controller]
