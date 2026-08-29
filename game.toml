@@ -37,7 +37,12 @@ known_sha1 = [
 # Deep widescreen: emit a plugin entry hook in setPosDataPolyFT4 (the shared
 # FT4 positioner). dw_ws_backdrop.c filters by return address to the two
 # world-anchored callers and squashes backdrop X like the GTE squashes 3D.
-mod_function_entry_funcs = ["0x800E56EC"]
+mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810"]
+# 0x800A1F68/0x800A2810 = loadMMD/loadMMDAsync: dw_roster.c remaps the
+# type argument 114->115 so slot 114 streams Machinedramon's model and
+# texture.
+# 0x800EEBDC = initializeHeap: runs once, after the BSS memfill, before
+# any table consumer -- dw_roster.c fills its enhancement arena there.
 seeds = "seeds/ghidra_funcs.txt"
 out_dir = "generated"
 strict = true
