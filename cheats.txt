@@ -17,7 +17,13 @@
 #
 # Supported code types: 30 (write byte), 80 (write halfword),
 #                       D0/D1/D2/D3 (halfword ==, !=, <, > gate next line),
-#                       E0/E1/E2/E3 (byte     ==, !=, <, > gate next line).
+#                       E0/E1/E2/E3 (byte     ==, !=, <, > gate next line),
+#                       50 (repeat the NEXT write line: 5000CCSS, count CC,
+#                           address step SS, and the value word is the
+#                           per-iteration value step).
+# A conditional gates only the line straight after it, so never put a D0/E0
+# gate in front of a 50 -- it would consume the repeat and the write would
+# happen once.
 # Unsupported types are listed at the bottom with an explanation.
 
 
@@ -250,11 +256,16 @@ E0134EBE 0001
 # are listed so nothing is silently lost -- enabling them prints a warning and
 # skips only the unsupported lines.
 #
-# "HAPPY = DISCIPLINE" and "ENEMY GIVES MONEY = HP" open with type C2, and
-# "Have All Cards (short form)" / "All Digimon Raised" use type 50 repeat
-# blocks. C2 and 50 are vendor extensions whose exact semantics vary between
-# GameShark revisions and PEC; implementing them from a guess would poke the
-# wrong addresses. The long-form equivalents above cover the same ground.
+# "HAPPY = DISCIPLINE" and "ENEMY GIVES MONEY = HP" open with type C2, a vendor
+# extension whose exact semantics vary between GameShark revisions and PEC;
+# implementing it from a guess would poke the wrong addresses. The long-form
+# equivalents above cover the same ground.
+#
+# Type 50 IS supported and this note used to say otherwise. psx_cheats.c
+# implements it (case 0x50): the address word is 0x50_00_CC_SS -- CC is the
+# repeat count, SS the address step -- and the value word is the per-iteration
+# value step, applied to the NEXT write line only. Four cheats above already
+# rely on it.
 #
 # [ ] HAPPY = DISCIPLINE (unsupported: C2)
 # C213848A 0002
@@ -285,9 +296,21 @@ E0134EBE 0001
 50000A01 0000          # repeat 10x, address +1 each
 3013D492 0063          #   <- inventory counts, slots 1..10 = 99
 
-[ ] Max quantity of every storage item
-50003801 0000          # repeat 56x, address +1 each
-301BDF58 0063          #   <- storage counts (Digimushrm .. Metal Banana)
+# The Item Keeper in File City holds one counter per item id, all 128 of them,
+# so every item in the game has a permanent slot and the bank never runs out of
+# room. 99 is the per-item maximum: 0x80 and above collides with a flag bit the
+# list shares with the amount byte, and the rows misdraw.
+#
+# This replaces an earlier version that started 44 items too far in and reached
+# only 56 of the 128, despite its comment claiming otherwise. Checked against
+# the code: the list builder walks SCRIPT_STATE+0x54 one byte per id
+# (0x8010744C addiu $a0,$v0,0x54 -- 0x801074AC lbu $a3,0($a0)) for 128 ids
+# (0x80107574 sltiu $at,$a2,0x80), and deposit/withdraw load-modify-store that
+# same field (0x80108788 / 0x80108794).
+[ ] Item Keeper holds 99 of every item
+50008001 0000          # repeat 128x, address +1 each, value +0
+301BDF2C 0063          #   <- Item Keeper store, item ids 0..127 = 99
+                       #      (SCRIPT_STATE+0x54, 0x801BDF2C..0x801BDFAB)
 
 [ ] Press O to beat the game
 D0135450 FFDF          # if pad (0x80135450) has Circle held
