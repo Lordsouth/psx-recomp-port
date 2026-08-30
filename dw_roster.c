@@ -68,7 +68,13 @@
 #define N_EVO_PATHS 62u
 #define STRIDE_EVO_PATHS 11u
 #define SRC_EVOCHART 0x80124544u
-#define N_EVOCHART 61u
+/* 62, not the table's declared 61. renderEvoChartView's second loop draws
+ * index 61 UNCONDITIONALLY, one entry past the end -- in stock that reads the
+ * bytes that happen to follow, which place the frame at (-146,-67), safely
+ * offscreen. Copying only 61 entries leaves the relocated slot zeroed and the
+ * frame lands at (-1,-1), a visible stray box. Copying 62 keeps the vanilla
+ * bytes and the vanilla appearance. */
+#define N_EVOCHART 62u
 #define STRIDE_EVOCHART 8u
 /* TRAINING_ANIM_IDS and TRN2_D_8008DA20 have no SRC_: they live in the TRN
  * and TRN2 overlays, which are not resident at the fill hook (they load when
@@ -187,13 +193,28 @@ static void roster_fill(void) {
                 roster_arena + OFF_TRN2_ANIM + t * STRIDE_TRAIN_ANIM + i,
                 sp->trn2[i]);
         }
-        /* Terminate the species' own evolution list: it is an Ultimate, and
-         * the arena tail is 0xFF-filled already, but be explicit -- a zero
-         * here would send the evolution scan looking up type 0. */
-        for (i = 0; i < STRIDE_EVO_PATHS; i++)
-            psx_mod_write_byte(
-                roster_arena + OFF_EVO_PATHS + (t - 1u) * STRIDE_EVO_PATHS + i,
-                0xFF);
+        /* NOTE: this used to 0xFF-fill the species' own EVO_PATHS row, on the
+         * assumption that every authored species was a terminal Ultimate. It is
+         * removed, not moved: the arena-wide 0xFF fill above already covers
+         * every row the stock copy does not reach (types 63+), so it was
+         * redundant -- and now that newly-authored Rookies are themselves
+         * evolution sources, it would erase their to[] and silently strip every
+         * Champion hanging off them. */
+    }
+
+    /* Evolution paths whose SOURCE is newly authored. Stock sources have a row
+     * in the EXE and are patched there, then copied in above; these types are
+     * past the end of the stock table and have no row to patch, so their to[]
+     * bytes are written here -- after the species loop, and after the stock
+     * copy, so nothing can overwrite them. */
+    for (s = 0; s < (uint32_t)(sizeof(k_evo_wire) / sizeof(k_evo_wire[0])); s++) {
+        const RosterWire* w = &k_evo_wire[s];
+        if (w->src == 0)
+            continue;                    /* the empty-table placeholder */
+        psx_mod_write_byte(roster_arena + OFF_EVO_PATHS
+                           + (uint32_t)(w->src - 1u) * STRIDE_EVO_PATHS
+                           + 5u + w->slot,
+                           w->target);
     }
 
     /* EVOCHART_ICONS[114] is deliberately left zero. The evolution chart is a

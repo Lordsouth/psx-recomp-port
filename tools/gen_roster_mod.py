@@ -120,6 +120,9 @@ EVO_REQ_VA, EVO_REQ_STRIDE = 0x8012ABEC, 28
 RAISE_VA, RAISE_STRIDE = 0x801225BC, 28
 EVO_GAINS_VA, EVO_GAINS_STRIDE = 0x8012B2D0, 14
 ITEM_TAKE_VA = 0x80122D24
+# EVO_PATHS_DATA ends here. A source above this has no row in the EXE, so its
+# wiring has to be authored into the arena rather than patched.
+N_EVO_PATHS_STOCK = 62
 
 # ---- newly raisable species --------------------------------------------------
 # Only a CHAMPION may be an evolution source. The dispatch at 0x800A9150 is a
@@ -140,10 +143,10 @@ ITEM_TAKE_VA = 0x80122D24
 #        discipline, happiness, battles, techs, flags)
 NEW_SPECIES = [
     dict(type=64, name="Gigadramon", src=[("Airdramon", 7)],
-         raise_donor=54, gains_donor=54, anim_donor=54,
+         raise_donor=64, gains_donor=64, anim_donor=64,
          req=(-1, 400, 500, 600, 400, 400, 400, 10, 45, -1, -1, 50, 35, 0x10)),
     dict(type=65, name="MetalEtemon", src=[("Sukamon", 39)],
-         raise_donor=42, gains_donor=42, anim_donor=42,
+         raise_donor=65, gains_donor=65, anim_donor=65,
          req=(-1, 400, 400, 600, 500, 400, 300, 5, 50, -1, -1, 60, 40, 0x10)),
     dict(type=66, name="Myotismon", src=[("Devimon", 6)],
          raise_donor=26, gains_donor=26, anim_donor=26,
@@ -162,8 +165,245 @@ NEW_SPECIES = [
     # only way in by design. It still needs the partner-line rows, or evolving
     # into it via that item lands on empty tables.
     dict(type=63, name="Panjyamon", src=[],
-         raise_donor=9, gains_donor=9, anim_donor=9,
+         raise_donor=63, gains_donor=63, anim_donor=63,
          req=(-1, 300, 300, 400, 300, 300, 300, 8, 30, -1, -1, 30, 20, 0x10)),
+
+
+    dict(type=67, name="Yanmamon", src=[("Tokomon", 30)],
+         raise_donor=46, gains_donor=46, anim_donor=46,
+         req=(-1, -1, 1, 1, -1, 1, -1, 1, 66, -1, -1, -1, -1, 0x10)),
+    # Palmon: dbone 1 (30 vs 31), dsize tie broken by camera (480,260,-1750) for
+    # a 360-tall model, and default (46,10). Tokomon slot 0 -> dead bonus.
+
+    dict(type=68, name="Gotsumon", src=[("Tsunomon", 16)],
+         raise_donor=17, gains_donor=17, anim_donor=31,
+         req=(-1, 1, -1, 1, 1, -1, -1, 2, 30, -1, -1, -1, -1, 0x10)),
+    # rock rig 0x8011C750 vs Agumon/Gabumon 0x8011C194: 6 of 44 bytes differ,
+    # 22 bones exact. anim off Patamon because Gabumon's (46,20) is non-default.
+
+    dict(type=69, name="Flarerizamon", src=[("Koromon", 2)],
+         raise_donor=31, gains_donor=31, anim_donor=31,
+         req=(-1, -1, 1, 1, -1, 1, -1, 1, 66, -1, -1, -1, -1, 0x10)),
+    # rig 0x8011CB10 is Patamon's with single parent-byte tweaks; radius 130 exact.
+
+    dict(type=71, name="SnowAgumon", src=[("Koromon", 2)],
+         raise_donor=3, gains_donor=3, anim_donor=3,
+         req=(-1, 1, -1, 1, 1, -1, -1, 1, 42, -1, -1, -1, -1, 0x10)),
+    # EXACT: DIGIMON_SKELETONS[71] == [3] == 0x8011C194, height 250 = Agumon.
+
+    dict(type=72, name="Hyogamon", src=[("SnowAgumon", 71)],
+         raise_donor=34, gains_donor=34, anim_donor=34,
+         req=(-1, 100, -1, -1, 100, -1, -1, 3, 35, 60, -1, -1, 28, 0x10)),
+    # EXACT: shared skeleton 0x8011C898, dims 180x390 byte-identical to Ogremon.
+
+    dict(type=73, name="PlatinumSukamon", src=[("Dokunemon", 74)],
+         raise_donor=39, gains_donor=39, anim_donor=39,
+         req=(-1, 100, -1, -1, -1, -1, -1, 5, 30, -1, -1, 15, 21, 0x00)),
+    # EXACT: shared skeleton 0x8011C348, dims 175x290 identical to Sukamon.
+
+    dict(type=74, name="Dokunemon", src=[("Tanemon", 44)],
+         raise_donor=32, gains_donor=32, anim_donor=32,
+         req=(-1, -1, -1, 1, 1, -1, 1, 3, 66, -1, -1, -1, -1, 0x00)),
+    # EXACT: shared skeleton 0x8011C518, dims 120x210 identical to Kunemon.
+
+    dict(type=75, name="ShimaUnimon", src=[("Muchomon", 93)],
+         raise_donor=33, gains_donor=33, anim_donor=33,
+         req=(-1, -1, -1, -1, -1, 100, 100, 3, 45, 60, -1, -1, 35, 0x10)),
+    # EXACT: shared skeleton 0x8011C48C, dims 180x400 identical to Unimon.
+
+    dict(type=76, name="Tankmon", src=[("Tentomon", 111)],
+         raise_donor=34, gains_donor=34, anim_donor=52,
+         req=(-1, -1, -1, -1, 100, -1, 100, 1, 55, 90, -1, -1, 28, 0x10)),
+    # ORPHAN rig 0x8011CCF0. Ogremon: dbone 1, 4/4 move overlap, heavy-eater row
+    # for a 200x450 chassis. anim off Mojyamon -- Ogremon's (49,10) is non-default.
+
+    dict(type=77, name="RedVegiemon", src=[("Aruraumon", 86)],
+         raise_donor=25, gains_donor=25, anim_donor=25,
+         req=(-1, -1, -1, 100, -1, -1, -1, 4, 30, -1, -1, 10, 21, 0x00)),
+    # EXACT: shared skeleton 0x8011C4C4, dims 150x270 identical to Vegiemon.
+
+    dict(type=78, name="J-Mojyamon", src=[("Icemon", 94)],
+         raise_donor=52, gains_donor=52, anim_donor=52,
+         req=(-1, 100, -1, -1, -1, 100, -1, 5, 45, -1, -1, 5, 28, 0x01)),
+    # EXACT: shared skeleton 0x8011C7D4, dims 170x300 identical to Mojyamon.
+    # flags bit0 keeps Mojyamon's pacifist clause (battles as a MAXIMUM of 5).
+
+    dict(type=79, name="NiseDrimogemon", src=[("Gotsumon", 68)],
+         raise_donor=38, gains_donor=38, anim_donor=38,
+         req=(-1, 100, -1, 100, -1, -1, -1, 4, 45, -1, -1, 10, 28, 0x00)),
+    # EXACT: shared skeleton 0x8011C6C4, dims 200x360 identical to Drimogemon.
+
+    dict(type=80, name="Goburimon", src=[("Tsunomon", 16)],
+         raise_donor=17, gains_donor=17, anim_donor=31,
+         req=(-1, 1, -1, 1, -1, 1, -1, 2, 54, -1, -1, -1, -1, 0x10)),
+    # ORPHAN goblin rig 0x8011C318. Gabumon: dbone 1, dsize 25 (best in pool),
+    # 8-meal appetite. anim off Patamon -- Gabumon is (46,20).
+
+    dict(type=81, name="MudFrigimon", src=[("Meteormon", 113)],
+         raise_donor=23, gains_donor=23, anim_donor=23,
+         req=(-1, 100, -1, -1, -1, -1, 100, 5, 50, -1, 50, -1, 28, 0x10)),
+    # EXACT: shared skeleton 0x8011C3AC, dims 160x380 identical to Frigimon.
+
+    dict(type=82, name="Psychemon", src=[("Koromon", 2)],
+         raise_donor=17, gains_donor=17, anim_donor=17,
+         req=(-1, -1, 1, -1, -1, 1, 1, 1, 30, -1, -1, -2, -1, 0x10)),
+    # EXACT: shared skeleton 0x8011C194, dims 130x260 byte-identical to Gabumon
+    # (Agumon shares the pointer but is 120x250). Koromon slot 4 -> LIVE bonus.
+
+    dict(type=83, name="ModokiBetamon", src=[("Tanemon", 44)],
+         raise_donor=4, gains_donor=4, anim_donor=4,
+         req=(-1, 1, 1, -1, 1, -1, -1, 1, 54, -1, -1, -1, -1, 0x10)),
+    # EXACT: shared skeleton 0x8011C1C0, dims 160x160 identical to Betamon.
+
+    dict(type=84, name="ToyAgumon", src=[("Koromon", 2)],
+         raise_donor=3, gains_donor=3, anim_donor=3,
+         req=(-1, 1, -1, -1, 1, 1, -1, 0, 54, -1, -1, -2, -1, 0x10)),
+    # EXACT: shared skeleton 0x8011C194; height 250 = Agumon, not Gabumon's 260.
+
+    dict(type=85, name="Piddomon", src=[("Tsukaimon", 96)],
+         raise_donor=20, gains_donor=20, anim_donor=20,
+         req=(-1, -1, 100, -1, -1, 100, -1, 1, 20, -1, 50, -1, 35, 0x10)),
+    # EXACT: shared skeleton 0x8011C418, dims 150x400 identical to Angemon.
+
+    dict(type=86, name="Aruraumon", src=[("Tanemon", 44)],
+         raise_donor=46, gains_donor=46, anim_donor=46,
+         req=(-1, -1, 1, 1, -1, -1, 1, 2, 30, -1, -1, -2, -1, 0x10)),
+    # EXACT: shared skeleton 0x8011C44C, dims 100x260 identical to Palmon.
+
+    dict(type=87, name="Geremon", src=[("Dokunemon", 74)],
+         raise_donor=11, gains_donor=11, anim_donor=11,
+         req=(-1, -1, 100, -1, -1, -1, -1, 5, 12, -1, -1, 15, 21, 0x00)),
+    # EXACT: shared skeleton 0x8011C60C, dims 180x270 identical to Numemon.
+
+    dict(type=88, name="Vermilimon", src=[("Flarerizamon", 69)],
+         raise_donor=47, gains_donor=47, anim_donor=47,
+         req=(-1, 100, -1, 100, 100, -1, -1, 3, 60, -1, -1, 15, 35, 0x10)),
+    # EXACT: shared skeleton 0x8011C984, dims 260x330 identical to Monochromon.
+
+    dict(type=89, name="Fugamon", src=[("Goburimon", 80)],
+         raise_donor=34, gains_donor=34, anim_donor=34,
+         req=(-1, -1, -1, 100, -1, 100, -1, 5, 35, -1, -1, 15, 28, 0x00)),
+    # EXACT: shared skeleton 0x8011C898, dims 180x390 identical to Ogremon.
+
+    dict(type=91, name="MoriShellmon", src=[("ModokiBetamon", 83)],
+         raise_donor=35, gains_donor=35, anim_donor=35,
+         req=(-1, 100, -1, -1, 100, -1, -1, 5, 65, 60, -1, -1, 35, 0x10)),
+    # EXACT: shared skeleton 0x8011CAC0, dims 300x400 identical to Shellmon.
+
+    dict(type=92, name="Guardromon", src=[("ToyAgumon", 84)],
+         raise_donor=50, gains_donor=50, anim_donor=52,
+         req=(-1, -1, -1, -1, 100, -1, 100, 1, 45, 90, -1, -1, 28, 0x10)),
+    # ORPHAN rig 0x8011CB98 (Andromon is the body twin but is Ultimate).
+    # Kokatorimon: similarity 0.650, height 320 exact. anim off Mojyamon --
+    # Kokatorimon is (52,10), non-default.
+
+    dict(type=93, name="Muchomon", src=[("Tokomon", 30)],
+         raise_donor=57, gains_donor=57, anim_donor=57,
+         req=(-1, 1, -1, 1, -1, 1, -1, 1, 54, -1, -1, -1, -1, 0x10)),
+    # EXACT: shared skeleton 0x8011C7A0, dims 120x250 identical to Penguinmon.
+
+    dict(type=94, name="Icemon", src=[("Tsunomon", 16)],
+         raise_donor=3, gains_donor=3, anim_donor=31,
+         req=(-1, 1, 1, -1, 1, -1, -1, 2, 42, -1, -1, -2, -1, 0x10)),
+    # ORPHAN rock rig 0x8011C750; Agumon has the best pull-back camera in the
+    # Rookie pool. anim off Patamon -- Agumon's (51,12) is doubly non-default.
+
+    dict(type=95, name="Akatorimon", src=[("Muchomon", 93)],
+         raise_donor=50, gains_donor=50, anim_donor=50,
+         req=(-1, 100, -1, -1, -1, 100, -1, 3, 25, -1, -1, 10, 28, 0x00)),
+    # EXACT: shared skeleton 0x8011CA94, dims 190x320 identical to Kokatorimon.
+
+    dict(type=96, name="Tsukaimon", src=[("Tokomon", 30)],
+         raise_donor=31, gains_donor=31, anim_donor=31,
+         req=(-1, -1, 1, -1, -1, 1, 1, 3, 30, -1, -1, -2, -1, 0x00)),
+    # EXACT: shared skeleton 0x8011CAE0, dims 130x180 identical to Patamon.
+
+    dict(type=97, name="Sharmamon", src=[],
+         raise_donor=17, gains_donor=17, anim_donor=31,
+         req=(-1, 1, -1, 1, -1, -1, 1, 2, 20, -1, -1, -2, -1, 0x10)),
+    # ORPHAN goblin rig 0x8011C318, same reasoning as Goburimon. NO PATH.
+
+    dict(type=98, name="ClearAgumon", src=[],
+         raise_donor=3, gains_donor=3, anim_donor=3,
+         req=(-1, -1, 1, -1, 1, 1, -1, 2, 15, -1, -1, -2, -1, 0x10)),
+    # EXACT: shared skeleton 0x8011C194, height 250 = Agumon. NO PATH.
+
+    dict(type=99, name="Weedmon", src=[("Aruraumon", 86)],
+         raise_donor=25, gains_donor=25, anim_donor=25,
+         req=(-1, -1, 100, 100, -1, -1, 100, 3, 18, -1, 50, -1, 21, 0x00)),
+    # EXACT: shared skeleton 0x8011C4C4, dims 150x270 identical to Vegiemon.
+
+    dict(type=100, name="IceDevimon", src=[("Tsukaimon", 96)],
+         raise_donor=6, gains_donor=6, anim_donor=6,
+         req=(-1, -1, 100, -1, -1, -1, 100, 4, 40, -1, -1, 10, 28, 0x00)),
+    # EXACT: shared skeleton 0x8011C224, dims 160x400 identical to Devimon.
+
+    dict(type=101, name="Darkrizamon", src=[],
+         raise_donor=31, gains_donor=31, anim_donor=31,
+         req=(-1, 1, -1, 1, -1, 1, -1, 4, 20, -1, -1, -2, -1, 0x00)),
+    # ORPHAN rig 0x8011CB10 shared only with Flarerizamon. NO PATH.
+
+    dict(type=102, name="SandYanmamon", src=[],
+         raise_donor=46, gains_donor=46, anim_donor=46,
+         req=(-1, -1, -1, 1, 1, 1, -1, 2, 25, -1, -1, -2, -1, 0x10)),
+    # ORPHAN dragonfly rig 0x8011C714, same donor as Yanmamon. NO PATH.
+
+    dict(type=103, name="SnowGoburimon", src=[],
+         raise_donor=17, gains_donor=17, anim_donor=31,
+         req=(-1, 1, 1, -1, 1, -1, -1, 2, 20, -1, -1, -2, -1, 0x10)),
+    # ORPHAN goblin rig 0x8011C318. NO PATH.
+
+    dict(type=104, name="BlueMeramon", src=[("Icemon", 94)],
+         raise_donor=9, gains_donor=9, anim_donor=9,
+         req=(-1, -1, 100, 100, -1, -1, -1, 3, 20, -1, -1, 10, 35, 0x10)),
+    # EXACT: shared skeleton 0x8011C294, dims 150x400 identical to Meramon.
+
+    dict(type=105, name="Gururumon", src=[("Psychemon", 82)],
+         raise_donor=22, gains_donor=22, anim_donor=22,
+         req=(-1, 100, -1, 100, -1, -1, -1, 3, 40, -1, -1, 15, 28, 0x00)),
+    # EXACT: shared skeleton 0x8011CCBC, dims 220x290 identical to Garurumon.
+
+    dict(type=106, name="Saberdramon", src=[("Yanmamon", 67)],
+         raise_donor=21, gains_donor=21, anim_donor=21,
+         req=(-1, -1, 100, -1, -1, 100, -1, 1, 40, -1, -1, -1, 35, 0x10)),
+    # EXACT: shared skeleton 0x8011C64C, dims 230x450 identical to Birdramon.
+
+    dict(type=107, name="Soulmon", src=[("Psychemon", 82)],
+         raise_donor=37, gains_donor=37, anim_donor=37,
+         req=(-1, -1, 100, -1, -1, -1, -1, 5, 8, -1, 50, -1, 21, 0x00)),
+    # EXACT: shared skeleton 0x8011C638, dims 150x370 identical to Bakemon.
+    # MOVED off Tsukaimon (psyche -> soul) to keep every source at <= 2 targets.
+
+    dict(type=108, name="Rockmon", src=[("Gotsumon", 68)],
+         raise_donor=23, gains_donor=23, anim_donor=23,
+         req=(-1, -1, -1, -1, 100, -1, -1, 5, 25, -1, -1, 10, 21, 0x00)),
+    # EXACT: shared skeleton 0x8011C3AC, dims 160x380 identical to Frigimon.
+
+    dict(type=109, name="Otamamon", src=[("Tanemon", 44)],
+         raise_donor=31, gains_donor=31, anim_donor=31,
+         req=(-1, 1, 1, -1, -1, 1, -1, 1, 42, -1, -1, -2, -1, 0x10)),
+    # ORPHAN: skeleton 0x8011CE1C is unique. Patamon tops the pool at 0.526 and
+    # dsize 25 (130x180 vs 145x190) is the closest size match of any of the 44.
+
+    dict(type=110, name="Gekomon", src=[("Otamamon", 109)],
+         raise_donor=49, gains_donor=49, anim_donor=49,
+         req=(-1, -1, 100, -1, -1, -1, 100, 3, 15, -1, 50, -1, 21, 0x10)),
+    # ORPHAN rig 0x8011CDF0. Coelamon: attribute match, 4/4 move overlap
+    # (16,18,20,23), ocean favoredRegion 4, default (46,10).
+
+    dict(type=111, name="Tentomon", src=[("Tokomon", 30)],
+         raise_donor=32, gains_donor=32, anim_donor=31,
+         req=(-1, -1, 1, -1, 1, -1, 1, 1, 42, -1, -1, -2, -1, 0x10)),
+    # ORPHAN rig 0x8011CDB8 is unique and nothing in the pool scores above 0.400,
+    # so the fallback ladder decides: Kunemon wins bones (28 vs 27), size
+    # (dsize 40) and insect family. anim off Patamon -- Kunemon is (46,14).
+
+    dict(type=113, name="Meteormon", src=[("Tsunomon", 16)],
+         raise_donor=3, gains_donor=3, anim_donor=31,
+         req=(-1, 1, -1, -1, 1, -1, 1, 2, 66, -1, -1, -2, -1, 0x10)),
+    # ORPHAN rock rig 0x8011C750. Agumon over Gabumon: same pointer group, same
+    # 22 bones, camera (550,230,-1870) vs (420,230,-1610) -- 260 more pull-back
+    # for a 400-tall model. anim off Patamon.
 ]
 # Machinedramon keeps its authored requirement row; only its sources move, to
 # the two Champions that already lead to the Megadramon / MetalGreymon line the
@@ -285,30 +525,64 @@ def authored_research(rd):
         return rd(DIGIMON_DATA_VA + t * DIGIMON_STRIDE, 20).split(
             b"\0")[0].decode("ascii", "replace")
 
-    used_slots = {}
+    used_slots = {}      # EXE sources: vaddr -> target
+    arena_slots = {}     # arena sources: src_type -> [targets in slot order]
 
     def wire(src_name, src_type, new_type):
-        """Write new_type into a free to[] byte of src_type's path entry."""
-        assert level_of(src_type) == 4, (
-            "%s (type %d) is level %d, not Champion -- an Ultimate source is "
-            "dead wiring" % (src_name, src_type, level_of(src_type)))
+        """Give src_type an evolution into new_type.
+
+        TWO DESTINATIONS, and the split is not cosmetic. EVO_PATHS_DATA holds
+        only 62 records, so a source of type >= 63 has no row in the EXE at all
+        -- patching one would write into TEXT_COLORS at 0x8012B91B. Stock
+        sources are patched in the EXE (the plugin copies those 62 rows into the
+        arena afterwards, so the edit carries over); newly-authored sources are
+        written straight into the arena by the plugin instead.
+        """
+        # Slot 114 is an empty dev stub in the stock image; the mod fills its
+        # DIGIMON_DATA record from Machinedramon (115), so that is the level it
+        # actually has in play.
+        tgt_level = level_of(115) if new_type == 114 else level_of(new_type)
+        tgt_name = name_of(115) if new_type == 114 else name_of(new_type)
+        assert level_of(src_type) == tgt_level - 1, (
+            "%s (type %d, level %d) cannot evolve into %s (level %d): the "
+            "dispatch at 0x800A9150 is a level chain, a source must be exactly "
+            "one level below its target"
+            % (src_name, src_type, level_of(src_type), tgt_name, tgt_level))
         assert name_of(src_type) == src_name, (
             "type %d is %r, not %r" % (src_type, name_of(src_type), src_name))
-        base = EVO_PATHS_VA + (src_type - 1) * EVO_PATHS_STRIDE + 5
-        for slot in range(6):
-            va = base + slot
-            if va in used_slots:
-                continue
-            if rd(va, 1) == b"\xFF":
-                used_slots[va] = new_type
-                return bytes_patch(va, b"\xFF", bytes([new_type]))
-        raise AssertionError("%s has no free to[] slot" % src_name)
+
+        if src_type <= N_EVO_PATHS_STOCK:
+            base = EVO_PATHS_VA + (src_type - 1) * EVO_PATHS_STRIDE + 5
+            for slot in range(6):
+                va = base + slot
+                if va in used_slots:
+                    continue
+                if rd(va, 1) == b"\xFF":
+                    used_slots[va] = new_type
+                    return bytes_patch(va, b"\xFF", bytes([new_type]))
+            raise AssertionError("%s (type %d) has no free to[] slot"
+                                 % (src_name, src_type))
+
+        lst = arena_slots.setdefault(src_type, [])
+        assert len(lst) < 6, ("%s (type %d) already has 6 evolutions"
+                              % (src_name, src_type))
+        lst.append(new_type)
+        return []
 
     for spec in NEW_SPECIES:
         for src_name, src_type in spec["src"]:
             extra += wire(src_name, src_type, spec["type"])
     for src_name, src_type in MACHINEDRAMON_SRC:
         extra += wire(src_name, src_type, 114)
+
+    # Every arena source must itself be an authored species, or it can never be
+    # reached and its targets are unreachable with it.
+    authored = {s["type"] for s in NEW_SPECIES} | {114}
+    orphan = sorted(t for t in arena_slots if t not in authored)
+    assert not orphan, "arena evolution sources that are not authored: %s" % orphan
+    AUTHORED["evo_wire"] = [(t, i, tgt)
+                            for t in sorted(arena_slots)
+                            for i, tgt in enumerate(arena_slots[t])]
 
     # 8. The game's own three evolution items, un-gated.
     #
@@ -838,6 +1112,25 @@ def main():
                     % (r["item_take"], j(r["train"]), j(r["trn2"])))
     inc += ["static const RosterSpecies k_species[%d] = {"
             % len(AUTHORED["species"])] + body + ["};", ""]
+
+    # Evolution wiring for sources that have no row in the stock EXE table
+    # (type > 62). These are written into the arena AFTER the species loop,
+    # because that loop terminates a pathless species' own row with 0xFF.
+    wire = AUTHORED["evo_wire"]
+    inc += [
+        "/* Evolution paths whose SOURCE is itself newly authored. Stock",
+        " * sources (type <= 62) are patched in the EXE and copied into the",
+        " * arena with the rest of the table; these have no EXE row at all, so",
+        " * the plugin writes them directly. {source type, to[] slot, target}",
+        " * -- the slot index, not the byte offset. */",
+        "typedef struct { unsigned char src, slot, target; } RosterWire;",
+        "static const RosterWire k_evo_wire[%d] = {" % max(len(wire), 1),
+    ]
+    if wire:
+        inc += ["    { %3d, %d, %3d }," % w for w in wire]
+    else:
+        inc += ["    { 0, 0, 0 },   /* none */"]
+    inc += ["};", ""]
     inc_path = os.path.join(ROOT, "dw_roster_data.inc")
     with open(inc_path, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(inc))

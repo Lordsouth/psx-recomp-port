@@ -1524,6 +1524,118 @@ replace = "70"
 [[patch]]
 feature = "roster"
 target = "main_exe"
+address = 0x8012B7B0
+expected = "ff"
+replace = "43"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B716
+expected = "ff"
+replace = "44"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B67C
+expected = "ff"
+replace = "45"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B67D
+expected = "ff"
+replace = "47"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B84A
+expected = "ff"
+replace = "4a"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B717
+expected = "ff"
+replace = "50"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B680
+expected = "ff"
+replace = "52"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B84B
+expected = "ff"
+replace = "53"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B681
+expected = "ff"
+replace = "54"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B84E
+expected = "ff"
+replace = "56"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B7B1
+expected = "ff"
+replace = "5d"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B71A
+expected = "ff"
+replace = "5e"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B7B4
+expected = "ff"
+replace = "60"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B84F
+expected = "ff"
+replace = "6d"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B7B5
+expected = "ff"
+replace = "6f"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B71B
+expected = "ff"
+replace = "71"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
 address = 0x8012B6BE
 expected = "ff"
 replace = "72"

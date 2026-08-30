@@ -95,7 +95,7 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 
 | Mod | What it does |
 |---|---|
-| **Expanded Roster** | Adds seven Digimon. Machinedramon fills the game's one unused slot; Gigadramon, Myotismon, WaruSeadramon, WaruMonzaemon, MetalEtemon and Tekkamon are finished Digimon that were on the disc all along as enemies only. All seven are partners you can genuinely raise and evolve into — see below |
+| **Expanded Roster** | **Adds 52 Digimon.** Machinedramon fills the game's one unused slot; the other 51 — Tentomon, Myotismon, Guardromon, Gigadramon, Panjyamon, BlueMeramon, Otamamon, Gotsumon and more — are finished Digimon that were on the disc all along as enemies only. All of them become partners you can genuinely raise and evolve into — see below |
 | **Trainer** | Fifteen independent toggles: never hungry, tired, sick or dead; no lifespan loss; plus the Training group below |
 | **Perfect Training** | Every training session pays the jackpot rate. The slot minigame secretly grades your reels into a reward multiplier, from 0.5x for a miss up to 10x for triple sevens — this makes every spin pay the top rate |
 | **Lucky Reels** | The gentler version: the slot machine always tries to help you find the sevens, so the reels really do land on jackpots and you still stop them yourself |
@@ -111,9 +111,23 @@ patch, nothing is permanent.
 
 ### Raising the new Digimon
 
-Turn on **Expanded Roster** in the Mods panel before starting. Seven Digimon
-the disc has always contained then become partners you can raise, each reached
-from a Champion the same way any other Ultimate is:
+Turn on **Expanded Roster** in the Mods panel before starting. Fifty-two Digimon
+the disc has always contained then become partners you can raise — reached the
+ordinary way, by how you raise your partner.
+
+They slot into the tree at every stage. Your In-Training partner can now become
+one of six Rookies instead of two, those new Rookies grow into new Champions,
+and the new Ultimates hang off Champions you already know. As always **weight
+decides**, so each new option sits at its own weight; the classic evolutions are
+untouched and still happen at the weights they always did.
+
+Sixteen new Rookies, twenty-three new Champions, six new Ultimates, and
+Machinedramon. Five more (Sharmamon, ClearAgumon, Darkrizamon, SandYanmamon and
+SnowGoburimon) are fully built but have no way in: the game has only four
+In-Training Digimon with four free evolution slots each, and that is a hard
+limit of the original design.
+
+These evolve from a Champion, the same way any other Ultimate does:
 
 | Raise this Champion | …and you can become |
 |---|---|
