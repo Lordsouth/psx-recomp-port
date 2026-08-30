@@ -70,6 +70,7 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file dw_roster.c --project-file dw_roster_data.inc \
   --project-file dw_evolution.c \
   --project-file README.md --project-file DISC.md --project-file cheats.txt \
+  --project-file CHANGELOG.md \
   --project-dir seeds --project-dir mods --project-dir tools --project-dir docs
 ```
 

@@ -214,4 +214,8 @@ recompiler doing the real work here. Game internals mapped with
 Digimon World is © Bandai. This project ships no game content and is not
 affiliated with or endorsed by Bandai.
 
-Building from source: [DEVELOPING.md](DEVELOPING.md).
+What changed in each release, and what was known to be wrong at the time:
+[CHANGELOG.md](CHANGELOG.md).
+
+Building from source: [DEVELOPING.md](DEVELOPING.md). How the enhancements
+actually work, with addresses and reasoning: [docs/INTERNALS.md](docs/INTERNALS.md).
