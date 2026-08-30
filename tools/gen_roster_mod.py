@@ -85,6 +85,34 @@ OVL_RELOC = {
                           OFF_TRN2_ANIM),
 }
 
+# EVERY overlay's load address. Relocating a table means retargeting every
+# reference to it ANYWHERE, and overlays reference the EXE's tables too -- the
+# first version of this generator censused only the EXE plus TRN/TRN2, which
+# left EVL_REL.BIN (the evolution overlay) reading the STOCK 66-entry
+# EVO_GAINS_DATA. Every type above 65 then read out of bounds and evolution
+# produced a garbage partner type. Do not trim this list.
+#
+# Note these do NOT all share a base: assuming 0x80088800 for all of them (true
+# only for TRN/TRN2) yields correct table hits but wrong site addresses.
+OVL_BASES = {
+    "BTL_REL.BIN": 0x80052AE0, "DGET_REL.BIN": 0x80080800,
+    "DOO2_REL.BIN": 0x80070000, "DOOA_REL.BIN": 0x80080000,
+    "EAB_REL.BIN": 0x80060000, "ENDI_REL.BIN": 0x80060000,
+    "EVL_REL.BIN": 0x80060000, "FISH_REL.BIN": 0x80070000,
+    "KAR_REL.BIN": 0x80053800, "MOV_REL.BIN": 0x80010000,
+    "MURD_REL.BIN": 0x8007C000, "SHOP_REL.BIN": 0x80080800,
+    "STD_REL.BIN": 0x80052AE0, "TRN2_REL.BIN": 0x80088800,
+    "TRN_REL.BIN": 0x80088800, "VS_REL.BIN": 0x80052AE0,
+}
+# Start LBA on disc, verified by matching each overlay's first 2048 bytes
+# against the disc's user data. Only needed for overlays that actually
+# reference a relocated table; the generator asserts no other overlay does.
+OVL_LBAS = {
+    "EVL_REL.BIN": 147824,
+    "TRN_REL.BIN": 148248,
+    "TRN2_REL.BIN": 148262,
+}
+
 # ---- game tables read during generation -------------------------------------
 DIGIMON_DATA_VA, DIGIMON_STRIDE = 0x8012CEB4, 52
 EVO_PATHS_VA, EVO_PATHS_STRIDE = 0x8012B66C, 11
@@ -432,28 +460,65 @@ def scan_sites(data):
                       {n: (b, s) for n, (b, s, _a) in RELOC.items()})
 
 
-def scan_overlay_sites():
-    """Overlay census. -> (sites, images) where images maps file -> bytes.
+def arena_offset_of(name):
+    """Arena offset for any relocated table, EXE-resident or overlay-resident."""
+    if name in RELOC:
+        return RELOC[name][2]
+    return OVL_RELOC[name][4]
 
-    Each overlay is a flat load image at OVL_BASE, so the whole file is
-    scanned; the tables sit above all code, and a stray data-as-code match
-    would have to materialize an address inside a 136-byte window, which the
-    site counts below are asserted against.
+
+def table_base_of(name):
+    if name in RELOC:
+        return RELOC[name][0]
+    return OVL_RELOC[name][2]
+
+
+def scan_overlay_sites():
+    """Census EVERY overlay for references to EVERY relocated table.
+
+    Two scopes, deliberately different:
+
+      - The six EXE-resident tables live at 0x8012xxxx, which no overlay maps,
+        so a hit is unambiguous and every overlay is scanned for them.
+      - The two overlay-resident tables live inside an overlay's own address
+        window, which several overlays share (TRN and TRN2 both load at
+        0x80088800). Scanning TRN2 for TRN's table would match TRN2's own
+        unrelated data, so each is scanned ONLY in the overlay that owns it.
+
+    -> (sites, images); sites are (file, table, lui_va, lui_w, lo_va, lo_w, tgt)
     """
+    exe_tables = {n: (b, s) for n, (b, s, _a) in RELOC.items()}
     sites, images = [], {}
-    for name, (fn, _lba, base, size, _aoff) in OVL_RELOC.items():
-        img = open(os.path.join(OVL_DIR, fn), "rb").read()
+    for fn in sorted(OVL_BASES):
+        path = os.path.join(OVL_DIR, fn)
+        if not os.path.exists(path):
+            continue
+        img = open(path, "rb").read()
         images[fn] = img
+        base = OVL_BASES[fn]
+        tables = dict(exe_tables)
+        for name, (owner, _lba, tb, size, _aoff) in OVL_RELOC.items():
+            if owner == fn:
+                tables[name] = (tb, size)
         n = (len(img) // 4) * 4
-        for s in scan_image(img[:n], OVL_BASE, {name: (base, size)}):
+        for s in scan_image(img[:n], base, tables):
             sites.append((fn,) + s)
+
+    # Any overlay with a hit must have a known LBA, or its patch cannot be
+    # addressed on disc -- fail loudly rather than silently skipping it.
+    touched = sorted({s[0] for s in sites})
+    missing = [fn for fn in touched if fn not in OVL_LBAS]
+    assert not missing, (
+        "these overlays reference a relocated table but have no LBA: %s"
+        % missing)
     return sites, images
 
 
-def disc_offset(lba, vaddr):
+def disc_offset(lba, vaddr, base=OVL_BASE):
     """Disc user-data offset of an overlay vaddr. Verified against the
-    0.2.0 TRN patch (LBA 148248, type-114 slot -> 303638836)."""
-    return lba * 2048 + (vaddr - OVL_BASE)
+    0.2.0 TRN patch (LBA 148248, base 0x80088800, type-114 slot -> 303638836).
+    `base` is the overlay's own load address -- they are not all the same."""
+    return lba * 2048 + (vaddr - base)
 
 
 def retarget(sites):
@@ -540,7 +605,9 @@ def overlay_retarget(sites, images):
     the arena. Mirrors retarget() but keyed by (file, vaddr)."""
     lui_patches, lo_patches = {}, []
     for fn, name, lui_va, lui_w, lo_va, lo_w, tgt in sites:
-        _f, lba, base, _size, aoff = OVL_RELOC[name]
+        lba = OVL_LBAS[fn]
+        base = table_base_of(name)
+        aoff = arena_offset_of(name)
         new_tgt = ARENA + aoff + (tgt - base)
         lo = new_tgt & 0xFFFF
         hi = (new_tgt >> 16) + (1 if lo & 0x8000 else 0)
@@ -561,20 +628,22 @@ def overlay_retarget(sites, images):
 
     out = []
     for (fn, va), (old, new, lba) in sorted(lui_patches.items()):
-        img = images[fn]
-        off = va - OVL_BASE
-        assert struct.unpack("<I", img[off:off + 4])[0] == old
-        out += disc_bytes_patch(
-            disc_offset(lba, va), struct.pack("<I", old),
-            struct.pack("<I", new), "%s 0x%08X: table ref -> arena" % (fn, va))
+        out += _ovl_word_patch(images, fn, va, old, new, lba)
     for fn, va, old, new, lba in sorted(lo_patches):
-        img = images[fn]
-        off = va - OVL_BASE
-        assert struct.unpack("<I", img[off:off + 4])[0] == old
-        out += disc_bytes_patch(
-            disc_offset(lba, va), struct.pack("<I", old),
-            struct.pack("<I", new), "%s 0x%08X: table ref -> arena" % (fn, va))
+        out += _ovl_word_patch(images, fn, va, old, new, lba)
     return out
+
+
+def _ovl_word_patch(images, fn, va, old, new, lba):
+    """One overlay word patch, addressed through that overlay's OWN load base."""
+    base = OVL_BASES[fn]
+    off = va - base
+    got = struct.unpack("<I", images[fn][off:off + 4])[0]
+    assert got == old, ("%s 0x%08X: image has 0x%08X, expected 0x%08X"
+                        % (fn, va, got, old))
+    return disc_bytes_patch(
+        disc_offset(lba, va, base), struct.pack("<I", old),
+        struct.pack("<I", new), "%s 0x%08X: table ref -> arena" % (fn, va))
 
 
 def main():
@@ -600,9 +669,24 @@ def main():
                        ("EVO_PATHS_DATA", 9), ("EVOCHART_ICONS", 7)):
         assert c[name] == want, "%s: %d sites, expected %d" % (
             name, c[name], want)
-    for name, want in (("TRAINING_ANIM_IDS", 5), ("TRN2_D_8008DA20", 3)):
-        assert oc[name] == want, "%s: %d sites, expected %d" % (
-            name, oc[name], want)
+    # Per (overlay, table) rather than per table: the first version counted
+    # only the two TRN tables and so never noticed that EVL_REL.BIN reads
+    # EVO_GAINS_DATA. Every entry here is a site that MUST be retargeted, and a
+    # new one appearing is a hard failure rather than a silent omission.
+    per_file = Counter((s[0], s[1]) for s in ovl_sites)
+    want_ovl = {
+        ("TRN_REL.BIN", "TRAINING_ANIM_IDS"): 5,
+        ("TRN2_REL.BIN", "TRN2_D_8008DA20"): 3,
+        # These are the ones that made every type above 65 evolve into garbage:
+        # EVL is the evolution overlay and was reading the stock 66-entry table.
+        ("EVL_REL.BIN", "EVO_GAINS_DATA"): 1,
+        ("EVL_REL.BIN", "RAISE_DATA"): 1,
+        ("TRN_REL.BIN", "RAISE_DATA"): 3,
+        ("TRN2_REL.BIN", "RAISE_DATA"): 3,
+    }
+    assert dict(per_file) == want_ovl, (
+        "overlay site census changed.\n  got:    %s\n  wanted: %s"
+        % (dict(per_file), want_ovl))
 
     funcs = set()
     for _n, lui_va, _lw, _lv, _low, _t in sites:

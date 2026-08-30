@@ -392,6 +392,53 @@ def cmd_item(args):
     return code
 
 
+# Every species the roster mod makes raisable. Kept here so "test the roster"
+# means all of them, not the convenient ones -- the EVL overlay bug hid behind
+# a test set that happened to be entirely below the stock table's 66 entries.
+ROSTER_SPECIES = [63, 64, 65, 66, 70, 90, 112, 114]
+
+
+def cmd_roster(args):
+    """Evolve into every raisable species in turn, from the same fixture."""
+    g = Game.attach(port=args.port)
+    targets = [int(t) for t in args.targets.split(",")] if args.targets \
+        else ROSTER_SPECIES
+    results = []
+    for t in targets:
+        print("\n%s\n  target %d\n%s" % ("=" * 62, t, "=" * 62))
+        rep = Report("roster_%d" % t)
+        try:
+            g.savestate("load", args.from_slot)
+            r = g.settle()
+            if r.outcome != "DONE":
+                results.append((t, "?", "FIXTURE_%s" % r.outcome))
+                rep.emit("CANNOT_RUN")
+                continue
+            verdict, _code = test_evolve(g, rep, t,
+                                         timeout_frames=args.timeout_frames)
+            name = g.digimon_record(t)["name"]
+            results.append((t, name, verdict))
+            rep.emit(verdict)
+        except Precondition as e:
+            print("  PRECONDITION: %s" % e)
+            results.append((t, "?", "CANNOT_RUN"))
+            rep.emit("CANNOT_RUN")
+        except (Dead, Wedge) as e:
+            print("  process died/wedged: %s" % e)
+            results.append((t, "?", "CRASHED"))
+            rep.emit("CRASHED")
+            break
+
+    print("\n%s\n  ROSTER SUMMARY\n%s" % ("=" * 62, "=" * 62))
+    bad = 0
+    for t, name, verdict in results:
+        ok = verdict.startswith("SUCCESS")
+        bad += 0 if ok else 1
+        print("  %-4s %-4d %-16s %s" % ("OK" if ok else "FAIL", t, name, verdict))
+    print("\n  %d/%d species evolve correctly" % (len(results) - bad, len(results)))
+    return 0 if bad == 0 else 1
+
+
 def cmd_list(args):
     print("tests:")
     print("  evolve --target N   force an evolution into type N and classify it")
@@ -419,6 +466,12 @@ def main():
     it.add_argument("--from-slot", type=int, default=None)
     it.add_argument("--timeout-frames", type=int, default=5400)
     it.set_defaults(fn=cmd_item)
+    r = sub.add_parser("roster")
+    r.add_argument("--from-slot", type=int, default=2)
+    r.add_argument("--targets", default=None,
+                   help="comma-separated type ids (default: every raisable one)")
+    r.add_argument("--timeout-frames", type=int, default=5400)
+    r.set_defaults(fn=cmd_roster)
     args = ap.parse_args()
     return args.fn(args)
 

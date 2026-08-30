@@ -195,10 +195,47 @@ its cache entirely and is recompiled. Executing stale native code for a range
 that changed is not possible. The cost is that those functions interpret until
 the background compiler rebuilds them.
 
-Disc offsets follow `lba*2048 + (vaddr - 0x80088800)`; the runtime maps that
-onto a 2352-byte raw image as `(off/2048)*2352 + 24 + off%2048`. A patch may
-not straddle a 2048-byte sector boundary — the runtime applies writes inside a
-single sector buffer — and the generator asserts it.
+Disc offsets follow `lba*2048 + (vaddr - <that overlay's load base>)`; the
+runtime maps that onto a 2352-byte raw image as `(off/2048)*2352 + 24 +
+off%2048`. A patch may not straddle a 2048-byte sector boundary — the runtime
+applies writes inside a single sector buffer — and the generator asserts it.
+
+**Overlays do not share a load base.** TRN and TRN2 are `0x80088800`, but EVL,
+EAB and ENDI are `0x80060000`, BTL/STD/VS are `0x80052AE0`, and so on;
+`OVL_BASES` in the generator has all sixteen. Using one base for all of them
+still finds the right table references (the target address is absolute) but
+computes wrong site addresses, which is a silent way to patch the wrong bytes.
+
+#### 4.1.1a A relocation must census *every* overlay
+
+This one shipped broken and is worth recording precisely.
+
+The first version of the relocation censused reference sites **in the EXE
+only**, plus TRN/TRN2 for the two tables that live there. But overlays
+reference the EXE's tables too, and one of them mattered enormously:
+**`EVL_REL.BIN` — the evolution overlay — reads `EVO_GAINS_DATA`** at
+`lui 0x80063390`. It was still pointing at the stock table, which has **66
+entries**. So the moment a partner evolved into any type above 65, EVL computed
+the new species from out-of-bounds memory:
+
+| Target | Became |
+|---|---|
+| 12, 26, 63, 64, 65 | correct |
+| 66 | 511 |
+| 113 | 12543 |
+| 115 | 7730 |
+| 149 | 514 |
+
+Five of the seven authored species were affected, Machinedramon included — and
+the bug was invisible because every early test target happened to fall below
+66. Seven more sites read `RAISE_DATA` (EVL ×1, TRN ×3, TRN2 ×3) and would have
+corrupted training the same way.
+
+The census is now per **(overlay, table)** and asserted as an exact set, so a
+newly-appearing site is a hard generator failure rather than a silent omission.
+The EXE-resident tables are scanned in every overlay; the two overlay-resident
+tables are scanned only in the overlay that owns them, because TRN and TRN2
+share an address window and would otherwise match each other's unrelated data.
 
 The reference census that found those sites is in `research/roster-xref-census.md`.
 Two properties made the relocation safe, both verified mechanically: every

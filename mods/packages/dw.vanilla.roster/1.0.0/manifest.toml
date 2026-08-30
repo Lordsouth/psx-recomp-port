@@ -1188,6 +1188,22 @@ address = 0x80105398
 expected = "c5 25 42 24"
 replace = "09 14 42 24"
 
+# EVL_REL.BIN 0x80063390: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 302756752
+expected = "13 80 02 3c"
+replace = "00 9f 02 3c"
+
+# EVL_REL.BIN 0x8006376C: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 302757740
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
 # TRN2_REL.BIN 0x80089C60: table ref -> arena
 [[patch]]
 feature = "roster"
@@ -1210,6 +1226,54 @@ feature = "roster"
 target = "disc_user"
 offset = 303646248
 expected = "09 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN2_REL.BIN 0x8008B780: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303652736
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN2_REL.BIN 0x8008BD00: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303654144
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN2_REL.BIN 0x8008BD6C: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303654252
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN_REL.BIN 0x80089E28: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303617576
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN_REL.BIN 0x8008A554: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303619412
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN_REL.BIN 0x8008A5C0: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303619520
+expected = "12 80 02 3c"
 replace = "00 9f 02 3c"
 
 # TRN_REL.BIN 0x8008B91C: table ref -> arena
@@ -1252,6 +1316,22 @@ offset = 303626064
 expected = "09 80 02 3c"
 replace = "00 9f 02 3c"
 
+# EVL_REL.BIN 0x80063394: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 302756756
+expected = "d0 b2 42 24"
+replace = "00 28 42 24"
+
+# EVL_REL.BIN 0x80063770: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 302757744
+expected = "d1 25 42 24"
+replace = "15 14 42 24"
+
 # TRN2_REL.BIN 0x80089C64: table ref -> arena
 [[patch]]
 feature = "roster"
@@ -1275,6 +1355,54 @@ target = "disc_user"
 offset = 303646252
 expected = "20 da 42 24"
 replace = "00 44 42 24"
+
+# TRN2_REL.BIN 0x8008B788: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303652744
+expected = "d0 25 42 24"
+replace = "14 14 42 24"
+
+# TRN2_REL.BIN 0x8008BD04: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303654148
+expected = "c5 25 42 24"
+replace = "09 14 42 24"
+
+# TRN2_REL.BIN 0x8008BD70: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303654256
+expected = "c6 25 42 24"
+replace = "0a 14 42 24"
+
+# TRN_REL.BIN 0x80089E30: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303617584
+expected = "d0 25 42 24"
+replace = "14 14 42 24"
+
+# TRN_REL.BIN 0x8008A558: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303619416
+expected = "c5 25 42 24"
+replace = "09 14 42 24"
+
+# TRN_REL.BIN 0x8008A5C4: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303619524
+expected = "c6 25 42 24"
+replace = "0a 14 42 24"
 
 # TRN_REL.BIN 0x8008B920: table ref -> arena
 [[patch]]
