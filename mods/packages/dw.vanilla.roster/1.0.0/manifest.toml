@@ -1654,3 +1654,10 @@ address = 0x800A7378
 expected = "4f 00 20 10"
 replace = "4f 00 00 10"
 
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800EFAD4
+expected = "3b 00 01 2a"
+replace = "72 00 01 2a"
+

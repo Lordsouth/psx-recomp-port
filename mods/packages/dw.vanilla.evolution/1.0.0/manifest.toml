@@ -1,0 +1,38 @@
+# Digimon World - Native Evolution Engine (step 1: proof of primitive).
+#
+# Deliberately hand-written and deliberately patch-free. A function whose body
+# is replaced natively must carry NO code patch from any mod: patching marks
+# the range executable-dirty, dispatch then rejects the compiled body and
+# interprets it, and the replacement hook lives inside the body that was
+# rejected -- so it would silently never run.
+#
+# This package is separate from dw.vanilla.roster so the native chooser can be
+# toggled on its own. That is what makes a differential test meaningful: one
+# variable changes between the two runs.
+
+format_version = 5
+id = "dw.vanilla.evolution"
+version = "1.0.0"
+name = "Native Evolution Engine"
+author = "DigimonWorldVanilla"
+description = "Replaces the game's evolution chooser functions with native code, so the evolution graph is no longer limited to six paths per Digimon, ids below 128, or the 62 rows the original table holds. This first release replaces one function and is behaviour-identical to the original by design -- it exists to prove the mechanism."
+resolver = "declarative"
+# "shared", not "isolated": this release is behaviour-identical by
+# construction, writes no data, and cannot make a save that stock cannot read.
+# (Only "shared" and "isolated" are accepted -- anything else makes the
+# manifest throw and the package is dropped SILENTLY, with nothing logged.)
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-01032"
+
+[[feature]]
+id = "native-evolution"
+name = "Native evolution engine (no behaviour change yet)"
+description = "Runs the Fresh-stage evolution chooser as native code instead of the game's own. Identical results by construction; this is the foundation for removing the evolution system's structural limits, not a change in itself."
+group = "Roster"
+default_enabled = false
+
+[[plugin]]
+feature = "native-evolution"
+id = "dw.evolution"

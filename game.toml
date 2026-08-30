@@ -38,6 +38,22 @@ known_sha1 = [
 # FT4 positioner). dw_ws_backdrop.c filters by return address to the two
 # world-anchored callers and squashes backdrop X like the GTE squashes 3D.
 mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810"]
+# Native function replacement (dw_evolution.c). A listed function opens with
+#   if (psx_mod_function_replace(cpu, ADDR)) return;
+# so a plugin can compute the result, write $v0, publish $ra into cpu->pc and
+# replace the guest body outright.
+#
+# HARD INVARIANT: a function listed here must carry NO code patch from any mod.
+# Patching a body marks its range executable-dirty; dispatch then rejects the
+# compiled form and interprets it instead -- and this hook lives INSIDE the
+# body that was rejected, so it would silently never run. Leaving the guest
+# image byte-identical is exactly what makes the replacement work.
+#
+# 0x800E2544 = getFreshEvolutionTarget, chosen first precisely because it is
+# the one evolution chooser dw.vanilla.roster does NOT patch: 0x54 bytes,
+# fully decompiled, pure. This entry is the proof of the primitive, not the
+# goal -- the other four choosers need their 42 retarget patches deleted first.
+mod_function_replace_funcs = ["0x800E2544"]
 # 0x800A1F68/0x800A2810 = loadMMD/loadMMDAsync: dw_roster.c remaps the
 # type argument 114->115 so slot 114 streams Machinedramon's model and
 # texture.

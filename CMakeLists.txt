@@ -32,7 +32,8 @@ include("${PSXRECOMP_ROOT}/runtime/runtime.cmake")
 # compiled mod runtime, so it is unconditional.
 set(_dw_codegen_setup
     CODEGEN_SETUP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/dw_ws_backdrop.c"
-                          "${CMAKE_CURRENT_SOURCE_DIR}/dw_roster.c")
+                          "${CMAKE_CURRENT_SOURCE_DIR}/dw_roster.c"
+                          "${CMAKE_CURRENT_SOURCE_DIR}/dw_evolution.c")
 if(PSX_RECOMP_UI)
     list(APPEND _dw_codegen_setup "${CMAKE_CURRENT_SOURCE_DIR}/codegen_setup.c")
 endif()

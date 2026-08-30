@@ -607,6 +607,23 @@ def authored_research(rd):
     assert rd(g2, 4) == struct.pack("<I", 0x1020004F), "patch site drifted"
     extra += word_patch(g2, 0x1020004F, 0x1000004F)
 
+    # 9. Prosperity Points count the new recruits.
+    #
+    # recalculatePPandArena (main.c:405) sweeps recruit triggers 0xC8+i over
+    # i = 3..0x3A and adds (level - 2) per recruited species, so every species
+    # this mod adds was worth nothing to the town's prosperity. Widening the
+    # bound fixes that.
+    #
+    # 114 AND NOT 180. pp is a uint8_t feeding writePStat, and the running
+    # total is truncated by `andi $s1,$v0,0xFF` at 0x800EFAA0/0x800EFAC4.
+    # Summing (level-2) over the qualifying species gives 100 at the stock
+    # bound of 59, 196 at 114 -- and 312 at 180, which wraps and would make a
+    # fully-recruited town report a near-empty one. Computed from the real
+    # DIGIMON_DATA levels, not estimated.
+    pp = 0x800EFAD4
+    assert rd(pp, 4) == struct.pack("<I", 0x2A01003B), "PP loop bound drifted"
+    extra += word_patch(pp, 0x2A01003B, 0x2A010072)
+
     build_species_rows(rd, name_of, level_of)
     # NOTE the ordering these two patches depend on: they edit EVO_PATHS_DATA
     # in the EXE image, and that table is now relocated. Manifest patches are
