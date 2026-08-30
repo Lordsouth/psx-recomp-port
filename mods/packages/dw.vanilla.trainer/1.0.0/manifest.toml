@@ -129,6 +129,45 @@ max = 127
 step = 1
 default = 16
 
+[[feature]]
+id = "perfect-training"
+name = "Perfect Training"
+description = "Every training session pays the jackpot rate. The slot minigame normally grades your three reels into a reward multiplier -- 0.5x for no match, up to 10x for triple sevens -- and this makes every spin pay the 10x rate. The reels and sounds still behave normally, only the reward changes. Two things still apply: it only affects sessions that actually run the slot minigame, and a fully exhausted Digimon still earns almost nothing, so keep an eye on tiredness."
+group = "Training"
+default_enabled = false
+
+[[feature]]
+id = "training-multiplier"
+name = "Training Multiplier"
+description = "Makes the game's own training-boost effect permanent and sets its strength, multiplying the stats every training session awards. Stacks with Perfect Training. A real boost food still wins while its own timer is running."
+group = "Training"
+default_enabled = false
+
+[[option]]
+feature = "training-multiplier"
+id = "amount"
+label = "Training gain multiplier"
+description = "How much every training session is worth. The boost applies to all six stats."
+group = "Training"
+type = "choice"
+default = "x3"
+
+[[option.choice]]
+value = "x2"
+label = "2x"
+
+[[option.choice]]
+value = "x3"
+label = "3x"
+
+[[option.choice]]
+value = "x5"
+label = "5x"
+
+[[option.choice]]
+value = "x10"
+label = "10x"
+
 # tickHungerMechanics() @ 0x800A75DC -> jr $ra ; nop (return immediately)
 [[patch]]
 feature = "no-hunger"
@@ -232,4 +271,103 @@ target = "main_exe"
 address = 0x801344D2
 expected = "10"
 replace_from = { option = "gain-3", encoding = "u8", offset = 0 }
+
+# TRN tickSlotMachine payout: triple matching the trained stat (40) -> jackpot rate (100)
+# overlay vaddr 0x8008E45C, file offset 0x05C5C
+[[patch]]
+feature = "perfect-training"
+target = "disc_user"
+offset = 303635548
+expected = "28 00 02 24"
+replace = "64 00 02 24"
+
+# TRN tickSlotMachine payout: any other triple (20) -> jackpot rate (100)
+# overlay vaddr 0x8008E470, file offset 0x05C70
+[[patch]]
+feature = "perfect-training"
+target = "disc_user"
+offset = 303635568
+expected = "14 00 02 24"
+replace = "64 00 02 24"
+
+# TRN tickSlotMachine payout: no match (5) -> jackpot rate (100)
+# overlay vaddr 0x8008E488, file offset 0x05C88
+[[patch]]
+feature = "perfect-training"
+target = "disc_user"
+offset = 303635592
+expected = "05 00 02 24"
+replace = "64 00 02 24"
+
+# TRN2 tickSlotMachine payout: triple matching the trained stat (40) -> jackpot rate (100)
+# overlay vaddr 0x8008CE34, file offset 0x04634
+[[patch]]
+feature = "perfect-training"
+target = "disc_user"
+offset = 303658548
+expected = "28 00 02 24"
+replace = "64 00 02 24"
+
+# TRN2 tickSlotMachine payout: any other triple (20) -> jackpot rate (100)
+# overlay vaddr 0x8008CE48, file offset 0x04648
+[[patch]]
+feature = "perfect-training"
+target = "disc_user"
+offset = 303658568
+expected = "14 00 02 24"
+replace = "64 00 02 24"
+
+# TRN2 tickSlotMachine payout: no match (5) -> jackpot rate (100)
+# overlay vaddr 0x8008CE60, file offset 0x04660
+[[patch]]
+feature = "perfect-training"
+target = "disc_user"
+offset = 303658592
+expected = "05 00 02 24"
+replace = "64 00 02 24"
+
+# tickPartnerNormal boost-expiry block @ 0x800A9034: write the boost
+# instead of clearing it (flag = all six stats, value = N).
+[[patch]]
+feature = "training-multiplier"
+target = "main_exe"
+address = 0x800A9034
+expected = "14 80 01 3c ac 84 20 a4"
+replace = "3f 00 02 24 ac 84 22 a4"
+
+# trainBoostValue = 20 (2x)
+[[patch]]
+feature = "training-multiplier"
+target = "main_exe"
+address = 0x800A903C
+expected = "14 80 01 3c b0 84 20 a4"
+replace = "14 00 02 24 ae 84 22 a4"
+when = { amount = "x2" }
+
+# trainBoostValue = 30 (3x)
+[[patch]]
+feature = "training-multiplier"
+target = "main_exe"
+address = 0x800A903C
+expected = "14 80 01 3c b0 84 20 a4"
+replace = "1e 00 02 24 ae 84 22 a4"
+when = { amount = "x3" }
+
+# trainBoostValue = 50 (5x)
+[[patch]]
+feature = "training-multiplier"
+target = "main_exe"
+address = 0x800A903C
+expected = "14 80 01 3c b0 84 20 a4"
+replace = "32 00 02 24 ae 84 22 a4"
+when = { amount = "x5" }
+
+# trainBoostValue = 100 (10x)
+[[patch]]
+feature = "training-multiplier"
+target = "main_exe"
+address = 0x800A903C
+expected = "14 80 01 3c b0 84 20 a4"
+replace = "64 00 02 24 ae 84 22 a4"
+when = { amount = "x10" }
 

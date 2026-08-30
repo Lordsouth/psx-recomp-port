@@ -129,11 +129,21 @@ E01384AA 000F          # if age (+0x4A) == 15
 
 # -------------------------------------------------------------- training ----
 
-[ ] Training foods give double results
-801384AE 0014          # <- trainBoostValue (+0x4E)
+# Training multipliers. trainBoostFlag (+0x4C) selects which stats are
+# boosted; trainBoostValue (+0x4E) is the multiplier in tenths. The game
+# gates purely on the flag, so the two MUST be set together -- a flag with
+# value 0 zeroes every training gain. Enable only ONE of the three.
+[ ] Training gains 2x (all six stats)
+801384AC 003F          # <- trainBoostFlag: all six stats
+801384AE 0014          # <- trainBoostValue: 20 = 2.0x
 
-[ ] Always have the Digipine effect
-801384AC 003F          # <- trainBoostFlag (+0x4C)
+[ ] Training gains 3x (all six stats)
+801384AC 003F
+801384AE 001E          # <- 30 = 3.0x
+
+[ ] Training gains 5x (all six stats)
+801384AC 003F
+801384AE 0032          # <- 50 = 5.0x
 
 [ ] All gyms upgraded with baby bonus (+20%)
 801384C6 000A
@@ -141,16 +151,18 @@ E01384AA 000F          # if age (+0x4A) == 15
 801384CA 000A
 801384CE 000A
 801384D0 000A
+801384D2 000A          # <- Brain gym (upgradeBrainCounter, +0x72) -- was missing
 
 
 # ---------------------------------------------------------------- world ----
 
 [ ] Max Bits (money)
-80134EB8 E0FF
-80134EBA 05F5
+80134EB8 423F
+80134EBA 000F          # <- 999999 = 0xF423F: the clamp value, and the exact
+                       #    amount tamer.c checks to unlock the money medal
 
 [ ] Max Merit Points
-80134FC4 03E7
+80134FC4 270F          # <- 9999, the actual clamp
 
 [ ] Inventory size max (30 slots)
 8013D4CE 001E
