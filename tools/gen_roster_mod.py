@@ -44,13 +44,45 @@ GAME_ID = "SLUS-01032"
 ARENA = 0x9F000000
 OFF_EVO_REQ, OFF_RAISE, OFF_EVO_GAINS, OFF_ITEM_TAKE = (
     0x0000, 0x1400, 0x2800, 0x3200)
+# phase 2: the last four type-indexed tables. The two TRN* ones live in
+# overlay images rather than the EXE -- see OVL_RELOC.
+OFF_EVO_PATHS, OFF_EVOCHART, OFF_TRAIN_ANIM, OFF_TRN2_ANIM = (
+    0x3400, 0x3C00, 0x4200, 0x4400)
+N_TYPES = 180
+# 32 KB. The high-water mark is TRN2_ANIM's end; the lui/lo16 retarget can only
+# encode a positive lo16, so every offset must also stay below 0x8000.
+ARENA_SIZE = 0x8000
+_ARENA_END = OFF_TRN2_ANIM + N_TYPES * 2
+assert _ARENA_END <= ARENA_SIZE and _ARENA_END < 0x8000, _ARENA_END
 
-# ---- tables being relocated ------------------------------------------------
+# ---- tables being relocated, main EXE --------------------------------------
 RELOC = {
     "EVO_REQ_DATA":       (0x8012ABEC, 63 * 28, OFF_EVO_REQ),
     "RAISE_DATA":         (0x801225BC, 66 * 28, OFF_RAISE),
     "EVO_GAINS_DATA":     (0x8012B2D0, 66 * 14, OFF_EVO_GAINS),
     "ITEM_TAKE_DISTANCE": (0x80122D24, 67, OFF_ITEM_TAKE),
+    "EVO_PATHS_DATA":     (0x8012B66C, 62 * 11, OFF_EVO_PATHS),
+    "EVOCHART_ICONS":     (0x80124544, 61 * 8, OFF_EVOCHART),
+}
+
+# ---- tables being relocated, overlay images --------------------------------
+# Both are s8[68][2] indexed [type-1] inside an overlay, so every type above 68
+# reads past the end into the overlay's string pool. (0.2.0 shipped slot 114 by
+# patching the two string bytes index 114 happens to land on: correct for one
+# slot, unworkable for 51.) Relocating them retires that hack.
+#
+# Overlays load verbatim at OVL_BASE, so disc offset = lba*2048 + (vaddr -
+# OVL_BASE). These patches are code, and the runtime keys compiled overlay
+# entries by a content hash of their code ranges (overlay_loader.c, "Inc3"), so
+# a patched overlay misses its cache and is rebuilt -- executing stale native
+# code for a patched range is impossible by construction.
+OVL_BASE = 0x80088800
+OVL_DIR = os.path.dirname(EXE)
+OVL_RELOC = {
+    "TRAINING_ANIM_IDS": ("TRN_REL.BIN", 148248, 0x8008F050, 68 * 2,
+                          OFF_TRAIN_ANIM),
+    "TRN2_D_8008DA20":   ("TRN2_REL.BIN", 148262, 0x8008DA20, 68 * 2,
+                          OFF_TRN2_ANIM),
 }
 
 # ---- authored constants (from research/roster-* + the data workflow) -------
@@ -114,26 +146,29 @@ def authored_research(rd):
                          ("MetalGreymon", 0x8012B6EA)):
         assert rd(va, 1) == bytes([0xFF]), src_name
         extra += bytes_patch(va, bytes([0xFF]), bytes([114]))
-    # 7. offense/MP training anim tables live in TRN/TRN2 overlays on disc,
-    #    indexed by RAW type: slot 114 reads string bytes (TRN: invalid anim
-    #    101) and zeros (TRN2: threshold 0 soft-locks MP training). Anim 46 is
-    #    the row 60 of 66 partners share, proven present in the MUGE skeleton.
-    def disc_patch(offset, old_b, new_b, note):
-        return [
-            "# %s" % note,
-            "[[patch]]",
-            'feature = "roster"',
-            'target = "disc_user"',
-            "offset = %d" % offset,
-            'expected = "%s"' % hexs(old_b),
-            'replace = "%s"' % hexs(new_b),
-            "",
-        ]
-    extra += disc_patch(303638836, bytes([0x65, 0x20]), bytes([0x2E, 0x20]),
-                        "TRN_REL.BIN offense-training anim for type 114")
-    extra += disc_patch(303661828, bytes([0x00, 0x00]), bytes([0x2E, 0x0A]),
-                        "TRN2_REL.BIN MP-training anim for type 114 "
-                        "(threshold 0 would soft-lock)")
+    # NOTE the ordering these two patches depend on: they edit EVO_PATHS_DATA
+    # in the EXE image, and that table is now relocated. Manifest patches are
+    # applied to guest RAM before initializeHeap runs, and the plugin's arena
+    # copy is taken at that hook, so the copy inherits them. Keeping them as
+    # guarded EXE patches (rather than authoring bytes in the plugin) keeps
+    # the drift check: a changed EXE refuses to apply instead of corrupting.
+
+    # 7. Offense/MP training animation ids. Both tables are s8[68][2] in an
+    #    overlay indexed by raw type, so type 114 read 92 bytes past the end
+    #    (TRN: the string "Give it all you ", giving invalid anim 101; TRN2:
+    #    zeros, and threshold 0 soft-locks MP training). 0.2.0 shipped this as
+    #    two disc patches that rewrote those string bytes in place. Both
+    #    tables are now relocated into the arena instead, so the entry is
+    #    authored data and the string is left intact. Anim 46 is the row 60 of
+    #    66 partners share, proven present in the MUGE skeleton.
+    #    Byte [1] is the frame the impact lands on: a per-frame counter is
+    #    compared with == before the hit FX and sound fire (trn_off.c:145).
+    #    0.2.0's in-place patch rewrote only byte [0] of "e ", so it inherited
+    #    the string's space (0x20 = 32 frames) as the impact frame -- three
+    #    times the 0x0A every other user of animation 46 uses, and outside the
+    #    0x08..0x1E range of the whole stock table. Authored properly here.
+    AUTHORED["train_anim_114"] = bytes([0x2E, 0x0A])
+    AUTHORED["trn2_anim_114"] = bytes([0x2E, 0x0A])
 
     # authored table entries (filled into the arena by dw_roster.c)
     AUTHORED["evo_req_114"] = struct.pack(
@@ -199,14 +234,17 @@ def dest_reg(word):
     return None
 
 
-def scan_sites(data):
-    """[(table, lui_vaddr, lui_word, lo_vaddr, lo_word, target)]"""
-    text = data[HDR:HDR + (CODE_END - LOAD_ADDR)]
+def scan_image(text, start_va, tables):
+    """Generic lui/lo16 materialization census over one code image.
+
+    tables: name -> (base, size). Returns
+    [(table, lui_vaddr, lui_word, lo_vaddr, lo_word, target)].
+    """
     words = struct.unpack("<%dI" % (len(text) // 4), text)
     live = {}   # reg -> (hi16, lui_vaddr, lui_word)
     out = []
     for i, w in enumerate(words):
-        va = LOAD_ADDR + i * 4
+        va = start_va + i * 4
         op = w >> 26
         rs = (w >> 21) & 31
         rt = (w >> 16) & 31
@@ -216,7 +254,7 @@ def scan_sites(data):
         if (op == 0x09 or op in LOADS or op in STORES) and rs in live:
             hi, lui_va, lui_w = live[rs]
             tgt = ((hi << 16) + sext16(w & 0xFFFF)) & 0xFFFFFFFF
-            for name, (base, size, _aoff) in RELOC.items():
+            for name, (base, size) in tables.items():
                 if base <= tgt < base + size or tgt == base:
                     out.append((name, lui_va, lui_w, va, w, tgt))
         d = dest_reg(w)
@@ -226,6 +264,36 @@ def scan_sites(data):
             # invalidate on any write, except the lui itself handled above.
             del live[d]
     return out
+
+
+def scan_sites(data):
+    """EXE census, RELOC tables."""
+    return scan_image(data[HDR:HDR + (CODE_END - LOAD_ADDR)], LOAD_ADDR,
+                      {n: (b, s) for n, (b, s, _a) in RELOC.items()})
+
+
+def scan_overlay_sites():
+    """Overlay census. -> (sites, images) where images maps file -> bytes.
+
+    Each overlay is a flat load image at OVL_BASE, so the whole file is
+    scanned; the tables sit above all code, and a stray data-as-code match
+    would have to materialize an address inside a 136-byte window, which the
+    site counts below are asserted against.
+    """
+    sites, images = [], {}
+    for name, (fn, _lba, base, size, _aoff) in OVL_RELOC.items():
+        img = open(os.path.join(OVL_DIR, fn), "rb").read()
+        images[fn] = img
+        n = (len(img) // 4) * 4
+        for s in scan_image(img[:n], OVL_BASE, {name: (base, size)}):
+            sites.append((fn,) + s)
+    return sites, images
+
+
+def disc_offset(lba, vaddr):
+    """Disc user-data offset of an overlay vaddr. Verified against the
+    0.2.0 TRN patch (LBA 148248, type-114 slot -> 303638836)."""
+    return lba * 2048 + (vaddr - OVL_BASE)
 
 
 def retarget(sites):
@@ -246,8 +314,19 @@ def retarget(sites):
                 "shared lui at 0x%08X retargets inconsistently" % lui_va)
         lui_patches[lui_va] = (lui_w, new_lui)
         new_lo = (lo_w & 0xFFFF0000) | lo
+        check_pair(new_lui, new_lo, new_tgt, "%s @0x%08X" % (name, lo_va))
         lo_patches.append((lo_va, lo_w, new_lo))
     return lui_patches, lo_patches
+
+
+def check_pair(new_lui, new_lo, want, where):
+    """Decode a rewritten lui/lo16 pair the way the CPU does and assert it
+    materializes the intended address. The encoding is the one thing here that
+    fails silently: a wrong hi-adjust still assembles, still passes every
+    expected-byte guard, and simply points the game at the wrong memory."""
+    got = ((new_lui & 0xFFFF) << 16) + sext16(new_lo & 0xFFFF)
+    assert got & 0xFFFFFFFF == want, (
+        "%s: pair decodes to 0x%08X, wanted 0x%08X" % (where, got, want))
 
 
 def hexs(bs):
@@ -279,6 +358,65 @@ def bytes_patch(vaddr, old, new, feature="roster"):
     ]
 
 
+def disc_bytes_patch(offset, old, new, note, feature="roster"):
+    assert len(old) == len(new)
+    # A patch may not straddle a 2048-byte sector boundary.
+    assert offset // 2048 == (offset + len(old) - 1) // 2048, (
+        "patch at %d crosses a sector boundary" % offset)
+    return [
+        "# %s" % note,
+        "[[patch]]",
+        'feature = "%s"' % feature,
+        'target = "disc_user"',
+        "offset = %d" % offset,
+        'expected = "%s"' % hexs(old),
+        'replace = "%s"' % hexs(new),
+        "",
+    ]
+
+
+def overlay_retarget(sites, images):
+    """Emit disc_user word patches retargeting overlay table references into
+    the arena. Mirrors retarget() but keyed by (file, vaddr)."""
+    lui_patches, lo_patches = {}, []
+    for fn, name, lui_va, lui_w, lo_va, lo_w, tgt in sites:
+        _f, lba, base, _size, aoff = OVL_RELOC[name]
+        new_tgt = ARENA + aoff + (tgt - base)
+        lo = new_tgt & 0xFFFF
+        hi = (new_tgt >> 16) + (1 if lo & 0x8000 else 0)
+        assert not (lo & 0x8000), (
+            "arena layout must keep lo16 positive: %s 0x%X" % (name, new_tgt))
+        new_lui = (lui_w & 0xFFFF0000) | (hi & 0xFFFF)
+        key = (fn, lui_va)
+        prev = lui_patches.get(key)
+        if prev is not None:
+            assert prev == (lui_w, new_lui, lba), (
+                "shared lui at %s 0x%08X retargets inconsistently"
+                % (fn, lui_va))
+        lui_patches[key] = (lui_w, new_lui, lba)
+        new_lo = (lo_w & 0xFFFF0000) | lo
+        check_pair(new_lui, new_lo, new_tgt, "%s %s @0x%08X"
+                   % (fn, name, lo_va))
+        lo_patches.append((fn, lo_va, lo_w, new_lo, lba))
+
+    out = []
+    for (fn, va), (old, new, lba) in sorted(lui_patches.items()):
+        img = images[fn]
+        off = va - OVL_BASE
+        assert struct.unpack("<I", img[off:off + 4])[0] == old
+        out += disc_bytes_patch(
+            disc_offset(lba, va), struct.pack("<I", old),
+            struct.pack("<I", new), "%s 0x%08X: table ref -> arena" % (fn, va))
+    for fn, va, old, new, lba in sorted(lo_patches):
+        img = images[fn]
+        off = va - OVL_BASE
+        assert struct.unpack("<I", img[off:off + 4])[0] == old
+        out += disc_bytes_patch(
+            disc_offset(lba, va), struct.pack("<I", old),
+            struct.pack("<I", new), "%s 0x%08X: table ref -> arena" % (fn, va))
+    return out
+
+
 def main():
     check_only = "--check" in sys.argv
     data = open(EXE, "rb").read()
@@ -286,10 +424,25 @@ def main():
     sites = scan_sites(data)
     from collections import Counter
     c = Counter(s[0] for s in sites)
-    print("reference sites:", dict(c))
+    print("EXE reference sites:", dict(c))
     lui_patches, lo_patches = retarget(sites)
-    print("patches: %d lui (deduped) + %d lo16" %
+    print("EXE patches: %d lui (deduped) + %d lo16" %
           (len(lui_patches), len(lo_patches)))
+
+    ovl_sites, ovl_images = scan_overlay_sites()
+    oc = Counter(s[1] for s in ovl_sites)
+    print("overlay reference sites:", dict(oc))
+    # Census counts are the contract: a different count means the scanner or
+    # the image changed, and silently patching a different set of sites is how
+    # you ship a half-relocated table.
+    for name, want in (("EVO_REQ_DATA", 16), ("RAISE_DATA", 44),
+                       ("EVO_GAINS_DATA", 4), ("ITEM_TAKE_DISTANCE", 3),
+                       ("EVO_PATHS_DATA", 9), ("EVOCHART_ICONS", 7)):
+        assert c[name] == want, "%s: %d sites, expected %d" % (
+            name, c[name], want)
+    for name, want in (("TRAINING_ANIM_IDS", 5), ("TRN2_D_8008DA20", 3)):
+        assert oc[name] == want, "%s: %d sites, expected %d" % (
+            name, oc[name], want)
 
     funcs = set()
     for _n, lui_va, _lw, _lv, _low, _t in sites:
@@ -306,6 +459,15 @@ def main():
     # detection lui for the plugin gate: lowest lui vaddr among EVO_REQ sites
     detect = min(lv for n, lv, _lw, _lo, _low, _t in sites
                  if n == "EVO_REQ_DATA")
+
+    # stock overlay table contents, baked for the plugin (see the .inc note)
+    def ovl_stock(name):
+        fn, _lba, base, size, _aoff = OVL_RELOC[name]
+        off = base - OVL_BASE
+        return ovl_images[fn][off:off + size]
+    stock_train = ovl_stock("TRAINING_ANIM_IDS")
+    stock_trn2 = ovl_stock("TRN2_D_8008DA20")
+    assert len(stock_train) == 136 and len(stock_trn2) == 136
 
     out = [
         "# Digimon World - Expanded Roster. Generated by",
@@ -349,6 +511,7 @@ def main():
         out += word_patch(lui_va, old, new)
     for lo_va, old, new in sorted(lo_patches):
         out += word_patch(lo_va, old, new)
+    out += overlay_retarget(ovl_sites, ovl_images)
     out += AUTHORED["extra_patches"]
 
     dest_dir = os.path.join(ROOT, "mods", "packages", PKG_ID, PKG_VER)
@@ -374,6 +537,34 @@ def main():
         ", ".join("0x%02X" % b for b in AUTHORED["evo_gains_114"]),
         "static const unsigned char k_item_take_114 = 0x%02X;" %
         AUTHORED["item_take_114"],
+        "",
+        "/* Arena offsets are emitted here rather than duplicated in the",
+        " * plugin: the manifest's retargeted addresses are computed from",
+        " * these, so a drift between the two would silently point the game at",
+        " * the wrong table. */",
+        "#define ROSTER_ARENA_SIZE 0x%Xu" % ARENA_SIZE,
+        "#define ROSTER_OFF_EVO_REQ 0x%04Xu" % OFF_EVO_REQ,
+        "#define ROSTER_OFF_RAISE 0x%04Xu" % OFF_RAISE,
+        "#define ROSTER_OFF_EVO_GAINS 0x%04Xu" % OFF_EVO_GAINS,
+        "#define ROSTER_OFF_ITEM_TAKE 0x%04Xu" % OFF_ITEM_TAKE,
+        "#define ROSTER_OFF_EVO_PATHS 0x%04Xu" % OFF_EVO_PATHS,
+        "#define ROSTER_OFF_EVOCHART 0x%04Xu" % OFF_EVOCHART,
+        "#define ROSTER_OFF_TRAIN_ANIM 0x%04Xu" % OFF_TRAIN_ANIM,
+        "#define ROSTER_OFF_TRN2_ANIM 0x%04Xu" % OFF_TRN2_ANIM,
+        "",
+        "/* Stock contents of the two overlay tables. Unlike the EXE tables,",
+        " * these cannot be copied out of guest RAM at the fill hook: TRN and",
+        " * TRN2 are not resident until the player enters a gym, long after",
+        " * initializeHeap. Baked from the overlay images at generation time",
+        " * and asserted equal-length. */",
+        "static const unsigned char k_train_anim_stock[%d] = { %s };"
+        % (len(stock_train), ", ".join("0x%02X" % b for b in stock_train)),
+        "static const unsigned char k_trn2_anim_stock[%d] = { %s };"
+        % (len(stock_trn2), ", ".join("0x%02X" % b for b in stock_trn2)),
+        "static const unsigned char k_train_anim_114[2] = { %s };" %
+        ", ".join("0x%02X" % b for b in AUTHORED["train_anim_114"]),
+        "static const unsigned char k_trn2_anim_114[2] = { %s };" %
+        ", ".join("0x%02X" % b for b in AUTHORED["trn2_anim_114"]),
         "",
     ]
     inc_path = os.path.join(ROOT, "dw_roster_data.inc")

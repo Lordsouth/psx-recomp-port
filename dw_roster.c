@@ -35,15 +35,22 @@
 #include "cpu_state.h"
 #include "mod_plugins.h"
 
-/* ---- arena layout (mirrored in tools/gen_roster_mod.py) ---------------- */
-#define ROSTER_ARENA_SIZE 0x4000u
+/* ---- arena layout ------------------------------------------------------
+ * The offsets and the arena size come from the generated include, not from
+ * literals here: the manifest's retargeted addresses are computed from the
+ * same constants, so duplicating them is how the game ends up reading the
+ * wrong table after an edit to one file only. */
 #define ROSTER_ARENA_BASE 0x9F000000u
 #define ROSTER_N_TYPES 180u
 
-#define OFF_EVO_REQ 0x0000u  /* 180 * 28 = 0x13B0 */
-#define OFF_RAISE 0x1400u    /* 180 * 28 = 0x13B0 */
-#define OFF_EVO_GAINS 0x2800u /* 180 * 14 = 0x9D8 */
-#define OFF_ITEM_TAKE 0x3200u /* 180 * 1  */
+#define OFF_EVO_REQ ROSTER_OFF_EVO_REQ        /* 180 * 28 = 0x13B0 */
+#define OFF_RAISE ROSTER_OFF_RAISE            /* 180 * 28 = 0x13B0 */
+#define OFF_EVO_GAINS ROSTER_OFF_EVO_GAINS    /* 180 * 14 = 0x9D8  */
+#define OFF_ITEM_TAKE ROSTER_OFF_ITEM_TAKE    /* 180 * 1          */
+#define OFF_EVO_PATHS ROSTER_OFF_EVO_PATHS    /* 180 * 11 = 0x7BC  */
+#define OFF_EVOCHART ROSTER_OFF_EVOCHART      /* 180 * 8  = 0x5A0  */
+#define OFF_TRAIN_ANIM ROSTER_OFF_TRAIN_ANIM  /* 180 * 2  = 0x168  */
+#define OFF_TRN2_ANIM ROSTER_OFF_TRN2_ANIM    /* 180 * 2  = 0x168  */
 
 /* ---- stock table locations in guest RAM -------------------------------- */
 #define SRC_EVO_REQ 0x8012ABECu
@@ -57,6 +64,17 @@
 #define STRIDE_EVO_GAINS 14u
 #define SRC_ITEM_TAKE 0x80122D24u
 #define N_ITEM_TAKE 67u
+#define SRC_EVO_PATHS 0x8012B66Cu
+#define N_EVO_PATHS 62u
+#define STRIDE_EVO_PATHS 11u
+#define SRC_EVOCHART 0x80124544u
+#define N_EVOCHART 61u
+#define STRIDE_EVOCHART 8u
+/* TRAINING_ANIM_IDS and TRN2_D_8008DA20 have no SRC_: they live in the TRN
+ * and TRN2 overlays, which are not resident at the fill hook (they load when
+ * the player enters a gym). Their stock contents are baked into the include
+ * instead -- see k_train_anim_stock / k_trn2_anim_stock. */
+#define STRIDE_TRAIN_ANIM 2u
 
 /* Feature-detection: the first EVO_REQ retarget site's lui. When the
  * manifest applied, its immediate reads 0x9F00. (Site from the census;
@@ -71,6 +89,12 @@ static uint32_t roster_arena = 0;
 
 static void roster_fill(void) {
     uint32_t i;
+    /* Zero first. Every table here is grown to 180 entries while its stock
+     * content covers 61-68, so the tail is read by any id the stock game
+     * never had; "unreachable entries stay zero" should be a fact, not an
+     * assumption about what the allocator hands back. */
+    for (i = 0; i < ROSTER_ARENA_SIZE; i += 4)
+        psx_mod_write_word(roster_arena + i, 0);
     /* copy stock entries */
     for (i = 0; i < N_EVO_REQ * STRIDE_EVO_REQ; i += 4)
         psx_mod_write_word(roster_arena + OFF_EVO_REQ + i,
@@ -84,6 +108,24 @@ static void roster_fill(void) {
     for (i = 0; i < N_ITEM_TAKE; i++)
         psx_mod_write_byte(roster_arena + OFF_ITEM_TAKE + i,
                            psx_mod_read_byte(SRC_ITEM_TAKE + i));
+    /* EVO_PATHS_DATA is 11 bytes per entry -- odd stride, so copy bytewise
+     * rather than assuming alignment. This copy is taken after the manifest's
+     * patches have been applied to guest RAM, which is what carries the
+     * evolution wiring for slot 114 (two edits inside this table) into the
+     * arena; see the note in gen_roster_mod.py. */
+    for (i = 0; i < N_EVO_PATHS * STRIDE_EVO_PATHS; i++)
+        psx_mod_write_byte(roster_arena + OFF_EVO_PATHS + i,
+                           psx_mod_read_byte(SRC_EVO_PATHS + i));
+    for (i = 0; i < N_EVOCHART * STRIDE_EVOCHART; i += 2)
+        psx_mod_write_half(roster_arena + OFF_EVOCHART + i,
+                           psx_mod_read_half(SRC_EVOCHART + i));
+    /* The two overlay tables come from baked constants, not guest RAM. */
+    for (i = 0; i < sizeof(k_train_anim_stock); i++)
+        psx_mod_write_byte(roster_arena + OFF_TRAIN_ANIM + i,
+                           k_train_anim_stock[i]);
+    for (i = 0; i < sizeof(k_trn2_anim_stock); i++)
+        psx_mod_write_byte(roster_arena + OFF_TRN2_ANIM + i,
+                           k_trn2_anim_stock[i]);
     /* neutral defaults for the previously-out-of-range ids: unreachable
      * entries stay zero (EVO_REQ .digimon 0 never matches; RAISE zeros are
      * only read if a type becomes a partner, which only 114 can) */
@@ -98,6 +140,20 @@ static void roster_fill(void) {
         psx_mod_write_byte(roster_arena + OFF_EVO_GAINS + 114u * STRIDE_EVO_GAINS + i,
                            k_evo_gains_114[i]);
     psx_mod_write_byte(roster_arena + OFF_ITEM_TAKE + 114u, k_item_take_114);
+    for (i = 0; i < sizeof(k_train_anim_114); i++)
+        psx_mod_write_byte(
+            roster_arena + OFF_TRAIN_ANIM + 114u * STRIDE_TRAIN_ANIM + i,
+            k_train_anim_114[i]);
+    for (i = 0; i < sizeof(k_trn2_anim_114); i++)
+        psx_mod_write_byte(
+            roster_arena + OFF_TRN2_ANIM + 114u * STRIDE_TRAIN_ANIM + i,
+            k_trn2_anim_114[i]);
+    /* EVOCHART_ICONS[114] is deliberately left zero. The evolution chart is a
+     * fixed 61-slot layout with baked screen positions, so there is no free
+     * position to give slot 114 and copying a donor entry would draw it on
+     * top of that donor. Stock reads 424 bytes past the table here; zero is
+     * at least deterministic. Open item: what this actually draws needs to be
+     * looked at on screen before the chart is claimed correct. */
     printf("dw_roster: arena %08X filled (tables grown to %u types)\n",
            roster_arena, (unsigned)ROSTER_N_TYPES);
     fflush(stdout);

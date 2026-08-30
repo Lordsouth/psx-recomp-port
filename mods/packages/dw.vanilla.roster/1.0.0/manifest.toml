@@ -267,6 +267,83 @@ replace = "00 9f 02 3c"
 [[patch]]
 feature = "roster"
 target = "main_exe"
+address = 0x800B98E0
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800B98FC
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BA9D0
+expected = "13 80 03 3c"
+replace = "00 9f 03 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BAA24
+expected = "13 80 03 3c"
+replace = "00 9f 03 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BAB20
+expected = "13 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BACF0
+expected = "13 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BAF2C
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BAFF8
+expected = "13 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BB034
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BB13C
+expected = "13 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BB178
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
 address = 0x800BBCB4
 expected = "12 80 02 3c"
 replace = "00 9f 02 3c"
@@ -282,6 +359,20 @@ replace = "00 9f 02 3c"
 feature = "roster"
 target = "main_exe"
 address = 0x800BBD44
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BDB0C
+expected = "12 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BDBF8
 expected = "12 80 02 3c"
 replace = "00 9f 02 3c"
 
@@ -344,6 +435,13 @@ replace = "00 9f 02 3c"
 [[patch]]
 feature = "roster"
 target = "main_exe"
+address = 0x800E25C8
+expected = "13 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
 address = 0x800E2610
 expected = "13 80 02 3c"
 replace = "00 9f 02 3c"
@@ -366,6 +464,13 @@ replace = "00 9f 02 3c"
 feature = "roster"
 target = "main_exe"
 address = 0x800E2B40
+expected = "13 80 02 3c"
+replace = "00 9f 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800E2BEC
 expected = "13 80 02 3c"
 replace = "00 9f 02 3c"
 
@@ -417,6 +522,13 @@ target = "main_exe"
 address = 0x800E2E28
 expected = "13 80 04 3c"
 replace = "00 9f 04 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800E2F40
+expected = "13 80 02 3c"
+replace = "00 9f 02 3c"
 
 [[patch]]
 feature = "roster"
@@ -736,6 +848,83 @@ replace = "09 14 42 24"
 [[patch]]
 feature = "roster"
 target = "main_exe"
+address = 0x800B98E4
+expected = "44 45 42 24"
+replace = "00 3c 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800B9900
+expected = "46 45 42 24"
+replace = "02 3c 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BA9D4
+expected = "6c b6 63 24"
+replace = "00 34 63 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BAA28
+expected = "71 b6 63 24"
+replace = "05 34 63 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BAB24
+expected = "6c b6 42 24"
+replace = "00 34 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BACF4
+expected = "71 b6 42 24"
+replace = "05 34 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BAF30
+expected = "44 45 42 24"
+replace = "00 3c 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BAFFC
+expected = "6c b6 42 24"
+replace = "00 34 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BB038
+expected = "44 45 42 24"
+replace = "00 3c 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BB140
+expected = "71 b6 42 24"
+replace = "05 34 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BB17C
+expected = "44 45 42 24"
+replace = "00 3c 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
 address = 0x800BBCB8
 expected = "ce 25 42 24"
 replace = "12 14 42 24"
@@ -753,6 +942,20 @@ target = "main_exe"
 address = 0x800BBD48
 expected = "bc 25 42 24"
 replace = "00 14 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BDB10
+expected = "44 45 42 24"
+replace = "00 3c 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800BDBFC
+expected = "44 45 42 24"
+replace = "00 3c 42 24"
 
 [[patch]]
 feature = "roster"
@@ -813,6 +1016,13 @@ replace = "00 32 42 24"
 [[patch]]
 feature = "roster"
 target = "main_exe"
+address = 0x800E25CC
+expected = "6c b6 42 24"
+replace = "00 34 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
 address = 0x800E2614
 expected = "06 ac 42 24"
 replace = "1a 00 42 24"
@@ -837,6 +1047,13 @@ target = "main_exe"
 address = 0x800E2B44
 expected = "d0 b2 42 24"
 replace = "00 28 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800E2BF4
+expected = "6c b6 42 24"
+replace = "00 34 42 24"
 
 [[patch]]
 feature = "roster"
@@ -886,6 +1103,13 @@ target = "main_exe"
 address = 0x800E2E2C
 expected = "f8 ab 84 24"
 replace = "0c 00 84 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800E2F48
+expected = "6c b6 42 24"
+replace = "00 34 42 24"
 
 [[patch]]
 feature = "roster"
@@ -964,6 +1188,134 @@ address = 0x80105398
 expected = "c5 25 42 24"
 replace = "09 14 42 24"
 
+# TRN2_REL.BIN 0x80089C60: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303645792
+expected = "09 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN2_REL.BIN 0x80089D10: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303645968
+expected = "09 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN2_REL.BIN 0x80089E28: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303646248
+expected = "09 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN_REL.BIN 0x8008B91C: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303624476
+expected = "09 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN_REL.BIN 0x8008B9FC: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303624700
+expected = "09 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN_REL.BIN 0x8008BC30: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303625264
+expected = "09 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN_REL.BIN 0x8008BE38: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303625784
+expected = "09 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN_REL.BIN 0x8008BF50: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303626064
+expected = "09 80 02 3c"
+replace = "00 9f 02 3c"
+
+# TRN2_REL.BIN 0x80089C64: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303645796
+expected = "20 da 42 24"
+replace = "00 44 42 24"
+
+# TRN2_REL.BIN 0x80089D14: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303645972
+expected = "21 da 42 24"
+replace = "01 44 42 24"
+
+# TRN2_REL.BIN 0x80089E2C: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303646252
+expected = "20 da 42 24"
+replace = "00 44 42 24"
+
+# TRN_REL.BIN 0x8008B920: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303624480
+expected = "50 f0 42 24"
+replace = "00 42 42 24"
+
+# TRN_REL.BIN 0x8008BA00: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303624704
+expected = "51 f0 42 24"
+replace = "01 42 42 24"
+
+# TRN_REL.BIN 0x8008BC34: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303625268
+expected = "50 f0 42 24"
+replace = "00 42 42 24"
+
+# TRN_REL.BIN 0x8008BE3C: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303625788
+expected = "51 f0 42 24"
+replace = "01 42 42 24"
+
+# TRN_REL.BIN 0x8008BF54: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303626068
+expected = "50 f0 42 24"
+replace = "00 42 42 24"
+
 [[patch]]
 feature = "roster"
 target = "main_exe"
@@ -1012,20 +1364,4 @@ target = "main_exe"
 address = 0x8012B6EA
 expected = "ff"
 replace = "72"
-
-# TRN_REL.BIN offense-training anim for type 114
-[[patch]]
-feature = "roster"
-target = "disc_user"
-offset = 303638836
-expected = "65 20"
-replace = "2e 20"
-
-# TRN2_REL.BIN MP-training anim for type 114 (threshold 0 would soft-lock)
-[[patch]]
-feature = "roster"
-target = "disc_user"
-offset = 303661828
-expected = "00 00"
-replace = "2e 0a"
 
