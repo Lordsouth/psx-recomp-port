@@ -369,13 +369,28 @@ class Game:
     # ---- savestates ------------------------------------------------------
     def savestate(self, op, slot, timeout_s=30.0):
         """Save or load a slot. The request is STAGED and completes on the emu
-        thread, so this polls savestate_status rather than trusting the ack."""
+        thread, so this polls savestate_status rather than trusting the ack.
+
+        last_ok is checked, not just generation: a REJECTED load still bumps
+        the generation, so polling for the bump alone reports success for a
+        load that never happened -- and every assertion afterwards is then
+        made against whatever state the machine happened to be in. A state is
+        rejected when the code image no longer matches the one it was taken
+        under, which is exactly what happens after any patch change, so this
+        is the normal path after editing a mod, not an exotic one.
+        """
         before = self.d.cmd("savestate_status")
         self.d.cmd("savestate", op=op, slot=int(slot))
         deadline = time.time() + timeout_s
         while time.time() < deadline:
             st = self.d.cmd("savestate_status")
             if st.get("generation") != before.get("generation"):
+                if not st.get("last_ok"):
+                    raise RuntimeError(
+                        "savestate %s slot %d was REJECTED (last_ok=0) -- the "
+                        "state was almost certainly taken under a different "
+                        "mod plan or code image; re-mint the fixture"
+                        % (op, slot))
                 return st
             time.sleep(0.2)
         raise TimeoutError("savestate %s slot %d did not complete" % (op, slot))

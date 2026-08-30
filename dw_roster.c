@@ -131,6 +131,20 @@ static void roster_fill(void) {
     for (i = 0; i < N_EVOCHART * STRIDE_EVOCHART; i += 2)
         psx_mod_write_half(roster_arena + OFF_EVOCHART + i,
                            psx_mod_read_half(SRC_EVOCHART + i));
+    /* Battle-intro name banner: 112 stock rows, then the two types that used
+     * to run off the end into the overlay's string pool. */
+    for (i = 0; i < sizeof(k_std_glyph_stock); i++)
+        psx_mod_write_byte(roster_arena + ROSTER_OFF_STD_GLYPH + i,
+                           k_std_glyph_stock[i]);
+    for (i = 0; i < sizeof(k_std_glyph_112); i++) {
+        psx_mod_write_byte(
+            roster_arena + ROSTER_OFF_STD_GLYPH + 112u * 14u + i,
+            k_std_glyph_112[i]);
+        psx_mod_write_byte(
+            roster_arena + ROSTER_OFF_STD_GLYPH + 113u * 14u + i,
+            k_std_glyph_113[i]);
+    }
+
     /* The two overlay tables come from baked constants, not guest RAM. */
     for (i = 0; i < sizeof(k_train_anim_stock); i++)
         psx_mod_write_byte(roster_arena + OFF_TRAIN_ANIM + i,

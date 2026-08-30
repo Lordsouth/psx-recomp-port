@@ -48,11 +48,13 @@ OFF_EVO_REQ, OFF_RAISE, OFF_EVO_GAINS, OFF_ITEM_TAKE = (
 # overlay images rather than the EXE -- see OVL_RELOC.
 OFF_EVO_PATHS, OFF_EVOCHART, OFF_TRAIN_ANIM, OFF_TRN2_ANIM = (
     0x3400, 0x3C00, 0x4200, 0x4400)
+# The battle-intro name glyphs, 14 bytes per type. 180 * 14 = 0x9D8.
+OFF_STD_GLYPH = 0x4600
 N_TYPES = 180
 # 32 KB. The high-water mark is TRN2_ANIM's end; the lui/lo16 retarget can only
 # encode a positive lo16, so every offset must also stay below 0x8000.
 ARENA_SIZE = 0x8000
-_ARENA_END = OFF_TRN2_ANIM + N_TYPES * 2
+_ARENA_END = OFF_STD_GLYPH + N_TYPES * 14
 assert _ARENA_END <= ARENA_SIZE and _ARENA_END < 0x8000, _ARENA_END
 
 # ---- tables being relocated, main EXE --------------------------------------
@@ -83,6 +85,13 @@ OVL_RELOC = {
                           OFF_TRAIN_ANIM),
     "TRN2_D_8008DA20":   ("TRN2_REL.BIN", 148262, 0x8008DA20, 68 * 2,
                           OFF_TRN2_ANIM),
+    # The battle-intro name banner, 112 rows of katakana glyph indices indexed
+    # by RAW partner type. Types 112 and 113 are past the end and read the
+    # overlay's string pool instead -- WaruSeadramon's banner renders the bytes
+    # of "\STDDAT\T_TOGI" and Meteormon's ".TMD..\STDDAT\". Visible garbage the
+    # moment either enters an arena battle.
+    "STD_NAME_GLYPHS":   ("STD_REL.BIN", 148157, 0x80079CBC, 112 * 14,
+                          OFF_STD_GLYPH),
 }
 
 # EVERY overlay's load address. Relocating a table means retargeting every
@@ -111,6 +120,10 @@ OVL_LBAS = {
     "EVL_REL.BIN": 147824,
     "TRN_REL.BIN": 148248,
     "TRN2_REL.BIN": 148262,
+    # BTL/STD/VS share their first sector byte-for-byte, so a first-sector
+    # signature match finds the wrong one. This LBA was found by matching a
+    # distinctive chunk 0x20000 bytes in, then verified over four sectors.
+    "STD_REL.BIN": 148157,
 }
 
 # ---- game tables read during generation -------------------------------------
@@ -624,6 +637,50 @@ def authored_research(rd):
     assert rd(pp, 4) == struct.pack("<I", 0x2A01003B), "PP loop bound drifted"
     extra += word_patch(pp, 0x2A01003B, 0x2A010072)
 
+    # 10. Evolution-chart cursor: stop empty cells opening a bogus page.
+    #
+    # tickPlayerMenu reverse-looks-up the cursor position against the 62 chart
+    # cells. It presets selection = -1 (0x800B98B0/B8), then scans a0 = 0..61 --
+    # but BOTH the match branch and the loop-exhausted fall-through arrive at
+    # the unconditional store at 0x800B992C:
+    #
+    #     addi $v0,$a0,0x1  ;  sh $v0,-28140($gp)
+    #
+    # A match can only produce 1..62, so 63 is unambiguously "no match" -- and
+    # 63 is Panjyamon under this mod, whose confirm handler gates only on
+    # hasDigimonRaised, which the widened raised-flag guard now satisfies. The
+    # grid has 20 empty cells, every one of which opens a page for a Digimon
+    # the player did not select.
+    #
+    # The store cannot simply be branched over: it sits one instruction after
+    # the loop branch, and the intervening delay slot always executes. So the
+    # loop tail is reordered instead -- the bound test moves up one word and
+    # the a1 stride becomes the loop branch's delay slot, which frees a whole
+    # word for an unconditional jump past the store:
+    #
+    #   9918  addi $a0,$a0,1        (unchanged)
+    #   991C  slti $at,$a0,0x3E     <- moved up
+    #   9920  bnez $at,0x800B98E0   <- loop
+    #   9924  addi $a1,$a1,8        <- delay slot; must run every iteration
+    #   9928  b    0x800B9934       <- exhausted: skip the store entirely
+    #   992C  addi $v0,$a0,1        (delay slot, harmless; also the match entry)
+    #   9930  sh   $v0,-28140($gp)  (unchanged)
+    #
+    # The match path still enters at 0x992C and stores, so selection is
+    # untouched for every real cell. The loop's initial entry branch at
+    # 0x800B98D8 has to follow the bound test up one word.
+    chart = [
+        (0x800B98D8, 0x10000011, 0x10000010),   # b 0x9920 -> b 0x991C
+        (0x800B991C, 0x20A50008, 0x2881003E),   # addi a1 -> slti at
+        (0x800B9920, 0x2881003E, 0x1420FFEF),   # slti at -> bnez at,0x98E0
+        (0x800B9924, 0x1420FFEE, 0x20A50008),   # bnez    -> addi a1 (delay)
+        (0x800B9928, 0x00000000, 0x10000002),   # nop     -> b 0x9934
+    ]
+    for va, old, new in chart:
+        assert rd(va, 4) == struct.pack("<I", old), (
+            "chart cursor site 0x%08X drifted: %s" % (va, rd(va, 4).hex()))
+        extra += word_patch(va, old, new)
+
     build_species_rows(rd, name_of, level_of)
     # NOTE the ordering these two patches depend on: they edit EVO_PATHS_DATA
     # in the EXE image, and that table is now relocated. Manifest patches are
@@ -974,6 +1031,7 @@ def main():
         ("EVL_REL.BIN", "RAISE_DATA"): 1,
         ("TRN_REL.BIN", "RAISE_DATA"): 3,
         ("TRN2_REL.BIN", "RAISE_DATA"): 3,
+        ("STD_REL.BIN", "STD_NAME_GLYPHS"): 6,
     }
     assert dict(per_file) == want_ovl, (
         "overlay site census changed.\n  got:    %s\n  wanted: %s"
@@ -997,12 +1055,44 @@ def main():
 
     # stock overlay table contents, baked for the plugin (see the .inc note)
     def ovl_stock(name):
+        # Each overlay's own load base -- they are NOT all 0x80088800, and
+        # using one for all of them silently reads the wrong bytes.
         fn, _lba, base, size, _aoff = OVL_RELOC[name]
-        off = base - OVL_BASE
+        off = base - OVL_BASES[fn]
         return ovl_images[fn][off:off + size]
     stock_train = ovl_stock("TRAINING_ANIM_IDS")
     stock_trn2 = ovl_stock("TRN2_D_8008DA20")
     assert len(stock_train) == 136 and len(stock_trn2) == 136
+    stock_glyph = ovl_stock("STD_NAME_GLYPHS")
+    assert len(stock_glyph) == 112 * 14
+
+    # Battle-banner names for the two types that overran the table.
+    #
+    # These are katakana glyph indices, and both are COMPOSED from rows the
+    # game itself renders rather than decoded from a font map -- which is why
+    # they can be trusted.
+    #
+    # 0x3D is a segment separator, visible in every compound name:
+    # MegaSeadramon is MEGA|SEADRAMON, SkullGreymon SUKARU|GUREIMON,
+    # WaruMonzaemon WARU|MONZAEMON. So WaruSeadramon is exactly
+    # WaruMonzaemon's "WARU" + separator, followed by Seadramon's own row.
+    #
+    # Meteormon (メテオモン) is built from three independently cross-checked
+    # glyphs: ME 0x33 (first glyph of MegaSeadramon, and of BlueMeramon's
+    # "MERA"), TE 0x1B (Etemon and Tekkamon), O 0x04 (Ogremon), then the
+    # "MON" suffix 0x34 0x15 every name in the table ends with.
+    def glyph_row(t):
+        return stock_glyph[t * 14:(t + 1) * 14]
+
+    waru = glyph_row(70)[:2]              # WA RU
+    seadramon = glyph_row(10).rstrip(b"\0")
+    row112 = waru + b"\x3d" + seadramon
+    row113 = bytes([0x33, 0x1B, 0x04, 0x34, 0x15])
+    assert waru == b"\x0f\x07", waru.hex()
+    assert seadramon == bytes([0x11, 0x2D, 0x1F, 0x1C, 0x05, 0x34, 0x15])
+    assert len(row112) <= 14 and len(row113) <= 14
+    AUTHORED["glyph_112"] = row112 + bytes(14 - len(row112))
+    AUTHORED["glyph_113"] = row113 + bytes(14 - len(row113))
 
     out = [
         "# Digimon World - Expanded Roster. Generated by",
@@ -1102,6 +1192,17 @@ def main():
         ", ".join("0x%02X" % b for b in AUTHORED["train_anim_114"]),
         "static const unsigned char k_trn2_anim_114[2] = { %s };" %
         ", ".join("0x%02X" % b for b in AUTHORED["trn2_anim_114"]),
+        "",
+        "/* Battle-intro name banner: 112 stock rows of 14, plus the two types",
+        " * that used to read the overlay's string pool. Baked, because",
+        " * STD_REL.BIN is not resident when the arena is filled. */",
+        "static const unsigned char k_std_glyph_stock[%d] = { %s };"
+        % (len(stock_glyph), ", ".join("0x%02X" % b for b in stock_glyph)),
+        "static const unsigned char k_std_glyph_112[14] = { %s };  /* WaruSeadramon */"
+        % ", ".join("0x%02X" % b for b in AUTHORED["glyph_112"]),
+        "static const unsigned char k_std_glyph_113[14] = { %s };  /* Meteormon */"
+        % ", ".join("0x%02X" % b for b in AUTHORED["glyph_113"]),
+        "#define ROSTER_OFF_STD_GLYPH 0x%04Xu" % OFF_STD_GLYPH,
         "",
         "/* Newly raisable species. One row each; the plugin walks this table",
         " * so adding a species is a generator edit, not a plugin edit.",
