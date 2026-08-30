@@ -131,6 +131,21 @@ of Digimon you already know, and they want what you would expect: they are the
 only evolutions in the game that ask you to have made *more* care mistakes
 rather than fewer.
 
+### The three evolution items finally work
+
+Digimon World has always contained three items that do nothing:
+
+| Item | What it says |
+|---|---|
+| **Giga Hand** | "Digivolve to Gigadramon!" |
+| **Noble Mane** | "Digivolve to Panjyamon!" |
+| **Metalbanana** | "Digivolve to MetalEtemon!" |
+
+They have names, icons, descriptions and prices, and they point at three
+Digimon the game never let you have. Feed one to your partner and it now does
+exactly what it says — including on an Ultimate, which normally can never
+evolve again.
+
 Machinedramon is the demanding one: 5000 HP and MP, 500 Offense and Defense,
 400 Speed and Brains, at most 5 care mistakes, 100 discipline, 50 battles won
 and 35 techniques learned.

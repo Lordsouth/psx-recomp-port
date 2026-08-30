@@ -252,6 +252,146 @@ def cmd_evolve(args):
     return code
 
 
+# --------------------------------------------------------------------------
+# The game's three hardcoded evolution items. handleEvoItems (0x800C3864)
+# routes exactly these ids down a straight-line path that writes the target
+# below and falls through to the kick, with no level check on the way.
+INVENTORY_TYPES = 0x8013D474
+INVENTORY_AMOUNTS = 0x8013D492
+GATE_PATCH_VA = 0x800A7378
+GATE_PATCH_BYTES = bytes.fromhex("4f000010")     # b (unconditional)
+EVO_ITEMS = {
+    125: ("Giga Hand", 64, "Gigadramon"),
+    126: ("Noble Mane", 63, "Panjyamon"),
+    127: ("Metalbanana", 65, "MetalEtemon"),
+}
+
+
+def test_evo_item(g, rep, item, timeout_frames=5400):
+    """Feed one of the game's evolution items to the partner and classify.
+
+    This is the end-to-end test of the un-gating patch: it drives the real
+    inventory UI rather than poking the evolution state directly, so it
+    exercises partnerWillRefuseItem, handleEvoItems and the whole sequence.
+    """
+    name, target, tgt_name = EVO_ITEMS[item]
+    src = g.partner_type
+
+    rep.require("partner_alive", src, pred=lambda v: v != 0)
+    rep.require("player_has_control", g.tamer_state, 0)
+    rep.require("partner_idle", g.partner_state, 1)
+    rep.require("target_differs", target, pred=lambda v: v != src)
+    # The whole point: the patch must actually be in the loaded image.
+    rep.require("gate_patch_present", g.d.read(GATE_PATCH_VA, 4).hex(" "),
+                GATE_PATCH_BYTES.hex(" "))
+    rep.note("item", {"id": item, "name": name, "target": target,
+                      "target_name": tgt_name})
+    rep.note("source", g.digimon_record(src))
+    rep.note("source_level", g.digimon_record(src)["level"])
+    rep.note("mod_plan", g.plan())
+
+    # plant the item in slot 0
+    g.d.write_bytes(bytes([item]), INVENTORY_TYPES)
+    g.d.write_bytes(bytes([1]), INVENTORY_AMOUNTS)
+    rep.check("item_in_inventory", g.d.read(INVENTORY_TYPES, 1)[0], item)
+
+    # menu -> ITEM -> (item) -> Use
+    g.route("20:none,4:triangle,60:none")
+    rep.require("menu_opened", g.is_in_menu, 1)
+    g.route("4:cross,60:none")     # into ITEM list
+    g.route("4:cross,60:none")     # opens Use/Move/Sort/Drop
+    kick_frame = g.d.frame()
+    rep.note("use_frame", kick_frame)
+    g.route("4:cross,60:none")     # Use
+
+    def completed(gg):
+        if gg.partner_type != target:
+            return False
+        return gg.partner_state == 1 or gg.tamer_state == 20
+
+    res = g.wait_until(
+        completed, timeout_frames=timeout_frames,
+        probe=("partner_type", "partner_state", "tamer_state",
+               "evolution_target", "has_used_evoitem"),
+        stall_rules=(
+            # If the item is still refused, nothing at all happens: the menu
+            # stays up and the partner never leaves idle.
+            StallRule("ITEM_REFUSED",
+                      lambda gg: gg.partner_type == src and gg.evolution_target == -1
+                      and gg.partner_state in (1, 5), 600,
+                      "partnerWillRefuseItem still rejected it"),
+            StallRule("SOFTLOCK_CLOSENESS",
+                      lambda gg: gg.partner_state == 13 and gg.partner_sub_state == 1,
+                      600, "partner not adjacent to the tamer"),
+        ))
+    rep.note("wait_outcome", res.outcome)
+    rep.note("frames_elapsed", res.frames)
+    with open(os.path.join(rep.dir, "samples.json"), "w", encoding="utf-8") as f:
+        json.dump(res.samples, f, indent=1)
+
+    if res.outcome == "CRASHED":
+        return "CRASHED", 5
+    if res.outcome == "HUNG" and res.detail == "ITEM_REFUSED":
+        rep.check("item_accepted", False, True)
+        return "ITEM_REFUSED", 3
+    if res.outcome == "HUNG":
+        return "HUNG(%s)" % res.detail, 4
+
+    got = g.partner_type
+    if not rep.check("guest_wrote_partner_type", got, target):
+        return "NO_EVOLUTION", 3
+
+    if g.tamer_state == 20:
+        for _ in range(8):
+            g.route("4:cross,45:none")
+            if g.tamer_state == 0 and g.partner_state == 1:
+                break
+        g.settle()
+
+    final = g.get("partner_type", "partner_state", "tamer_state",
+                  "is_gametime_running", "evolution_target", "has_used_evoitem")
+    rep.note("final_state", final)
+    rep.note("partner_after", g.digimon_record(final["partner_type"]))
+    rep.check("partner_idle_after", final["partner_state"], 1)
+    rep.check("gametime_resumed", final["is_gametime_running"], 1)
+    rep.check("player_regained_control", final["tamer_state"], 0)
+    rep.check("item_consumed", g.d.read(INVENTORY_TYPES, 1)[0], 0xFF)
+    # The plugin clears this once the sequence is over; left set, every LATER
+    # natural evolution would silently skip its base-stat rescale.
+    rep.check("evoitem_flag_cleared", final["has_used_evoitem"], 0)
+    rep.artifact(g.artifact_shot(os.path.join(rep.dir, "after.png")))
+    return "SUCCESS", 0
+
+
+def cmd_item(args):
+    if args.item not in EVO_ITEMS:
+        print("item must be one of %s" % sorted(EVO_ITEMS))
+        return 2
+    rep = Report("evoitem_%d" % args.item)
+    g = Game.attach(port=args.port)
+    if args.from_slot is not None:
+        print("  loading savestate slot %d" % args.from_slot)
+        g.savestate("load", args.from_slot)
+        r = g.settle()
+        print("  settled: %s after %d frames" % (r.outcome, r.frames))
+    print("\n%s\n  item %d (%s)\n" % ("=" * 62, args.item,
+                                      EVO_ITEMS[args.item][0]))
+    try:
+        verdict, code = test_evo_item(g, rep, args.item,
+                                      timeout_frames=args.timeout_frames)
+    except Precondition as e:
+        print("\n  PRECONDITION FAILED: %s" % e)
+        rep.emit("CANNOT_RUN")
+        return 2
+    except (Dead, Wedge) as e:
+        print("\n  process died/wedged: %s" % e)
+        rep.emit("CRASHED")
+        return 5
+    print("\n  VERDICT: %s" % verdict)
+    rep.emit(verdict)
+    return code
+
+
 def cmd_list(args):
     print("tests:")
     print("  evolve --target N   force an evolution into type N and classify it")
@@ -273,6 +413,12 @@ def main():
                    help="load this savestate slot first (repeatable fixture)")
     e.add_argument("--timeout-frames", type=int, default=5400)
     e.set_defaults(fn=cmd_evolve)
+    it = sub.add_parser("item")
+    it.add_argument("--item", type=int, required=True,
+                    help="125 Giga Hand, 126 Noble Mane, 127 Metalbanana")
+    it.add_argument("--from-slot", type=int, default=None)
+    it.add_argument("--timeout-frames", type=int, default=5400)
+    it.set_defaults(fn=cmd_item)
     args = ap.parse_args()
     return args.fn(args)
 

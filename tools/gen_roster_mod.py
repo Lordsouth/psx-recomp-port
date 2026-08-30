@@ -129,6 +129,13 @@ NEW_SPECIES = [
     dict(type=112, name="WaruSeadramon", src=[("Seadramon", 10)],
          raise_donor=61, gains_donor=61, anim_donor=61,
          req=(-1, 500, 400, 500, 400, 400, 300, 12, 40, -1, -1, 50, -1, 0x00)),
+    # Panjyamon is a CHAMPION and deliberately has no evolution path: the game
+    # ships an item that targets it (Noble Mane, 0x7E -> type 63), which is the
+    # only way in by design. It still needs the partner-line rows, or evolving
+    # into it via that item lands on empty tables.
+    dict(type=63, name="Panjyamon", src=[],
+         raise_donor=9, gains_donor=9, anim_donor=9,
+         req=(-1, 300, 300, 400, 300, 300, 300, 8, 30, -1, -1, 30, 20, 0x10)),
 ]
 # Machinedramon keeps its authored requirement row; only its sources move, to
 # the two Champions that already lead to the Megadramon / MetalGreymon line the
@@ -202,7 +209,11 @@ def build_species_rows(rd, name_of, level_of):
     rows = []
     for spec in NEW_SPECIES:
         t, d = spec["type"], spec["raise_donor"]
-        assert level_of(t) == 5, "%s is not Ultimate" % spec["name"]
+        # Donor and target must share a level: raise curves, evolution gains and
+        # the training animation are all level-shaped.
+        assert level_of(t) == level_of(d), (
+            "%s is level %d but donor %s is level %d"
+            % (spec["name"], level_of(t), name_of(d), level_of(d)))
         assert name_of(t) == spec["name"], (
             "type %d is %r, not %r" % (t, name_of(t), spec["name"]))
         # donors must themselves be inside the stock partner-line tables
@@ -270,6 +281,29 @@ def authored_research(rd):
             extra += wire(src_name, src_type, spec["type"])
     for src_name, src_type in MACHINEDRAMON_SRC:
         extra += wire(src_name, src_type, 114)
+
+    # 8. The game's own three evolution items, un-gated.
+    #
+    # Items 125 "Giga Hand", 126 "Noble Mane" and 127 "Metalbanana" are
+    # finished: named, described ("Digivolve to Gigadramon!"), priced, with
+    # icons and handlers. handleEvoItems (0x800C3864) routes exactly 0x7D-0x7F
+    # down a straight-line path that writes EVOLUTION_TARGET (64 / 63 / 65) and
+    # falls through to the kick -- no level check anywhere on it.
+    #
+    # They were unusable for two reasons, and this project has now removed
+    # both. Their targets 63/64/65 had no partner-line table rows (fixed: all
+    # three are authored above), and partnerWillRefuseItem gates them on the
+    # partner's level -- item 126 demands level 3, items 125/127 demand level 4.
+    #
+    # Two instructions form a range check: everything below 0x7D leaves at
+    # 0x800A736C and everything from 0x80 up leaves at 0x800A7378, so the
+    # fall-through into the level tests is reached by exactly those three ids.
+    # Turning that second branch unconditional sends them to the same exit as
+    # every other item, skipping only the level tests. Just the rs field
+    # changes, $at -> $zero: one byte of the four.
+    g2 = 0x800A7378
+    assert rd(g2, 4) == struct.pack("<I", 0x1020004F), "patch site drifted"
+    extra += word_patch(g2, 0x1020004F, 0x1000004F)
 
     build_species_rows(rd, name_of, level_of)
     # NOTE the ordering these two patches depend on: they edit EVO_PATHS_DATA

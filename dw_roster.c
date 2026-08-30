@@ -232,9 +232,42 @@ static void roster_hook(struct CPUState* cpu, uint32_t address) {
  * the entry hook alone leaves the arena unfilled (the crash mode: retargeted
  * reads hit zeros). The framework reapplies the mod plan on restore, so the
  * patch-detect gate holds; this per-VBlank check closes the gap. */
+/* HAS_USED_EVOITEM is set to 1 when an evolution item fires and is cleared
+ * only when a partner is initialised (partner_impl.c:124). EVL_scaleBaseStats
+ * returns early while it is set (evl.c:734), so after one item evolution every
+ * LATER natural evolution silently skips its base-stat rescale for the rest of
+ * the playthrough. Vanilla never exposed this because the items were
+ * unreachable; un-gating them is what makes it reachable, so it is fixed here.
+ *
+ * Cleared only once the sequence is fully over -- partner idle, control
+ * returned, game time running again. Clearing it mid-sequence would rescale
+ * the item evolution itself, which is the behaviour the flag exists to
+ * suppress. */
+#define VA_HAS_USED_EVOITEM 0x80134E52u
+#define VA_PARTNER_STATE 0x80134C5Bu
+#define VA_TAMER_STATE 0x80134C91u
+#define VA_EVOLUTION_TARGET 0x80134E50u
+#define VA_IS_GAMETIME_RUNNING 0x80134E20u
+
+static void roster_clear_evoitem_flag(void) {
+    if (psx_mod_read_byte(VA_HAS_USED_EVOITEM) == 0)
+        return;
+    if (psx_mod_read_byte(VA_PARTNER_STATE) != 1)
+        return;
+    if (psx_mod_read_byte(VA_TAMER_STATE) != 0)
+        return;
+    if ((int16_t)psx_mod_read_half(VA_EVOLUTION_TARGET) != -1)
+        return;
+    if (psx_mod_read_word(VA_IS_GAMETIME_RUNNING) == 0)
+        return;
+    psx_mod_write_byte(VA_HAS_USED_EVOITEM, 0);
+}
+
 static void roster_vblank(void) {
     if (!roster_filled && psx_mod_game_started())
         roster_ensure_filled();
+    if (roster_live)
+        roster_clear_evoitem_flag();
 }
 
 /* Model + texture remap: slot 114 has no MMD file or ALLTIM slot of its own

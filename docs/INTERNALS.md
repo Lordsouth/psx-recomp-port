@@ -233,7 +233,57 @@ sources are now **Tyrannomon** and **Greymon** — the two Champions that alread
 lead to the Megadramon/MetalGreymon line, Tyrannomon to both. The generator
 asserts every source is level 4, so this cannot be authored again.
 
-#### 4.1.3 The six restored Ultimates
+#### 4.1.3 The three evolution items
+
+The game ships three finished evolution items that nothing could ever use:
+
+| Item | Id | Description string | Writes `EVOLUTION_TARGET` |
+|---|---|---|---|
+| Giga Hand | 125 `0x7D` | "Digivolve to Gigadramon!" | `0x40` = 64 |
+| Noble Mane | 126 `0x7E` | "Digivolve to Panjyamon!" | `0x3F` = 63 |
+| Metalbanana | 127 `0x7F` | "Digivolve to MetalEtemon!" | `0x41` = 65 |
+
+They target three of the unreachable species, and were dead for two reasons —
+both now removed. Types 63/64/65 had no partner-line rows (all three are
+authored above), and `partnerWillRefuseItem` gates them on the partner's level:
+item 126 demands level 3, items 125/127 demand level 4.
+
+`handleEvoItems` (`0x800C3864`) is clean: `slti $at,$a0,0x7D` routes everything
+below `0x7D` to the table path, and ids `0x7D`–`0x7F` fall down a straight line
+that writes the hardcoded target and drops into the kick
+(`jal 0x800AA188` with `$a0 = 6`, i.e. `setTamerState(6)`). **No level check on
+that path.**
+
+So the whole fix is one instruction. Two `slti`s at `0x800A7368`/`0x800A7374`
+form a range check whose fall-through is reached by exactly those three ids;
+turning the second branch unconditional sends them to the same exit as every
+other item and skips only the level tests:
+
+```
+0x800A7378   beqz $at,0x800A74B8   ->   b 0x800A74B8
+             4f 00 20 10                4f 00 00 10
+```
+
+Only the `rs` field changes (`$at` → `$zero`) — one byte of the four. Items
+below `0x7D` left two instructions earlier and items `0x80`+ take this very
+branch already, so nothing else is affected.
+
+**`HAS_USED_EVOITEM` (`0x80134E52`) had to be fixed too.** The item sets it, and
+`EVL_scaleBaseStats` returns early while it is set (`evl.c:734`), skipping the
+base-stat rescale. It is cleared only when a partner is initialised
+(`partner_impl.c:124`) — so after one item evolution, every *later* natural
+evolution silently skips its rescale for the rest of the playthrough. Vanilla
+never exposed this because the items were unreachable. `dw_roster.c` clears it
+from the per-VBlank callback once the sequence is fully over (partner idle,
+control returned, game time running) — not mid-sequence, which would rescale
+the item evolution itself, the very thing the flag exists to suppress.
+
+Verified end to end by `tools/dwtest.py item`, which drives the real inventory
+UI rather than poking evolution state: all three items fed to a level-5
+MetalGreymon, each producing its documented target, with the item consumed,
+control returned and the flag cleared.
+
+#### 4.1.4 The six restored Ultimates
 
 | Species | Type | Source Champion | Weight window |
 |---|---|---|---|

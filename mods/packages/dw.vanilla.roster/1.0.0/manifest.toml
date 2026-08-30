@@ -1407,3 +1407,10 @@ address = 0x8012B69D
 expected = "ff"
 replace = "72"
 
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800A7378
+expected = "4f 00 20 10"
+replace = "4f 00 00 10"
+
