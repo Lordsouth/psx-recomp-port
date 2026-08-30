@@ -217,9 +217,56 @@ entry patch.
 **Slot completion.** Guarded data patches: the `DIGIMON_DATA` record (the
 game's own Machinedramon data, attribute set to Virus), the skeleton pointer
 (`NULL → 0x8011CBC0`), the model-code pointer (`tAKA → MUGE`), the battle-aura
-family (`ORIGINAL_TYPE[114] = 115`), evolution branches from **Megadramon**
-and **MetalGreymon**, and the raised-flag guard at `0x800FF7FC` widened from
-63 types to 180.
+family (`ORIGINAL_TYPE[114] = 115`), evolution branches (below), and the
+raised-flag guard at `0x800FF7FC` widened from 63 types to 180.
+
+#### 4.1.2 Only a Champion can be an evolution source
+
+The evolution dispatch at `0x800A9150` is a level chain — Fresh (age ≥ 6),
+In-Training (≥ 24), Rookie (≥ 72), Champion (≥ 144) — and it **ends there**.
+There is no Ultimate branch, so an Ultimate partner never evolves again.
+
+0.2.0 shipped Machinedramon hung off **Megadramon** and **MetalGreymon**, both
+level 5. The route the README described could never fire; only the cheat could
+reach slot 114, which is also why its model was never seen on screen. Its
+sources are now **Tyrannomon** and **Greymon** — the two Champions that already
+lead to the Megadramon/MetalGreymon line, Tyrannomon to both. The generator
+asserts every source is level 4, so this cannot be authored again.
+
+#### 4.1.3 The six restored Ultimates
+
+| Species | Type | Source Champion | Weight window |
+|---|---|---|---|
+| Gigadramon | 64 | Airdramon | 45 |
+| MetalEtemon | 65 | Sukamon | 50 |
+| Myotismon | 66 | Devimon | 20 |
+| WaruMonzaemon | 70 | Numemon | 25 |
+| Tekkamon | 90 | Kokatorimon | 35 |
+| WaruSeadramon | 112 | Seadramon | 40 |
+
+`calculateRequirementScore` (`evolution.c:303`) offers four points and requires
+three: care mistakes, a **hard ±5 weight window**, all six stats at once, and
+one bonus from digimon/discipline/happiness/battles/techs. Weight is therefore
+the game's own steering mechanic, and each new species gets a window distinct
+from the ones its source already offers. The four dark variants require care
+mistakes as a *minimum* (flags bit4 clear) — a neglect path no stock Ultimate
+uses. Everything else is donor-copied from a species sharing family and body
+plan, so animation, camera pull-back and appetite suit the model.
+
+**Indexing is not uniform**, and getting it wrong is silent:
+
+| `[type]` | `[type - 1]` |
+|---|---|
+| `EVO_REQ_DATA`, `RAISE_DATA`, `EVO_GAINS_DATA`, `TRAINING_ANIM_IDS`, `TRN2_D_8008DA20` | `ITEM_TAKE_DISTANCE`, `EVO_PATHS_DATA`, `EVOCHART_ICONS` |
+
+0.2.0 wrote Machinedramon's `ITEM_TAKE_DISTANCE` at `[114]`; the game reads
+`[113]`, a zero. Fixed.
+
+Types 64–66 land *inside* the shorter tables' stock extents (`RAISE_DATA` has
+66 entries, `ITEM_TAKE_DISTANCE` 67, the training tables 68). Those slots are
+dead padding — the highest evolution target the disc ships is **61** — so
+authoring them is safe, and the verifier excludes them from its stock diff
+rather than reporting them as regressions.
 
 **The training tables** (`TRAINING_ANIM_IDS` `0x8008F050` in `TRN_REL.BIN`,
 `TRN2_D_8008DA20` `0x8008DA20` in `TRN2_REL.BIN`) are `s8[68][2]` indexed by

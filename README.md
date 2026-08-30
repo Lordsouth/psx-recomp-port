@@ -95,7 +95,7 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 
 | Mod | What it does |
 |---|---|
-| **Machinedramon** | Adds a Digimon. The game has always contained one unused slot, and this fills it with Machinedramon as a partner you can genuinely raise and evolve into — see below |
+| **Expanded Roster** | Adds seven Digimon. Machinedramon fills the game's one unused slot; Gigadramon, Myotismon, WaruSeadramon, WaruMonzaemon, MetalEtemon and Tekkamon are finished Digimon that were on the disc all along as enemies only. All seven are partners you can genuinely raise and evolve into — see below |
 | **Trainer** | Fifteen independent toggles: never hungry, tired, sick or dead; no lifespan loss; plus the Training group below |
 | **Perfect Training** | Every training session pays the jackpot rate. The slot minigame secretly grades your reels into a reward multiplier, from 0.5x for a miss up to 10x for triple sevens — this makes every spin pay the top rate |
 | **Lucky Reels** | The gentler version: the slot machine always tries to help you find the sevens, so the reels really do land on jackpots and you still stop them yourself |
@@ -109,13 +109,31 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 Turning a mod off restores the original game exactly — every change is a guarded
 patch, nothing is permanent.
 
-### Raising Machinedramon
+### Raising the new Digimon
 
-Turn on **Machinedramon** in the Mods panel before starting, then raise a
-**Megadramon** or a **MetalGreymon** and meet the requirements: 5000 HP and MP,
-500 Offense and Defense, 400 Speed and Brains, at most 5 care mistakes, 100
-discipline, 50 battles won and 35 techniques learned. He then becomes available
-as an evolution the same way any other Ultimate does.
+Turn on **Expanded Roster** in the Mods panel before starting. Seven Digimon
+the disc has always contained then become partners you can raise, each reached
+from a Champion the same way any other Ultimate is:
+
+| Raise this Champion | …and you can become |
+|---|---|
+| Tyrannomon or Greymon | **Machinedramon** |
+| Airdramon | **Gigadramon** |
+| Devimon | **Myotismon** |
+| Seadramon | **WaruSeadramon** |
+| Numemon | **WaruMonzaemon** |
+| Sukamon | **MetalEtemon** |
+| Kokatorimon | **Tekkamon** |
+
+As always, what you get depends on how you raised them — weight matters, and
+each of these wants a different build. Four of them are the dark counterparts
+of Digimon you already know, and they want what you would expect: they are the
+only evolutions in the game that ask you to have made *more* care mistakes
+rather than fewer.
+
+Machinedramon is the demanding one: 5000 HP and MP, 500 Offense and Defense,
+400 Speed and Brains, at most 5 care mistakes, 100 discipline, 50 battles won
+and 35 techniques learned.
 
 One caveat worth understanding: a save created with this mod on expects it to
 stay on. If you turn it off, that save's partner data no longer lines up.

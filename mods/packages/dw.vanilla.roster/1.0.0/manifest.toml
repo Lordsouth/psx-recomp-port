@@ -6,7 +6,7 @@ id = "dw.vanilla.roster"
 version = "1.0.0"
 name = "Expanded Roster"
 author = "DigimonWorldVanilla"
-description = "Grows the partner-line tables beyond their stock sizes and completes the game one unused Digimon slot: Machinedramon becomes a legitimate, raisable partner with a real evolution requirement. Powered by table relocation into enhancement memory."
+description = "Grows every type-indexed partner table beyond its stock size, then makes seven Digimon raisable: Machinedramon in the game's one unused slot, plus Gigadramon, Myotismon, WaruSeadramon, WaruMonzaemon, MetalEtemon and Tekkamon -- finished Digimon that shipped on the disc as enemies only. Powered by table relocation into enhancement memory."
 resolver = "declarative"
 save_compatibility = "isolated"
 
@@ -15,8 +15,8 @@ game_id = "SLUS-01032"
 
 [[feature]]
 id = "roster"
-name = "Machinedramon (new raisable Digimon)"
-description = "Relocates and grows the evolution-requirement, raise and evolution-gain tables, then wires slot 114 as Machinedramon: model, skeleton, battle auras, stats and an evolution path. The touched functions run interpreted until the background compiler rebuilds them natively."
+name = "Seven new raisable Digimon"
+description = "Relocates and grows all eight type-indexed partner tables, then authors seven species into the headroom: model, skeleton, battle auras, stats, training animations and an evolution path from a Champion for each. The touched functions run interpreted until the background compiler rebuilds them natively."
 group = "Roster"
 default_enabled = false
 
