@@ -1193,13 +1193,6 @@ replace = "64"
 [[patch]]
 feature = "guaranteed-drops"
 target = "main_exe"
-address = 0x8012E5FE
-expected = "0a"
-replace = "64"
-
-[[patch]]
-feature = "guaranteed-drops"
-target = "main_exe"
 address = 0x8012E632
 expected = "00"
 replace = "64"

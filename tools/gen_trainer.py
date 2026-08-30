@@ -147,6 +147,7 @@ DIGIMON_DATA_ADDR = 0x8012CEB4
 DIGIMON_STRIDE = 0x34
 DIGIMON_COUNT = 180
 DROP_CHANCE_OFF = 0x22
+ROSTER_OWNED_SLOT = 114   # see dw.vanilla.roster
 
 MULT_CHOICES = [
     ("x2", "2x", 0x14), ("x3", "3x", 0x1E),
@@ -235,6 +236,13 @@ def collect_training(data):
 
     drops = []
     for i in range(DIGIMON_COUNT):
+        # Slot 114 is the game's one free type id and belongs to
+        # dw.vanilla.roster, which rewrites that whole record. Patching a byte
+        # inside it would collide and make the runtime reject the ENTIRE mod
+        # plan whenever a player enables both features. Enforced by
+        # tools/check_mod_collisions.py.
+        if i == ROSTER_OWNED_SLOT:
+            continue
         va = DIGIMON_DATA_ADDR + i * DIGIMON_STRIDE + DROP_CHANCE_OFF
         cur_chance = data[file_off(va)]
         if cur_chance > 100:
