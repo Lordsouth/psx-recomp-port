@@ -123,6 +123,29 @@ Two failure modes worth knowing, both of which cost hours here:
   applies, with nothing logged. Unescaped quotes in a description are enough to
   do it. `python -c "import tomllib; tomllib.load(open(path,'rb'))"` catches it.
 
+### Run both gates before every release
+
+```bash
+py -3.12 tools/check_mod_collisions.py
+```
+
+```bash
+py -3.12 tools/verify_disc_patches.py
+```
+
+The first catches two co-enablable features writing the same byte differently —
+a single collision makes the runtime discard the **entire** mod plan, so one
+missed overlap costs every mod including widescreen.
+
+The second checks something the runtime will not tell you until it is too late:
+`disc_user` expected-bytes are verified lazily, when the containing sector is
+first read. A bad offset boots fine, menus fine, and only fails when a player
+reaches the content — at which point *every* disc patch in the plan is disabled,
+not just the bad one. See `docs/INTERNALS.md` §7.3.
+
+Both are also worth running after regenerating any manifest, not only at
+release time — they are seconds each.
+
 ## Licence
 
 The psxrecomp framework is PolyForm Noncommercial. This project ships no game

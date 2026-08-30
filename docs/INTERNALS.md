@@ -153,22 +153,52 @@ Kuwagamon → Off/MP/Brain).
 
 ### 4.1 `dw.vanilla.roster` — Machinedramon as a raisable partner
 
-**1 feature, 143 patches, 1 plugin.** The headline feature: the game contains
+**1 feature, 189 patches, 1 plugin.** The headline feature: the game contains
 exactly one free type id — slot **114**, a developer stub named `tAKA` — and
 this makes it Machinedramon, the complete-but-unobtainable Ultimate.
 
 Three obstacles, three mechanisms:
 
-**Table relocation.** `EVO_REQ_DATA` (63 entries), `RAISE_DATA` (66),
-`EVO_GAINS_DATA` (66) and `ITEM_TAKE_DISTANCE` (67) are indexed by type and
-packed tight against their neighbours, so they cannot grow in place — and a
-manifest cannot write outside the loaded image anyway (the game's own BSS clear
-would erase it). Instead `dw_roster.c` reserves a 16 KB Expansion-1 arena at
-`0x9F000000`, copies the stock tables in at a function-entry hook on
-`initializeHeap` (`0x800EEBDC`, which runs once after the BSS clear and before
-any consumer), and appends authored entries for type 114. The manifest's
-**67 lui + 67 lo16 guarded patches** retarget every instruction pair that
-materialises one of those table addresses.
+**Table relocation.** Eight tables are indexed by type and packed tight against
+their neighbours, so they cannot grow in place — and a manifest cannot write
+outside the loaded image anyway (the game's own BSS clear would erase it).
+Instead `dw_roster.c` reserves a 32 KB Expansion-1 arena at `0x9F000000`,
+copies the stock tables in at a function-entry hook on `initializeHeap`
+(`0x800EEBDC`, which runs once after the BSS clear and before any consumer),
+and appends authored entries for type 114. Guarded patches retarget every
+instruction pair that materialises one of those table addresses.
+
+| Table | Stock | Sites | Target |
+|---|---|---|---|
+| `EVO_REQ_DATA` `0x8012ABEC` | 63 | 16 | `main_exe` |
+| `RAISE_DATA` `0x801225BC` | 66 | 44 | `main_exe` |
+| `EVO_GAINS_DATA` `0x8012B2D0` | 66 | 4 | `main_exe` |
+| `ITEM_TAKE_DISTANCE` `0x80122D24` | 67 | 3 | `main_exe` |
+| `EVO_PATHS_DATA` `0x8012B66C` | 62 | 9 | `main_exe` |
+| `EVOCHART_ICONS` `0x80124544` | 61 | 7 | `main_exe` |
+| `TRAINING_ANIM_IDS` `0x8008F050` | 68 | 5 | `disc_user` (TRN) |
+| `TRN2_D_8008DA20` `0x8008DA20` | 68 | 3 | `disc_user` (TRN2) |
+
+All eight are grown to **180 entries**, the engine's hard ceiling (`loadMMD`
+rejects type ≥ `0xB4`). That is 91 `lui` + 91 `lo16` retargets. Site counts are
+asserted in the generator, because silently patching a different number of
+sites is how you ship a half-relocated table.
+
+#### 4.1.1 Patching overlay code
+
+The two training tables live in overlay images, which makes them the only case
+here where **executable** bytes are patched on disc rather than data. That is
+safe by construction rather than by luck: the runtime keys each compiled
+overlay entry by a content hash of its own code ranges plus a page-generation
+snapshot (`overlay_loader.c`, the "Inc3" design), so a patched overlay misses
+its cache entirely and is recompiled. Executing stale native code for a range
+that changed is not possible. The cost is that those functions interpret until
+the background compiler rebuilds them.
+
+Disc offsets follow `lba*2048 + (vaddr - 0x80088800)`; the runtime maps that
+onto a 2352-byte raw image as `(off/2048)*2352 + 24 + off%2048`. A patch may
+not straddle a 2048-byte sector boundary — the runtime applies writes inside a
+single sector buffer — and the generator asserts it.
 
 The reference census that found those sites is in `research/roster-xref-census.md`.
 Two properties made the relocation safe, both verified mechanically: every
@@ -191,9 +221,22 @@ family (`ORIGINAL_TYPE[114] = 115`), evolution branches from **Megadramon**
 and **MetalGreymon**, and the raised-flag guard at `0x800FF7FC` widened from
 63 types to 180.
 
-Two disc patches fix training tables that are indexed by raw type and stop at
-68 entries: without them, offense training picks an invalid animation and
-**MP training soft-locks** (its threshold reads zero).
+**The training tables** (`TRAINING_ANIM_IDS` `0x8008F050` in `TRN_REL.BIN`,
+`TRN2_D_8008DA20` `0x8008DA20` in `TRN2_REL.BIN`) are `s8[68][2]` indexed by
+raw type, so any type past 68 reads off the end. Without a fix, offense
+training picks an invalid animation and **MP training soft-locks** (its
+threshold reads zero).
+
+0.2.0 fixed this in place: index 114 lands 92 bytes past the table, inside the
+string `"Give it all you "`, and two disc patches rewrote those bytes. Correct
+for one slot, unworkable for 51 — and it carried a bug. The patch rewrote only
+byte `[0]` of `"e "`, so byte `[1]` silently inherited the string's space
+(`0x20`). That byte is the frame the training impact lands on: `trn_off.c:145`
+increments a counter per frame and compares it with `==` before firing the hit
+FX. Machinedramon's wind-up therefore ran 32 frames where every other user of
+animation 46 uses 10, and outside the `0x08..0x1E` range of the whole stock
+table. Both tables are relocated now (§4.1.1) and the entry is authored as
+`2E 0A`, leaving the string alone.
 
 Requirements as authored: 5000 HP/MP, 500/500/400/400 stats, ≤5 care mistakes,
 100 discipline, 50 battles, 35 techniques.
@@ -403,7 +446,25 @@ Both defaulted off and had never been booted together.
 py -3.12 tools/check_mod_collisions.py
 ```
 
-### 7.3 Packaging safety
+### 7.3 `verify_disc_patches.py` — run before every release
+
+`main_exe` patches are guarded when the mod plan is applied, so a bad one fails
+loudly at boot. **`disc_user` patches are not.** The runtime checks their
+expected bytes lazily, the first time the containing sector is actually read
+(`mod_runtime_patch_disc_sector`). A wrong offset therefore survives startup,
+survives the menus, and only trips when a player reaches the content — and the
+failure is not local: the runtime prints one line to stderr and sets
+`disc_guard_failed`, which disables **every** disc patch in the plan, not just
+the bad one. Widescreen and the roster would quietly stop working together.
+
+This gate reads the real disc image, reproduces the runtime's physical mapping
+exactly, and proves every guard up front.
+
+```
+py -3.12 tools/verify_disc_patches.py
+```
+
+### 7.4 Packaging safety
 
 The setup packager purges any staged mod package whose manifest marks itself
 non-redistributable, then **asserts** afterwards that no marker and no
@@ -438,6 +499,12 @@ user's PATH, and the fail-closed packaging guard.
   save made with the roster enabled and loaded with it disabled reads a stale
   table set. Documented in `cheats.txt`; a framework-level fix is the real
   answer.
+* **The overlay table retarget has not been seen working in a gym.** The
+  expected-byte guards are proven against the real disc image, every rewritten
+  instruction pair decodes to the intended arena address, and the arena content
+  is verified byte-exact — but nothing has yet driven the game into a training
+  gym with a relocated `TRAINING_ANIM_IDS`. Proven on paper and at the guard,
+  not on screen.
 * **Four inherited cheats remain suspect** (§6.3).
 * **Prosperity Points ignore new recruits** — the recruit loop's bound was
   deliberately not widened, since widening it sweeps trigger ids other events
@@ -449,10 +516,28 @@ user's PATH, and the fail-closed packaging guard.
 63–113 — Panjyamon, Gigadramon, MetalEtemon, Myotismon, Guardromon, Tentomon,
 BlueMeramon, Meteormon and more — have complete records, their own models,
 textures, skeletons, voices and battle auras. They are enemy-only purely
-because the partner-line tables stopped short, and **the roster mod has already
-grown all four of those to 180 entries.** What remains is four small tables
-(evolution paths, evo-chart icons, and the two training-animation tables) and
-the authoring. Full analysis in `research/rel_flagship.txt`.
+because the partner-line tables stopped short.
+
+**Every table wall is now down.** All eight type-indexed tables that capped the
+partner line are relocated and grown to 180 entries (§4.1), verified
+byte-identical to the stock images over their stock ranges. What remains is
+**authoring**, not engineering: per species, an `EVO_REQ_DATA` row (14 fields),
+a `RAISE_DATA` row (28 bytes), `EVO_GAINS_DATA` (7 fields), a training-animation
+pair in each of the two overlay tables, and evolution branches grafted onto
+existing Champions. A donor-copy pass keyed on level, attribute and family gets
+a working first cut; balance is playtesting.
+
+Two things are not solved by the relocation:
+
+* **Evo-chart icons.** The chart is a fixed 61-slot layout with baked screen
+  positions, so there is no free position for a new species and copying a donor
+  entry draws the newcomer on top of that donor. Slot 114's entry is
+  deliberately left zero. What that actually draws has not been looked at.
+* **Prosperity Points** still ignore new recruits (above).
+
+Full analysis in `research/rel_flagship.txt`. Tier-3 (type ids beyond 179) was
+costed and **rejected**: 304 relocation sites, ALLTIM exactly full, and no
+models for the new slots.
 
 ---
 
