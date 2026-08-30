@@ -1354,14 +1354,56 @@ replace = "b4 00 81 2c"
 [[patch]]
 feature = "roster"
 target = "main_exe"
-address = 0x8012B8B8
+address = 0x8012B6B3
+expected = "ff"
+replace = "40"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B813
+expected = "ff"
+replace = "41"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B6A8
+expected = "ff"
+replace = "42"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B6DF
+expected = "ff"
+replace = "46"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B88C
+expected = "ff"
+replace = "5a"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B6D4
+expected = "ff"
+replace = "70"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x8012B6BE
 expected = "ff"
 replace = "72"
 
 [[patch]]
 feature = "roster"
 target = "main_exe"
-address = 0x8012B6EA
+address = 0x8012B69D
 expected = "ff"
 replace = "72"
 

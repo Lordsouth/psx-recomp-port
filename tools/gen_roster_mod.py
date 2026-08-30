@@ -85,6 +85,56 @@ OVL_RELOC = {
                           OFF_TRN2_ANIM),
 }
 
+# ---- game tables read during generation -------------------------------------
+DIGIMON_DATA_VA, DIGIMON_STRIDE = 0x8012CEB4, 52
+EVO_PATHS_VA, EVO_PATHS_STRIDE = 0x8012B66C, 11
+EVO_REQ_VA, EVO_REQ_STRIDE = 0x8012ABEC, 28
+RAISE_VA, RAISE_STRIDE = 0x801225BC, 28
+EVO_GAINS_VA, EVO_GAINS_STRIDE = 0x8012B2D0, 14
+ITEM_TAKE_VA = 0x80122D24
+
+# ---- newly raisable species --------------------------------------------------
+# Only a CHAMPION may be an evolution source. The dispatch at 0x800A9150 is a
+# level chain -- Fresh, In-Training, Rookie, Champion -- and it simply ends;
+# there is no Ultimate branch, so an Ultimate partner never evolves again.
+# (This is why the 0.2.0 wiring was dead: it hung Machinedramon off Megadramon
+# and MetalGreymon, both level 5.)
+#
+# Requirement scoring, from calculateRequirementScore (evolution.c:303): four
+# possible points, three needed -- care mistakes, a hard +/-5 weight window,
+# all six stats at once, and ONE bonus from digimon/discipline/happiness/
+# battles/techs. flags bit4 (0x10) makes care a maximum; cleared, it is a
+# minimum, which is the "neglect" path the dark variants use below and no stock
+# Ultimate uses. Weight is the game's own steering mechanic, so every new
+# species gets a window distinct from the others its source already offers.
+#
+# req = (digimon, hp/10, mp/10, off, def, spd, brn, care, weight,
+#        discipline, happiness, battles, techs, flags)
+NEW_SPECIES = [
+    dict(type=64, name="Gigadramon", src=[("Airdramon", 7)],
+         raise_donor=54, gains_donor=54, anim_donor=54,
+         req=(-1, 400, 500, 600, 400, 400, 400, 10, 45, -1, -1, 50, 35, 0x10)),
+    dict(type=65, name="MetalEtemon", src=[("Sukamon", 39)],
+         raise_donor=42, gains_donor=42, anim_donor=42,
+         req=(-1, 400, 400, 600, 500, 400, 300, 5, 50, -1, -1, 60, 40, 0x10)),
+    dict(type=66, name="Myotismon", src=[("Devimon", 6)],
+         raise_donor=26, gains_donor=26, anim_donor=26,
+         req=(-1, 400, 600, 500, 300, 400, 500, 15, 20, -1, -1, -1, 40, 0x00)),
+    dict(type=70, name="WaruMonzaemon", src=[("Numemon", 11)],
+         raise_donor=14, gains_donor=14, anim_donor=14,
+         req=(-1, 400, 300, 500, 400, 300, 300, 12, 25, -1, -1, 60, -1, 0x00)),
+    dict(type=90, name="Tekkamon", src=[("Kokatorimon", 50)],
+         raise_donor=41, gains_donor=41, anim_donor=41,
+         req=(-1, 400, 400, 500, 600, 400, 300, 8, 35, -1, -1, 40, 35, 0x10)),
+    dict(type=112, name="WaruSeadramon", src=[("Seadramon", 10)],
+         raise_donor=61, gains_donor=61, anim_donor=61,
+         req=(-1, 500, 400, 500, 400, 400, 300, 12, 40, -1, -1, 50, -1, 0x00)),
+]
+# Machinedramon keeps its authored requirement row; only its sources move, to
+# the two Champions that already lead to the Megadramon / MetalGreymon line the
+# feature was always described in terms of. Tyrannomon reaches both.
+MACHINEDRAMON_SRC = [("Tyrannomon", 8), ("Greymon", 5)]
+
 # ---- authored constants (from research/roster-* + the data workflow) -------
 # Filled by fill_authored() below -- kept in one place on purpose.
 AUTHORED = {}
@@ -130,6 +180,53 @@ def fill_authored():
     AUTHORED["hook_vaddr"] = 0x800EEBDC  # initializeHeap
 
 
+def build_species_rows(rd, name_of, level_of):
+    """Assemble the arena rows for every newly raisable species.
+
+    Everything except the requirement row is donor-copied from a species the
+    game already ships partner data for -- chosen for family and body plan, so
+    the animation, camera pull-back and appetite all suit the model. The
+    requirement row is authored (see NEW_SPECIES).
+
+    INDEXING IS NOT UNIFORM and each row below states which it uses:
+      EVO_REQ / RAISE / EVO_GAINS / TRAINING_ANIM / TRN2_ANIM -> [type]
+      ITEM_TAKE / EVO_PATHS / EVOCHART                        -> [type - 1]
+    """
+    trn = open(os.path.join(OVL_DIR, "TRN_REL.BIN"), "rb").read()
+    trn2 = open(os.path.join(OVL_DIR, "TRN2_REL.BIN"), "rb").read()
+
+    def anim(img, table_va, t):
+        o = table_va - OVL_BASE + t * 2
+        return img[o:o + 2]
+
+    rows = []
+    for spec in NEW_SPECIES:
+        t, d = spec["type"], spec["raise_donor"]
+        assert level_of(t) == 5, "%s is not Ultimate" % spec["name"]
+        assert name_of(t) == spec["name"], (
+            "type %d is %r, not %r" % (t, name_of(t), spec["name"]))
+        # donors must themselves be inside the stock partner-line tables
+        assert d < 66 and spec["gains_donor"] < 66 and spec["anim_donor"] < 68
+
+        gains = bytearray(rd(EVO_GAINS_VA + spec["gains_donor"]
+                             * EVO_GAINS_STRIDE, EVO_GAINS_STRIDE))
+        gains[12:14] = struct.pack("<h", t)   # .targetDigimon is the species
+        rows.append(dict(
+            type=t, name=spec["name"],
+            req=struct.pack("<13hBB", *(spec["req"] + (0,))),
+            raise_=rd(RAISE_VA + d * RAISE_STRIDE, RAISE_STRIDE),
+            gains=bytes(gains),
+            item_take=rd(ITEM_TAKE_VA + (spec["raise_donor"] - 1), 1)[0],
+            train=anim(trn, 0x8008F050, spec["anim_donor"]),
+            trn2=anim(trn2, 0x8008DA20, spec["anim_donor"]),
+        ))
+    for r in rows:
+        assert len(r["req"]) == 28 and len(r["raise_"]) == 28
+        assert len(r["gains"]) == 14
+        assert len(r["train"]) == 2 and len(r["trn2"]) == 2
+    AUTHORED["species"] = rows
+
+
 def authored_research(rd):
     """Constants sourced from the data-authoring research (research/roster-*):
     evolution wiring, guard widening, disc fixes, and the 114 entries."""
@@ -139,13 +236,42 @@ def authored_research(rd):
     g = 0x800FF7FC
     assert rd(g, 4) == struct.pack("<I", 0x2C81003F)
     extra += word_patch(g, 0x2C81003F, 0x2C8100B4)
-    # 6. evolution wiring: Machinedramon (114) reachable from the two
-    #    machine-line Ultimates. to[] slots skip -1 entries, any free byte
-    #    works (evolution.c:73).
-    for src_name, va in (("Megadramon", 0x8012B8B8),
-                         ("MetalGreymon", 0x8012B6EA)):
-        assert rd(va, 1) == bytes([0xFF]), src_name
-        extra += bytes_patch(va, bytes([0xFF]), bytes([114]))
+    # 6. evolution wiring. to[] slots skip -1 entries, so any free byte works
+    #    (evolution.c:73) -- but the SOURCE must be a Champion, since the level
+    #    dispatch has no Ultimate branch (see NEW_SPECIES).
+    def level_of(t):
+        return rd(DIGIMON_DATA_VA + t * DIGIMON_STRIDE + 29, 1)[0]
+
+    def name_of(t):
+        return rd(DIGIMON_DATA_VA + t * DIGIMON_STRIDE, 20).split(
+            b"\0")[0].decode("ascii", "replace")
+
+    used_slots = {}
+
+    def wire(src_name, src_type, new_type):
+        """Write new_type into a free to[] byte of src_type's path entry."""
+        assert level_of(src_type) == 4, (
+            "%s (type %d) is level %d, not Champion -- an Ultimate source is "
+            "dead wiring" % (src_name, src_type, level_of(src_type)))
+        assert name_of(src_type) == src_name, (
+            "type %d is %r, not %r" % (src_type, name_of(src_type), src_name))
+        base = EVO_PATHS_VA + (src_type - 1) * EVO_PATHS_STRIDE + 5
+        for slot in range(6):
+            va = base + slot
+            if va in used_slots:
+                continue
+            if rd(va, 1) == b"\xFF":
+                used_slots[va] = new_type
+                return bytes_patch(va, b"\xFF", bytes([new_type]))
+        raise AssertionError("%s has no free to[] slot" % src_name)
+
+    for spec in NEW_SPECIES:
+        for src_name, src_type in spec["src"]:
+            extra += wire(src_name, src_type, spec["type"])
+    for src_name, src_type in MACHINEDRAMON_SRC:
+        extra += wire(src_name, src_type, 114)
+
+    build_species_rows(rd, name_of, level_of)
     # NOTE the ordering these two patches depend on: they edit EVO_PATHS_DATA
     # in the EXE image, and that table is now relocated. Manifest patches are
     # applied to guest RAM before initializeHeap runs, and the plugin's arena
@@ -566,7 +692,32 @@ def main():
         "static const unsigned char k_trn2_anim_114[2] = { %s };" %
         ", ".join("0x%02X" % b for b in AUTHORED["trn2_anim_114"]),
         "",
+        "/* Newly raisable species. One row each; the plugin walks this table",
+        " * so adding a species is a generator edit, not a plugin edit.",
+        " * NOTE the mixed indexing -- item_take is written at [type-1], the",
+        " * rest at [type]. */",
+        "typedef struct {",
+        "    unsigned char type;",
+        "    unsigned char req[28];",
+        "    unsigned char raise_[28];",
+        "    unsigned char gains[14];",
+        "    unsigned char item_take;",
+        "    unsigned char train[2];",
+        "    unsigned char trn2[2];",
+        "} RosterSpecies;",
+        "",
     ]
+    body = []
+    for r in AUTHORED["species"]:
+        j = lambda bs: ", ".join("0x%02X" % b for b in bs)
+        body.append("    { /* %s */ %d," % (r["name"], r["type"]))
+        body.append("      { %s }," % j(r["req"]))
+        body.append("      { %s }," % j(r["raise_"]))
+        body.append("      { %s }," % j(r["gains"]))
+        body.append("      0x%02X, { %s }, { %s } },"
+                    % (r["item_take"], j(r["train"]), j(r["trn2"])))
+    inc += ["static const RosterSpecies k_species[%d] = {"
+            % len(AUTHORED["species"])] + body + ["};", ""]
     inc_path = os.path.join(ROOT, "dw_roster_data.inc")
     with open(inc_path, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(inc))

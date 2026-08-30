@@ -88,7 +88,7 @@
 static uint32_t roster_arena = 0;
 
 static void roster_fill(void) {
-    uint32_t i;
+    uint32_t i, s;
     /* Zero first. Every table here is grown to 180 entries while its stock
      * content covers 61-68, so the tail is read by any id the stock game
      * never had; "unreachable entries stay zero" should be a fact, not an
@@ -108,11 +108,17 @@ static void roster_fill(void) {
     for (i = 0; i < N_ITEM_TAKE; i++)
         psx_mod_write_byte(roster_arena + OFF_ITEM_TAKE + i,
                            psx_mod_read_byte(SRC_ITEM_TAKE + i));
-    /* EVO_PATHS_DATA is 11 bytes per entry -- odd stride, so copy bytewise
-     * rather than assuming alignment. This copy is taken after the manifest's
-     * patches have been applied to guest RAM, which is what carries the
-     * evolution wiring for slot 114 (two edits inside this table) into the
-     * arena; see the note in gen_roster_mod.py. */
+    /* EVO_PATHS_DATA's tail must be 0xFF, not 0x00. The evolution scan skips
+     * an entry only when it reads -1 (evolution.c:73); a zero is treated as a
+     * real target and sends the game looking up type 0. Harmless while no
+     * grown-range type can be a partner, live the moment one can -- so the
+     * unauthored range is terminated properly rather than left zeroed. */
+    for (i = 0; i < ROSTER_N_TYPES * STRIDE_EVO_PATHS; i++)
+        psx_mod_write_byte(roster_arena + OFF_EVO_PATHS + i, 0xFF);
+    /* Odd 11-byte stride, so copy bytewise rather than assuming alignment.
+     * This copy is taken after the manifest's patches have been applied to
+     * guest RAM, which is what carries the evolution wiring into the arena;
+     * see the note in gen_roster_mod.py. */
     for (i = 0; i < N_EVO_PATHS * STRIDE_EVO_PATHS; i++)
         psx_mod_write_byte(roster_arena + OFF_EVO_PATHS + i,
                            psx_mod_read_byte(SRC_EVO_PATHS + i));
@@ -139,7 +145,11 @@ static void roster_fill(void) {
     for (i = 0; i < sizeof(k_evo_gains_114); i++)
         psx_mod_write_byte(roster_arena + OFF_EVO_GAINS + 114u * STRIDE_EVO_GAINS + i,
                            k_evo_gains_114[i]);
-    psx_mod_write_byte(roster_arena + OFF_ITEM_TAKE + 114u, k_item_take_114);
+    /* ITEM_TAKE_DISTANCE is read at [type - 1] (partner.c:412), unlike
+     * EVO_REQ/RAISE/EVO_GAINS which are read at [type]. 0.2.0 wrote this one
+     * at [114] and the game read [113] -- a zero. */
+    psx_mod_write_byte(roster_arena + OFF_ITEM_TAKE + (114u - 1u),
+                       k_item_take_114);
     for (i = 0; i < sizeof(k_train_anim_114); i++)
         psx_mod_write_byte(
             roster_arena + OFF_TRAIN_ANIM + 114u * STRIDE_TRAIN_ANIM + i,
@@ -148,6 +158,44 @@ static void roster_fill(void) {
         psx_mod_write_byte(
             roster_arena + OFF_TRN2_ANIM + 114u * STRIDE_TRAIN_ANIM + i,
             k_trn2_anim_114[i]);
+    /* Newly raisable species (types 63-113). Same shape as slot 114 above,
+     * but table-driven so the set is a generator edit. Mixed indexing: the
+     * item-take distance is written at [type - 1], everything else at
+     * [type]. */
+    for (s = 0; s < (uint32_t)(sizeof(k_species) / sizeof(k_species[0])); s++) {
+        const RosterSpecies* sp = &k_species[s];
+        uint32_t t = sp->type;
+        for (i = 0; i < sizeof(sp->req); i++)
+            psx_mod_write_byte(
+                roster_arena + OFF_EVO_REQ + t * STRIDE_EVO_REQ + i,
+                sp->req[i]);
+        for (i = 0; i < sizeof(sp->raise_); i++)
+            psx_mod_write_byte(
+                roster_arena + OFF_RAISE + t * STRIDE_RAISE + i,
+                sp->raise_[i]);
+        for (i = 0; i < sizeof(sp->gains); i++)
+            psx_mod_write_byte(
+                roster_arena + OFF_EVO_GAINS + t * STRIDE_EVO_GAINS + i,
+                sp->gains[i]);
+        psx_mod_write_byte(roster_arena + OFF_ITEM_TAKE + (t - 1u),
+                           sp->item_take);
+        for (i = 0; i < sizeof(sp->train); i++) {
+            psx_mod_write_byte(
+                roster_arena + OFF_TRAIN_ANIM + t * STRIDE_TRAIN_ANIM + i,
+                sp->train[i]);
+            psx_mod_write_byte(
+                roster_arena + OFF_TRN2_ANIM + t * STRIDE_TRAIN_ANIM + i,
+                sp->trn2[i]);
+        }
+        /* Terminate the species' own evolution list: it is an Ultimate, and
+         * the arena tail is 0xFF-filled already, but be explicit -- a zero
+         * here would send the evolution scan looking up type 0. */
+        for (i = 0; i < STRIDE_EVO_PATHS; i++)
+            psx_mod_write_byte(
+                roster_arena + OFF_EVO_PATHS + (t - 1u) * STRIDE_EVO_PATHS + i,
+                0xFF);
+    }
+
     /* EVOCHART_ICONS[114] is deliberately left zero. The evolution chart is a
      * fixed 61-slot layout with baked screen positions, so there is no free
      * position to give slot 114 and copying a donor entry would draw it on
