@@ -312,3 +312,85 @@ D0135450 FF7F          # if pad has Square held
 
 [ ] Partner becomes Machinedramon (the boss, 115)
 801557A8 0073          # <- same mechanism, the original boss entry
+
+# ===========================================================================
+# Derived from the decompilation (jype0/dw_decomp), not from any published
+# code list -- every address below was resolved to its symbol and its struct
+# offset recomputed independently before shipping. None of these exist in the
+# public GameShark corpus for this game.
+# ===========================================================================
+
+# -------- the raise sim ----------------------------------------------------
+
+[ ] Freeze the game clock (no hunger, no aging, no lifespan drain)
+30134E20 0000          # <- IS_GAMETIME_RUNNING; tickGameClock early-returns,
+                       #    which stops hunger, tiredness, ageing and the
+                       #    lifetime countdown all at once
+
+[ ] Double game speed
+301BE031 0001          # <- pstats[0] PSTAT_TIME_SPEED (1 = 2x, 2 = half)
+
+[ ] Infinite lifespan
+801384A8 03E7          # <- remainingLifetime (+0x48) held at 999 hours
+
+[ ] Perfect condition (never sick, injured, sleepy or needing the toilet)
+80138460 0000          # <- PartnerPara.condition (+0x00), u32: bit 0x04
+80138462 0000          #    sleepy, 0x08 poop, 0x20 injured, 0x40 sick
+
+[ ] Infinite training energy
+8013849C 0050          # <- energyLevel (+0x3C) = 80, the highest energyCap
+                       #    any Digimon has, so training is never refused
+
+# -------- training ---------------------------------------------------------
+
+[ ] Always carry the Training Manual (+10% to every training result)
+3013D474 0021          # <- INVENTORY_ITEM_TYPES[0]   = 0x21 Trn. manual
+3013D492 0063          # <- INVENTORY_ITEM_AMOUNTS[0] = 99
+3013D4B0 0000          # <- INVENTORY_ITEM_NAMES[0]   = name row 0
+3013D4CE 001E          # <- INVENTORY_SIZE = 30 (all three arrays must agree
+                       #    or the slot shows as empty)
+
+# -------- the city ---------------------------------------------------------
+
+[ ] Everyone moves to File City (max prosperity, both gym upgrades)
+50000801 0000          # <- repeat the next line 8 times, stepping 1 byte
+301BDFE6 00FF          # <- recruit triggers 0xC8+id for every Digimon.
+                       #    Two of these bits ARE the gym upgrades:
+                       #    Kabuterimon -> +20% HP/Def/Speed gyms,
+                       #    Kuwagamon   -> +20% Off/MP/Brain gyms.
+
+[ ] Max prosperity points (100)
+301BE032 0064          # <- pstats[1]
+
+[ ] Item shop stocks 99 of everything
+50004E01 0000          # <- repeat 78 times, stepping 1 byte
+301BDEDE 0063          # <- smth[6..83], the shop's stock counters (cap 99)
+
+# -------- battle -----------------------------------------------------------
+
+[ ] Partner takes no damage
+8013D666 03E8          # <- fighter[0].invulnerableTimer (+0x26) held open
+
+[ ] No attack cooldown
+8013D668 0000          # <- fighter[0].cooldown (+0x28)
+
+[ ] Enemies drop 9999 bits each
+80155888 270F          # <- NPC_ENTITIES[n].bits (+0x60), stride 0x68
+801558F0 270F
+80155958 270F
+801559C0 270F
+80155A28 270F
+80155A90 270F
+80155AF8 270F
+80155B60 270F
+
+# -------- medals and milestones -------------------------------------------
+
+[ ] 100 fish caught (unlocks the fishing medal)
+801384BE 0064          # <- fishCaught (+0x5E); tamer.c unlocks medal 9 at 100
+
+[ ] Year 10 (unlocks the longevity medal)
+30134F02 000A          # <- YEAR, u8; tamer.c unlocks medal 0x0E at exactly 10
+
+[ ] Max tamer level (10)
+301557A4 000A          # <- TAMER_ENTITY + 0x38, capped at 10 by tamer.c

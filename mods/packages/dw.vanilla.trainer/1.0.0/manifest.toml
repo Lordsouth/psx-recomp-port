@@ -168,6 +168,20 @@ label = "5x"
 value = "x10"
 label = "10x"
 
+[[feature]]
+id = "lucky-reels"
+name = "Lucky Reels"
+description = "The training slot machine always tries to help you. Before every spin it secretly rolls how much assistance to give -- usually none, and only one time in ten does it actively hunt for a seven. This makes it hunt every time, so the reels really do land on jackpots and you still stop them yourself. A fair-play alternative to Perfect Training; leave that one off if you want the challenge."
+group = "Training"
+default_enabled = false
+
+[[feature]]
+id = "guaranteed-drops"
+name = "Guaranteed Item Drops"
+description = "Every Digimon you defeat drops its item. Normally each species has its own drop chance -- usually 10 to 50 percent, and some never drop at all -- and this raises all 180 of them to certain."
+group = "Battle"
+default_enabled = false
+
 # tickHungerMechanics() @ 0x800A75DC -> jr $ra ; nop (return immediately)
 [[patch]]
 feature = "no-hunger"
@@ -370,4 +384,1131 @@ address = 0x800A903C
 expected = "14 80 01 3c b0 84 20 a4"
 replace = "64 00 02 24 ae 84 22 a4"
 when = { amount = "x10" }
+
+# TRN slot-machine assist table @ 0x8008F2CC (fo 0x06ACC):
+# always pick assist level 2 (actively scan for a seven).
+[[patch]]
+feature = "lucky-reels"
+target = "disc_user"
+offset = 303639244
+expected = "00 00 00 00 00 01 01 01 01 02"
+replace = "02 02 02 02 02 02 02 02 02 02"
+
+# TRN2 slot-machine assist table @ 0x8008DBC8 (fo 0x053C8):
+# always pick assist level 2 (actively scan for a seven).
+[[patch]]
+feature = "lucky-reels"
+target = "disc_user"
+offset = 303662024
+expected = "00 00 00 00 00 01 01 01 01 02"
+replace = "02 02 02 02 02 02 02 02 02 02"
+
+# DIGIMON_DATA[i].dropChance -> 100 for every species that is
+# not already certain (stride 0x34, field +0x22).
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012CED6
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012CF0A
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012CF3E
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012CF72
+expected = "32"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012CFA6
+expected = "1e"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012CFDA
+expected = "1e"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D00E
+expected = "1e"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D042
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D076
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D0AA
+expected = "14"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D0DE
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D112
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D146
+expected = "14"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D17A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D1AE
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D1E2
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D216
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D24A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D27E
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D2B2
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D2E6
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D31A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D34E
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D382
+expected = "1e"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D3B6
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D3EA
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D41E
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D452
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D486
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D4BA
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D4EE
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D522
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D556
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D58A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D5BE
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D5F2
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D626
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D65A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D68E
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D6C2
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D6F6
+expected = "1e"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D72A
+expected = "1e"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D75E
+expected = "1e"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D792
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D7C6
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D7FA
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D82E
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D862
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D896
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D8CA
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D8FE
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D932
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D966
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D99A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012D9CE
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DA02
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DA36
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DA6A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DA9E
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DAD2
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DB06
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DB3A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DB6E
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DBA2
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DBD6
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DC0A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DC3E
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DC72
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DCA6
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DCDA
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DD0E
+expected = "32"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DD42
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DD76
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DDAA
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DDDE
+expected = "19"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DE12
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DE46
+expected = "14"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DE7A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DEAE
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DEE2
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DF16
+expected = "1e"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DF4A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DF7E
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DFB2
+expected = "28"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012DFE6
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E01A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E04E
+expected = "05"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E082
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E0B6
+expected = "01"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E0EA
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E152
+expected = "01"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E186
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E1BA
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E1EE
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E222
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E256
+expected = "1e"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E28A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E2BE
+expected = "05"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E2F2
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E326
+expected = "01"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E35A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E38E
+expected = "05"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E3C2
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E3F6
+expected = "01"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E42A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E45E
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E492
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E4C6
+expected = "01"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E4FA
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E52E
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E562
+expected = "28"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E596
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E5FE
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E632
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E666
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E69A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E6CE
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E702
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E736
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E76A
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E79E
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E7D2
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E806
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E83A
+expected = "14"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E86E
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E8A2
+expected = "0a"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E8D6
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012E972
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EA0E
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EADE
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EB12
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EB46
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EB7A
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EBAE
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EBE2
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EC4A
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EC7E
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012ECB2
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012ED4E
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012ED82
+expected = "14"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EDEA
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EE52
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EE86
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EEBA
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EEEE
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EF22
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EF56
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012EFF2
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012F05A
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012F08E
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012F0C2
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012F12A
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012F15E
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012F192
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012F296
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012F2CA
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012F2FE
+expected = "00"
+replace = "64"
+
+[[patch]]
+feature = "guaranteed-drops"
+target = "main_exe"
+address = 0x8012F332
+expected = "00"
+replace = "64"
 
