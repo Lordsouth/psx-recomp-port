@@ -95,19 +95,39 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 
 | Mod | What it does |
 |---|---|
+| **Machinedramon** | Adds a Digimon. The game has always contained one unused slot, and this fills it with Machinedramon as a partner you can genuinely raise and evolve into — see below |
+| **Trainer** | Fifteen independent toggles: never hungry, tired, sick or dead; no lifespan loss; plus the Training group below |
+| **Perfect Training** | Every training session pays the jackpot rate. The slot minigame secretly grades your reels into a reward multiplier, from 0.5x for a miss up to 10x for triple sevens — this makes every spin pay the top rate |
+| **Lucky Reels** | The gentler version: the slot machine always tries to help you find the sevens, so the reels really do land on jackpots and you still stop them yourself |
+| **Training Multiplier** | Multiply everything training awards, 2x to 10x |
+| **Guaranteed Item Drops** | Every Digimon you defeat drops its item |
 | **Quality of Life** | Make your partner live longer than the stock 15 in-game days; slow the world clock so hunger, tiredness and ageing all relax together |
 | **Gameplay** | Better odds of learning techniques in battle; lower the stat requirements for evolutions |
-| **Trainer** | Immortality, no pooping, no lifespan loss, stat-gain multipliers |
-| **Widescreen (experimental)** | 16:9. Off by default: 3D proportions are correct and, new in 0.1.7, the pre-rendered backdrops stay aligned with the 3D — but menus and HUD still render stretched. Turn it on if the trade-off suits you |
+| **Widescreen (experimental)** | 16:9. Off by default: 3D proportions are correct and the pre-rendered backdrops stay aligned with the 3D — but menus and HUD still render stretched. Turn it on if the trade-off suits you |
 | **Fast Loading** | Shorter loads. **Off by default and best left off on this game** -- it speeds up real time whenever it thinks a load is happening, and on Digimon World it stays engaged, running the whole game at 4x. |
 
 Turning a mod off restores the original game exactly — every change is a guarded
 patch, nothing is permanent.
 
+### Raising Machinedramon
+
+Turn on **Machinedramon** in the Mods panel before starting, then raise a
+**Megadramon** or a **MetalGreymon** and meet the requirements: 5000 HP and MP,
+500 Offense and Defense, 400 Speed and Brains, at most 5 care mistakes, 100
+discipline, 50 battles won and 35 techniques learned. He then becomes available
+as an evolution the same way any other Ultimate does.
+
+One caveat worth understanding: a save created with this mod on expects it to
+stay on. If you turn it off, that save's partner data no longer lines up.
+Either keep it enabled for that playthrough, or start a separate file.
+
 **Cheats:** open `cheats.txt` in Notepad and change `[ ]` to `[x]` on any code,
-then restart. 44 GameShark-style codes are included. One worth knowing:
-**"Skip all movies"** takes you straight to the title screen instead of sitting
-through the two-minute intro.
+then restart. Sixty GameShark-style codes are included, grouped by what they
+affect, and many of them exist nowhere else — they were derived from a
+decompilation of the game rather than copied from published code lists. Two
+worth knowing: **"Skip all movies"** takes you straight to the title screen
+instead of sitting through the two-minute intro, and **"Freeze the game clock"**
+stops hunger, tiredness, ageing and the lifespan countdown all at once.
 
 ---
 

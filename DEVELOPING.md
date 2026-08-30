@@ -2,6 +2,8 @@
 
 Building this from source, and producing the setup package players install.
 If you only want to play, see [README.md](README.md).
+For how the enhancements actually work — every mod, cheat and patch, with
+the addresses and the reasoning — see [docs/INTERNALS.md](docs/INTERNALS.md).
 
 ## 1. Get the framework
 
@@ -67,7 +69,7 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file dw_ws_backdrop.c \
   --project-file dw_roster.c --project-file dw_roster_data.inc \
   --project-file README.md --project-file DISC.md --project-file cheats.txt \
-  --project-dir seeds --project-dir mods --project-dir tools
+  --project-dir seeds --project-dir mods --project-dir tools --project-dir docs
 ```
 
 `PSXRECOMP_FORCE_SETUP_HOST` is what keeps game code out: the host links without
