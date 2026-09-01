@@ -55,9 +55,12 @@ extern int32_t psx_mod_ws_native_wide_offset(void);
 extern int32_t psx_mod_widescreen_x_margin(void);
 
 #define DW_CAMERA_IS_AT_EDGE 0x800D7F68u
+#define DW_HANDLE_TILE_UPDATE 0x800D78BCu  /* the backdrop streaming ladder */
+#define DW_CAMERA_SETTLE 0x800D6A4Cu      /* MAIN_func_800D6A4C: 2nd X clamp */
 
 #define DW_CAMERA_X 0x80150C38u /* int16 */
 #define DW_CAMERA_Y 0x80150C3Au /* int16 */
+#define DW_CAMERA_X_PREVIOUS 0x80134DCCu /* int16 */
 #define DW_MAP_WIDTH 0x80150C3Cu  /* int8  */
 #define DW_MAP_HEIGHT 0x80150C3Du /* int8  */
 #define DW_DRAWING_OFFSET_X 0x80134EC0u /* int32 */
@@ -114,6 +117,114 @@ static int32_t dw_read_i16(uint32_t addr) {
     return (int32_t)(int16_t)psx_mod_read_half(addr);
 }
 
+/* ---- Wide-aware backdrop tile origin -------------------------------------
+ *
+ * The backdrop streams as a ring of FOUR tile columns of 128 world px = 512 px.
+ * The widened view spans [C - m, C + 320 + m) = 426 px at 16:9, and coverage
+ * needs the ring origin 128*T to land in [C - 139, C - 53] -- an 87-wide target
+ * on a 128-spaced lattice, so ~32% of camera positions cannot be covered at
+ * all. Shifting the origin one tile left whenever the left edge would fail is
+ * what fixes the left half of that, and it makes the right deficit at most 41
+ * world px instead of a whole column.
+ *
+ * handleTileUpdate (0x800D78BC, map.c:2177-2339) picks the origin with a
+ * hand-tuned ladder of CAMERA_X bands and then calls updateTileColumn /
+ * updateTileRow to actually stream. It cannot be replaced natively -- a plugin
+ * has no way to call those guest functions, so a replacement could set
+ * MAP_TILE_X but never stream, showing the wrong tiles.
+ *
+ * It can, however, be made to SEE a shifted camera. Verified: handleTileUpdate
+ * READS CAMERA_X and CAMERA_X_PREVIOUS and never writes them (no `CAMERA_X[0] =`
+ * anywhere in its body). So subtract the reveal on the way in and put it back
+ * on the way out, and the ladder -- bands, hysteresis and all -- selects the
+ * origin for the wide view's left edge with no band edits at all. At m = 0 the
+ * subtraction is zero and every band behaves exactly as vanilla.
+ *
+ * The restore is why [recompiler] mod_function_exit_funcs exists. An entry hook
+ * alone would leave CAMERA_X 53 px low for every later reader in the frame.
+ */
+static int32_t dw_tile_shift_applied;
+
+static void dw_tile_ladder_enter(struct CPUState* cpu, uint32_t address) {
+    int32_t m, c, p;
+    (void)cpu;
+    (void)address;
+    dw_tile_shift_applied = 0;
+    m = dw_margin_for_map((int32_t)(int8_t)psx_mod_read_byte(DW_MAP_WIDTH));
+    if (m <= 0)
+        return;
+    c = dw_read_i16(DW_CAMERA_X);
+    p = dw_read_i16(DW_CAMERA_X_PREVIOUS);
+    /* Never push either below 0: the ladder's lowest band starts at +10 and a
+     * negative camera would fall off the bottom of the chain entirely, leaving
+     * MAP_TILE_X at whatever it was. */
+    if (c < m || p < m)
+        return;
+    psx_mod_write_half(DW_CAMERA_X, (uint16_t)(c - m));
+    psx_mod_write_half(DW_CAMERA_X_PREVIOUS, (uint16_t)(p - m));
+    dw_tile_shift_applied = m;
+}
+
+static void dw_tile_ladder_exit(struct CPUState* cpu, uint32_t address) {
+    const int32_t m = dw_tile_shift_applied;
+    (void)cpu;
+    (void)address;
+    if (m <= 0)
+        return;
+    psx_mod_write_half(DW_CAMERA_X,
+                       (uint16_t)(dw_read_i16(DW_CAMERA_X) + m));
+    psx_mod_write_half(DW_CAMERA_X_PREVIOUS,
+                       (uint16_t)(dw_read_i16(DW_CAMERA_X_PREVIOUS) + m));
+    dw_tile_shift_applied = 0;
+}
+
+/* The widened X clamp. Returns 1 if it fired.
+ *
+ * Idempotent, which is what lets the SAME logic serve both a replacement (where
+ * it runs instead of the vanilla clamp) and an exit hook (where it runs after
+ * one, correcting its result). Either way the post-condition is the same:
+ * CAMERA_X in [m, MAP_WIDTH*128 - 320 - m], with DRAWING_OFFSET_X moved by the
+ * matching amount so CAMERA_X + DRAWING_OFFSET_X stays invariant.
+ */
+static int dw_clamp_x(int32_t w, int32_t m) {
+    const int32_t c = dw_read_i16(DW_CAMERA_X);
+    const int32_t hi = w * 128 - DW_SCREEN_W - m;
+    if (c < m) {
+        psx_mod_write_half(DW_CAMERA_X, (uint16_t)m);
+        psx_mod_write_word(DW_DRAWING_OFFSET_X,
+                           (uint32_t)(dw_read_i16(DW_LIMIT_X_MAX) - m));
+        return 1;
+    }
+    if (c > hi) {
+        psx_mod_write_half(DW_CAMERA_X, (uint16_t)hi);
+        psx_mod_write_word(DW_DRAWING_OFFSET_X,
+                           (uint32_t)(dw_read_i16(DW_LIMIT_X_MIN) + m));
+        return 1;
+    }
+    return 0;
+}
+
+/* The SECOND copy of the clamp. map.c has two, byte-for-byte the same logic:
+ * cameraIsAtEdge (replaced above) and MAIN_func_800D6A4C (map.c:1892-1907),
+ * where it is the last thing the function does. Measuring across 20 maps caught
+ * this: every map whose camera settled through this path clamped to the VANILLA
+ * bound -- CAMERA_X 0 instead of m, and a 88-91% left void -- because only the
+ * other copy had been widened.
+ *
+ * This one cannot be replaced: the function runs GTE transforms and calls out.
+ * But the clamp is its tail, so re-applying the widened bound on exit corrects
+ * whatever the vanilla clamp just decided. That is what the exit hook is for.
+ */
+static void dw_camera_settle_exit(struct CPUState* cpu, uint32_t address) {
+    int32_t w, m;
+    (void)cpu;
+    (void)address;
+    w = (int32_t)(int8_t)psx_mod_read_byte(DW_MAP_WIDTH);
+    m = dw_margin_for_map(w);
+    if (m > 0)
+        dw_clamp_x(w, m);
+}
+
 static int dw_camera_is_at_edge(struct CPUState* cpu, uint32_t address) {
     int32_t m, w, h, c, lim;
     uint32_t out_x, out_y;
@@ -132,21 +243,8 @@ static int dw_camera_is_at_edge(struct CPUState* cpu, uint32_t address) {
     psx_mod_write_word(out_x, 1u);
 
     /* --- X: the widened arm ------------------------------------------- */
-    c = dw_read_i16(DW_CAMERA_X);
-    if (c < m) {
-        psx_mod_write_half(DW_CAMERA_X, (uint16_t)m);
-        psx_mod_write_word(DW_DRAWING_OFFSET_X,
-                           (uint32_t)(dw_read_i16(DW_LIMIT_X_MAX) - m));
+    if (dw_clamp_x(w, m))
         psx_mod_write_word(out_x, 0u);
-    } else {
-        lim = w * 128 - DW_SCREEN_W - m;
-        if (lim < c) {
-            psx_mod_write_half(DW_CAMERA_X, (uint16_t)lim);
-            psx_mod_write_word(DW_DRAWING_OFFSET_X,
-                               (uint32_t)(dw_read_i16(DW_LIMIT_X_MIN) + m));
-            psx_mod_write_word(out_x, 0u);
-        }
-    }
 
     /* --- Y: transcribed unchanged; native-wide does not widen vertically */
     c = dw_read_i16(DW_CAMERA_Y);
@@ -172,4 +270,10 @@ static int dw_camera_is_at_edge(struct CPUState* cpu, uint32_t address) {
 PSX_MOD_CONSTRUCTOR(dw_ws_camera_register) {
     psx_mod_register_function_replace_plugin(
         "dw.ws.camera-edge", DW_CAMERA_IS_AT_EDGE, dw_camera_is_at_edge);
+    psx_mod_register_function_entry_plugin(
+        "dw.ws.tile-ladder", DW_HANDLE_TILE_UPDATE, dw_tile_ladder_enter);
+    psx_mod_register_function_exit_plugin(
+        "dw.ws.tile-ladder", DW_HANDLE_TILE_UPDATE, dw_tile_ladder_exit);
+    psx_mod_register_function_exit_plugin(
+        "dw.ws.camera-settle", DW_CAMERA_SETTLE, dw_camera_settle_exit);
 }

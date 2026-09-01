@@ -37,7 +37,7 @@ known_sha1 = [
 # Deep widescreen: emit a plugin entry hook in setPosDataPolyFT4 (the shared
 # FT4 positioner). dw_ws_backdrop.c filters by return address to the two
 # world-anchored callers and squashes backdrop X like the GTE squashes 3D.
-mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928"]
+mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC"]
 # Native function replacement (dw_evolution.c). A listed function opens with
 #   if (psx_mod_function_replace(cpu, ADDR)) return;
 # so a plugin can compute the result, write $v0, publish $ra into cpu->pc and
@@ -53,6 +53,19 @@ mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A281
 # the one evolution chooser dw.vanilla.roster does NOT patch: 0x54 bytes,
 # fully decompiled, pure. This entry is the proof of the primitive, not the
 # goal -- the other four choosers need their 42 retarget patches deleted first.
+# 0x800D78BC = handleTileUpdate: the backdrop tile-streaming ladder. It cannot
+# be REPLACED -- it has to call updateTileColumn/updateTileRow to stream, and a
+# plugin cannot call a guest function -- but it only READS the camera, so
+# dw_ws_camera.c subtracts the widescreen reveal on entry and restores it on
+# exit. The ladder then picks the tile origin for the WIDE view's left edge with
+# no band edits. The exit half is what mod_function_exit_funcs exists for.
+# 0x800D6A4C = MAIN_func_800D6A4C: map.c has TWO copies of the camera X clamp,
+# and this is the one that is not cameraIsAtEdge. It cannot be replaced (GTE
+# transforms, calls out) but the clamp is its tail, so the widened bound is
+# re-applied on exit. Measuring 20 maps is what caught the omission: every map
+# settling through this path clamped to the vanilla bound and showed an 88-91%
+# left void.
+mod_function_exit_funcs = ["0x800D78BC", "0x800D6A4C"]
 mod_function_replace_funcs = ["0x800E2544", "0x800D7F68"]
 # 0x800D7F68 = cameraIsAtEdge (map.c:2341-2370): a 212-byte leaf with no calls,
 # and the single per-frame chokepoint for the camera scroll clamp. dw_ws_camera.c
