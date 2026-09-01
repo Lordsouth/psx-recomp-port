@@ -121,7 +121,7 @@ static int32_t dw_ws_native_wide_margin(void) {
  */
 static void dw_ws_hud_park_hook(struct CPUState* cpu, uint32_t address) {
     const int32_t margin = dw_ws_native_wide_margin();
-    int32_t x, w;
+    int32_t x, w, sx;
     (void)address;
     if (margin <= 0)
         return;
@@ -129,10 +129,19 @@ static void dw_ws_hud_park_hook(struct CPUState* cpu, uint32_t address) {
     w = (int32_t)(int16_t)cpu->gpr[6]; /* $a2 width */
     if (w <= 0)
         return;
-    if (x + w <= 0)
-        cpu->gpr[4] = (uint32_t)(x - margin);       /* parked left  */
-    else if (x >= DW_SCREEN_W)
-        cpu->gpr[4] = (uint32_t)(x + margin);       /* parked right */
+    /* posX is CENTRE-RELATIVE, not 0-based. Measured at the call sites inside
+     * renderGameClock: the dial arrives as x=-137 w=16, x=-127 w=32,
+     * x=-135 w=48 -- all comfortably on screen at 320/2 + x. Testing those
+     * against 0 as if they were screen coordinates makes EVERY widget left of
+     * centre look parked, and shoves it 53 px left. That is exactly what it
+     * did: it moved the clock face while the needle -- drawn by GsSortSprite,
+     * not this helper -- stayed where it was, so the hand came off the clock.
+     * A player reported it before this was caught. */
+    sx = x + DW_SCREEN_W / 2;
+    if (sx + w <= 0)
+        cpu->gpr[4] = (uint32_t)(x - margin);       /* parked off the left  */
+    else if (sx >= DW_SCREEN_W)
+        cpu->gpr[4] = (uint32_t)(x + margin);       /* parked off the right */
 }
 
 static void dw_ws_backdrop_hook(struct CPUState* cpu, uint32_t address) {

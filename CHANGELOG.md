@@ -9,6 +9,25 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ---
 
+## 0.3.3
+
+**Fixes the clock hand coming off the clock in widescreen.**
+
+In 0.3.2 the needle floated away from the clock face and sat by itself to the
+right of it. Reported by two players within hours of release.
+
+The cause was mine, and it was worse than the needle: the code that keeps
+hidden HUD pieces hidden was reading positions as if they were measured from
+the left edge of the screen, when the game measures them from the centre. So
+anything on the left half of the screen looked to it like it had been hidden
+off-screen, and got shoved 53 pixels left. The clock face moved; the needle is
+drawn by a different routine and stayed where it was.
+
+Nothing else in 0.3.2 changes. Widescreen coverage is unaffected — still
+measured at 20 of 20 maps fully covered.
+
+---
+
 ## 0.3.2
 
 **Widescreen, rebuilt. Nothing is stretched any more.**
