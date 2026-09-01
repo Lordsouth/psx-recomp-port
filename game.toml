@@ -53,7 +53,13 @@ mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A281
 # the one evolution chooser dw.vanilla.roster does NOT patch: 0x54 bytes,
 # fully decompiled, pure. This entry is the proof of the primitive, not the
 # goal -- the other four choosers need their 42 retarget patches deleted first.
-mod_function_replace_funcs = ["0x800E2544"]
+mod_function_replace_funcs = ["0x800E2544", "0x800D7F68"]
+# 0x800D7F68 = cameraIsAtEdge (map.c:2341-2370): a 212-byte leaf with no calls,
+# and the single per-frame chokepoint for the camera scroll clamp. dw_ws_camera.c
+# widens its X arm by the native-wide reveal so the map edge stays inside the
+# WIDENED frame instead of the 4:3 one, moving DRAWING_OFFSET_X in step so the
+# backdrop cannot slide against the 3D. Returns 0 -- running the stock body --
+# whenever widescreen is off, without touching any guest state.
 # 0x800A1F68/0x800A2810 = loadMMD/loadMMDAsync: dw_roster.c remaps the
 # type argument 114->115 so slot 114 streams Machinedramon's model and
 # texture.
