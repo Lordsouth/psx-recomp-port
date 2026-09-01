@@ -117,6 +117,10 @@ static int32_t dw_read_i16(uint32_t addr) {
     return (int32_t)(int16_t)psx_mod_read_half(addr);
 }
 
+static int32_t dw_read_i32(uint32_t addr) {
+    return (int32_t)psx_mod_read_word(addr);
+}
+
 /* ---- Wide-aware backdrop tile origin -------------------------------------
  *
  * The backdrop streams as a ring of FOUR tile columns of 128 world px = 512 px.
@@ -215,14 +219,70 @@ static int dw_clamp_x(int32_t w, int32_t m) {
  * But the clamp is its tail, so re-applying the widened bound on exit corrects
  * whatever the vanilla clamp just decided. That is what the exit hook is for.
  */
+/* Nudge the camera out of the tile window's blind band.
+ *
+ * The ring covers [128T, 128T+512) and the widened view needs
+ * leftslack = C - 128T in [m, 192-m]. For a given C only two leftslacks are
+ * reachable -- r = C mod 128, with T = floor(C/128), or r + 128 with T one
+ * lower -- so C is coverable iff
+ *
+ *     r >= m            (use T)        ... at m=53: r in [53,127]
+ *  or r <= 64 - m       (use T-1)      ... at m=53: r in [0,11]
+ *
+ * leaving a blind band r in [12,52] at 16:9 that NO choice of origin covers.
+ * That is the whole of the remaining defect, and it only bites at map load:
+ * once the player walks, the streaming ladder moves the camera out of the band
+ * on its own. Measured over 20 maps, four landed in it, with left voids of
+ * 33-73% that went to 0.0% after a single step.
+ *
+ * Rather than add a fifth tile column -- which needs VRAM that a three-method
+ * census proved does not exist -- move the camera to the nearer edge of the
+ * band. The cost is bounded by half the band, 21 px out of 320, applied once
+ * when a map loads and erased the moment the player moves. A view that starts
+ * 21 px off centre is not a thing anyone can see; a 40-column black bar is.
+ *
+ * CAMERA_X and DRAWING_OFFSET_X move opposite each other, exactly as the
+ * camera-follow code does (map.c: `CAMERA_X += d; DRAWING_OFFSET_X -= d;`),
+ * so the backdrop stays registered with the 3D.
+ */
+static void dw_align_x(int32_t w, int32_t m) {
+    const int32_t lo = m;
+    const int32_t hi = w * 128 - DW_SCREEN_W - m;
+    const int32_t c = dw_read_i16(DW_CAMERA_X);
+    const int32_t r = ((c % 128) + 128) % 128;
+    int32_t d;
+
+    /* Only UP. In principle leftslack r + 128 also covers when r <= 64 - m,
+     * by taking the origin one tile lower -- but that choice is not available
+     * where it matters. At map load MAP_TILE_X is set by the plain formula
+     * CAMERA_X / 128 (map.c:1785), never T-1, so the low window is unreachable
+     * and nudging down lands on an origin the loader will not pick. Measured:
+     * aiming at r = 11 left maps 12, 20 and 30 with 54-73% left voids at
+     * exactly leftslack 11. The reachable condition is the simple one:
+     *
+     *     C mod 128 >= m
+     *
+     * and the right edge needs no test, because r <= 127 < 192 - m always. */
+    if (r >= m)
+        return;
+    d = m - r;
+    if (c + d < lo || c + d > hi)
+        return;                       /* no room: leave it to the ladder */
+    psx_mod_write_half(DW_CAMERA_X, (uint16_t)(c + d));
+    psx_mod_write_word(DW_DRAWING_OFFSET_X,
+                       (uint32_t)(dw_read_i32(DW_DRAWING_OFFSET_X) - d));
+}
+
 static void dw_camera_settle_exit(struct CPUState* cpu, uint32_t address) {
     int32_t w, m;
     (void)cpu;
     (void)address;
     w = (int32_t)(int8_t)psx_mod_read_byte(DW_MAP_WIDTH);
     m = dw_margin_for_map(w);
-    if (m > 0)
-        dw_clamp_x(w, m);
+    if (m <= 0)
+        return;
+    dw_clamp_x(w, m);
+    dw_align_x(w, m);
 }
 
 static int dw_camera_is_at_edge(struct CPUState* cpu, uint32_t address) {

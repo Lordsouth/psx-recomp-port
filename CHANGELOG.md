@@ -9,37 +9,45 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ---
 
-## Unreleased
+## 0.3.2
 
-**Widescreen is no longer stretched.**
+**Widescreen, rebuilt. Nothing is stretched any more.**
 
-Through 0.3.0 widescreen ran in *squash* mode: the game rendered a wider field
-of view compressed into its normal 320-pixel frame, and the picture was then
-stretched back out on screen. The 3D looked roughly right; every menu, text box
-and HUD element came out horizontally stretched. That is why it shipped off by
-default and labelled experimental.
+Until now widescreen worked by squashing: the game drew a wider view squeezed
+into its normal 320-pixel frame, and the picture was stretched back out on
+screen. The 3D survived that; menus, text boxes and the HUD did not, which is
+why it shipped off by default and labelled experimental.
 
-It now runs in **native-wide**: the wider view is rendered into a genuinely
-wider frame (320 → 426 at 16:9) and shown 1:1. Nothing is stretched. Menus,
-item windows, dialogue boxes and the HUD keep their original pixel shapes, and
-the extra width is real extra view on both sides rather than a squeeze.
+It now renders the wider view into a genuinely wider frame and shows it 1:1.
+Menus, item windows, dialogue and the HUD keep their exact original shapes, and
+the extra width is real extra view on both sides rather than a stretch.
 
-**What is still not perfect.** Some interior rooms are only *modelled* as far
-as the original fixed camera could ever see — the set is cut off flat along the
-old screen edge, mid-object. Widening the view there shows black at one side.
-Measured over fourteen camera setups across four rooms, three showed it. No
-setting can fix that one: the geometry was never built, and only new artwork
-would fill it.
+Four things had to be fixed to get there, all found by surveying the game
+rather than by guessing:
 
-*Not verified:* battles, the arena, shops and cut-scenes have not been surveyed
-in widescreen yet — the fourteen sampled setups were all field and interior
-cameras.
+* **Every fade leaked.** The screen would fade to black while the strips down
+  each side stayed lit, on every single screen transition in the game.
+* **Widgets the game hides came back.** The clock slides off the left edge when
+  you open a menu, and the enemy health bars sit off the right when there is no
+  enemy. A wider screen revealed both of those hiding places, sliced by the
+  frame edge.
+* **The camera stopped too late at the edge of a map**, so the extra width had
+  no map behind it and rendered as a black bar -- for the whole of a battle, if
+  you fought there.
+* **The scrolling background could not always fill the wider frame**, leaving a
+  black band down one side on some screens until you moved.
 
----
+Widescreen is still **off by default** -- turn it on in the Mods panel. It is no
+longer labelled experimental.
 
-*Held back from 0.3.1*, which was a build hotfix. The scene survey behind
-this found three defects that are worth fixing before it goes out — see
-`research/widescreen-survey/README.md`.
+**Also:** when a build fails, the launcher now shows what actually went wrong
+and writes `psxrecomp-build.log` next to the game. Previously it reported only
+"psxrecomp generate failed (exit 1)" and threw away the message that identified
+the fault, which made every report of a build problem undiagnosable.
+
+*Not covered:* one known oddity remains unexamined -- for about a second after
+a wild battle ends, the picture drops back to 4:3 before returning to
+widescreen.
 
 ---
 

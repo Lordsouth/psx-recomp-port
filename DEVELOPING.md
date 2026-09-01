@@ -97,32 +97,17 @@ no `generated/*.c` and no BIOS dump. The only `.bin` should be
 past the start of the BSS memfill, and bounding the sweep below it keeps the
 analysis clean.
 
-Widescreen still SHIPS in squash mode (`native_wide = false`). Native-wide is
-implemented, measured and ready, and is what the rest of this section
-describes -- it stays off until the three defects in
-`research/widescreen-survey/README.md` are fixed (the 320-wide fade plate,
-the edge-parked HUD clip, the 320-column camera clamp). Squash
+Widescreen ships in **native-wide** (`native_wide = true`), not squash. Squash
 compresses a wider field of view into the 320-wide framebuffer and presents it
-stretched, which is what made menus and the HUD look wrong through 0.3.0.
+stretched, which is what made menus and the HUD look wrong through 0.3.1.
 Native-wide renders into a genuinely wider framebuffer (320 -> 426 at 16:9) and
 presents 1:1, so nothing is stretched.
 
-This was tried once before and rejected for "stale side strips, boundary void
-and torn menus". Re-measured across 14 camera setups in four rooms, on both
-renderer backends (they agree to 0.1% per scene): the strips are not stale --
-they track camera motion frame to frame and cross the old 4:3 edge with no
-seam -- and the menus are not torn. The 4:3 image lands exactly on wide columns
-53..372, so both reveals are real new view. Boundary void is real but narrow:
-3 of the 14 setups show black in the right reveal because those interiors are
-only modelled as far as the fixed 4:3 camera could see, and the set is cut off
-along the old frustum plane mid-object. It is missing art, not a cull -- other
-cameras in the same rooms draw 31 columns past the old edge, which a
-screen-space clip could not allow.
-
-Do not enable `nw_hud_corners`: on this game it shifts world polygons, tearing
-black vertical slabs through the scene. `[widescreen.cull]` is deliberately
-absent -- see the comment block in `game.toml` for the scan that shows this
-game carries none of the immediates `auto_screen_x` looks for.
+Four defects had to be fixed before it could be turned on, all measured and all
+recorded in `research/widescreen-survey/README.md`. Three of them live in
+`dw_ws_backdrop.c` and `dw_ws_camera.c` as hooks on the game's own functions;
+none of them is a code patch. Do NOT enable `nw_hud_corners` -- it was tested
+here and shifts world polygons.
 
 `geometry_correction` stays off: it is framework-withdrawn and measured at 0.2%
 coverage here, so it buys nothing.

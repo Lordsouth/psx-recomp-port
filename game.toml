@@ -140,15 +140,17 @@ spu_hq = true
 # allow. Nothing in the renderer can fix it; only new geometry could.
 [widescreen]
 gte_game_mode = true
-# native_wide ships FALSE for now -- 0.3.1 is a build hotfix and deliberately
-# carries no rendering change. Everything above is measured and true, and the
-# switch is ready; it stays off until the three defects the scene survey found
-# are fixed (research/widescreen-survey/README.md): full-screen 2D plates are
-# drawn 320 wide so every fade leaves both reveals lit, edge-parked HUD widgets
-# are revealed and clipped on both sides, and the map-edge camera clamp is
-# hardcoded to 320 so a battle at a clamped camera renders 53 columns of black.
-# Flip to true once those land -- squash's stretched 2D is worse than all three.
-native_wide = false
+# NATIVE-WIDE IS ON. The four defects the scene survey found are fixed and
+# measured (research/widescreen-survey/README.md):
+#   * full-screen 2D plates were drawn 320 wide, so every fade left both
+#     reveals lit -- 29.6/0.6/64.9 -> 0.0/0.0/0.0
+#   * widgets the game parks off-screen came back sliced -- columns 0..7 now
+#     zero in every state
+#   * the map-edge camera clamp was hardcoded to 320 -- right reveal at a
+#     clamped camera 100% void -> 7.6%
+#   * the backdrop tile window could not cover 426 at every alignment --
+#     left edge covered on 20 of 20 sampled maps, mean void 0.7%
+native_wide = true
 
 # nw_hud_corners stays OFF (and is not listed). It re-anchors outer-third 2D
 # prims to the true wide corners, which on this game shifts WORLD polygons: it

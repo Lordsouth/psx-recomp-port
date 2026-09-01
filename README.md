@@ -103,7 +103,7 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 | **Guaranteed Item Drops** | Every Digimon you defeat drops its item |
 | **Quality of Life** | Make your partner live longer than the stock 15 in-game days; slow the world clock so hunger, tiredness and ageing all relax together |
 | **Gameplay** | Better odds of learning techniques in battle; lower the stat requirements for evolutions |
-| **Widescreen (experimental)** | 16:9. Off by default: 3D proportions are correct and the pre-rendered backdrops stay aligned with the 3D — but menus and HUD still render stretched. A rebuilt widescreen that does not stretch anything is finished and measured, and lands in the next release |
+| **Widescreen** | 16:9. The wider view is rendered at full width and shown 1:1, so nothing is stretched — menus, text boxes and the HUD keep their original shapes, and the extra width is real extra view on both sides |
 | **Fast Loading** | Shorter loads. **Off by default and best left off on this game** -- it speeds up real time whenever it thinks a load is happening, and on Digimon World it stays engaged, running the whole game at 4x. |
 
 Turning a mod off restores the original game exactly — every change is a guarded
