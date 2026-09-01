@@ -97,10 +97,35 @@ no `generated/*.c` and no BIOS dump. The only `.bin` should be
 past the start of the BSS memfill, and bounding the sweep below it keeps the
 analysis clean.
 
-Widescreen runs in squash mode (`native_wide = false`). Native-wide rendering on
-this title leaves stale pixels down the side, a void at area boundaries and torn
-menus, all of which squash avoids. `geometry_correction` stays off: it is
-framework-withdrawn and measured at 0.2% coverage here, so it buys nothing.
+Widescreen still SHIPS in squash mode (`native_wide = false`). Native-wide is
+implemented, measured and ready, and is what the rest of this section
+describes -- it stays off until the three defects in
+`research/widescreen-survey/README.md` are fixed (the 320-wide fade plate,
+the edge-parked HUD clip, the 320-column camera clamp). Squash
+compresses a wider field of view into the 320-wide framebuffer and presents it
+stretched, which is what made menus and the HUD look wrong through 0.3.0.
+Native-wide renders into a genuinely wider framebuffer (320 -> 426 at 16:9) and
+presents 1:1, so nothing is stretched.
+
+This was tried once before and rejected for "stale side strips, boundary void
+and torn menus". Re-measured across 14 camera setups in four rooms, on both
+renderer backends (they agree to 0.1% per scene): the strips are not stale --
+they track camera motion frame to frame and cross the old 4:3 edge with no
+seam -- and the menus are not torn. The 4:3 image lands exactly on wide columns
+53..372, so both reveals are real new view. Boundary void is real but narrow:
+3 of the 14 setups show black in the right reveal because those interiors are
+only modelled as far as the fixed 4:3 camera could see, and the set is cut off
+along the old frustum plane mid-object. It is missing art, not a cull -- other
+cameras in the same rooms draw 31 columns past the old edge, which a
+screen-space clip could not allow.
+
+Do not enable `nw_hud_corners`: on this game it shifts world polygons, tearing
+black vertical slabs through the scene. `[widescreen.cull]` is deliberately
+absent -- see the comment block in `game.toml` for the scan that shows this
+game carries none of the immediates `auto_screen_x` looks for.
+
+`geometry_correction` stays off: it is framework-withdrawn and measured at 0.2%
+coverage here, so it buys nothing.
 
 `[controller] default_mode = "digital"` matters more than it looks. This game
 only reads the digital pad response; in analog mode every button is dead.
@@ -125,7 +150,7 @@ Two failure modes worth knowing, both of which cost hours here:
   applies, with nothing logged. Unescaped quotes in a description are enough to
   do it. `python -c "import tomllib; tomllib.load(open(path,'rb'))"` catches it.
 
-### Run both gates before every release
+### Run all three gates before every release
 
 ```bash
 py -3.12 tools/check_mod_collisions.py
@@ -133,6 +158,10 @@ py -3.12 tools/check_mod_collisions.py
 
 ```bash
 py -3.12 tools/verify_disc_patches.py
+```
+
+```bash
+py -3.12 tools/verify_setup_package.py dist/digimon-world-<version>-win-x64.zip
 ```
 
 The first catches two co-enablable features writing the same byte differently —
@@ -145,8 +174,27 @@ first read. A bad offset boots fine, menus fine, and only fails when a player
 reaches the content — at which point *every* disc patch in the plan is disabled,
 not just the bad one. See `docs/INTERNALS.md` §7.3.
 
-Both are also worth running after regenerating any manifest, not only at
-release time — they are seconds each.
+The third answers the question nothing else in this process asked: **can the
+package a player downloads actually be compiled?** It resolves every quoted
+`#include` in the staged framework against the package's own contents, and with
+`--build` it configures and compiles the recompiler from the staged tree.
+
+That check exists because **0.1.6, 0.2.0 and 0.3.0 all shipped unbuildable**.
+The packager staged the framework with `--exclude 'generated'`; a bare name
+matches at every depth, so besides dropping `psxrecomp/generated/` (recompiled
+OpenBIOS C, correctly excluded) it also dropped
+`recompiler/lib/rabbitizer/include/generated/` — 21 headers that are
+checked-in *source*. Every player's build died on the very first file with
+`fatal error: 'generated/InstrId_enum.h' file not found`, and the launcher
+showed only "psxrecomp generate failed (exit 1)". Three releases went out
+before a player reported it, because the release process looked at the package
+as a file list and never as a compiler sees it. The exclusion is now anchored
+(`--exclude '/generated'`) and this gate is what keeps it that way; it passes
+on 0.1.5 and fails on 0.1.6, 0.2.0 and 0.3.0.
+
+The first two are also worth running after regenerating any manifest, not only
+at release time — they are seconds each. So is the header half of the third;
+only `--build` is slow.
 
 ## Licence
 

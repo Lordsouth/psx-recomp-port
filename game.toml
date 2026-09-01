@@ -87,21 +87,76 @@ perspective_texturing = true
 [audio]
 spu_hq = true
 
-# Same widescreen tuning proven on the Vice build: fully-3D title needs the
-# GTE-activity detector; native-wide shows stale side strips, boundary void
-# and torn menus on this game, so squash mode.
+# Fully-3D title, so it needs the GTE-activity detector.
+#
+# NATIVE-WIDE, not squash. Squash mode compresses a wider field of view into
+# the 320-wide framebuffer and presents it stretched -- which is exactly why
+# menus and the HUD look wrong, and why the UI counter-squash below never
+# worked: it was trying to undo a squash that should not be happening.
+# Native-wide renders the wider view into a genuinely wider framebuffer and
+# presents it 1:1, so that whole artifact class disappears by construction
+# (psxrecomp WIDESCREEN.md, "Strategic direction").
+#
+# Measured on this game, both renderer backends, 14 sampled camera setups
+# across four rooms (tools/dwgame.py enter_game + a fixed walk plan; OpenGL and
+# software agreed to 0.1% on every scene):
+#   * The 4:3 image lands EXACTLY on wide columns 53..372 -- so both 53-column
+#     reveals are genuinely new view, not a stretch.
+#   * Menus, text boxes and the HUD keep native pixel proportions. The item
+#     window measures 301 px in 4:3 and 303 px wide -- it is not squashed and
+#     needs no counter-squash.
+#   * The reveals render live: they track camera motion frame to frame, and the
+#     geometry crosses the old 4:3 edge with no seam. The "stale side strips"
+#     this was rejected for in 0.1.x are not present.
+# The one residual is boundary void: 3 of 14 camera setups show black in the
+# right reveal, because those interiors are only MODELLED as far as the fixed
+# 4:3 camera could ever see -- the set is cut off along the old frustum plane,
+# mid-object. That is missing art, not a cull: other cameras in the same rooms
+# draw content 31 columns past the old edge, which no screen-space clip would
+# allow. Nothing in the renderer can fix it; only new geometry could.
 [widescreen]
 gte_game_mode = true
-# Counter-squash the UI layer so menus/HUD render 4:3-correct instead of
-# stretched. The UI layer starts at the game's own DR_OFFSET reset packet,
+# native_wide ships FALSE for now -- 0.3.1 is a build hotfix and deliberately
+# carries no rendering change. Everything above is measured and true, and the
+# switch is ready; it stays off until the three defects the scene survey found
+# are fixed (research/widescreen-survey/README.md): full-screen 2D plates are
+# drawn 320 wide so every fade leaves both reveals lit, edge-parked HUD widgets
+# are revealed and clipped on both sides, and the map-edge camera clamp is
+# hardcoded to 320 so a battle at a clamped camera renders 53 columns of black.
+# Flip to true once those land -- squash's stretched 2D is worse than all three.
+native_wide = false
+
+# nw_hud_corners stays OFF (and is not listed). It re-anchors outer-third 2D
+# prims to the true wide corners, which on this game shifts WORLD polygons: it
+# tears two black vertical slabs through the scene and splits the HP/MP bars
+# from their icons. Tested; the screenshot is unambiguous. The HUD sitting
+# inset by the reveal reads as a safe-area HUD and is the better look here.
+
+# The UI counter-squash. This exists only to undo a squash, so under
+# native-wide it has nothing to do and stays off; kept for the squash-mode
+# fallback. The UI layer starts at the game's own DR_OFFSET reset packet,
 # identified by its static address: DRAW_OFFSETS @0x8015DB90, one 12-byte
 # packet per framebuffer (pauseFrame, utils.c -- AddPrim at OT index 32).
-# DORMANT until the stale-frame issue is resolved (research/
-# widescreen-w2-dossier.md): flip to true to test UI counter-squash.
+# See research/widescreen-w2-dossier.md for why it never worked.
 ui_offset_squash = false
 ui_offset_packet_addr = "0x8015DB90"
 ui_offset_packet_span = 24
-native_wide = false
+
+# NOTE ON TABLE ORDER: everything above belongs to [widescreen]. Any
+# [widescreen.cull] subtable must come LAST -- in TOML every key after that
+# header lands in `cull`, so putting it earlier silently reparents
+# ui_offset_* and native_wide and they stop taking effect.
+#
+# There is deliberately no [widescreen.cull] here. auto_screen_x widens the GTE
+# render-funnel screen-extent reject, which it finds by pairing a
+# `sltiu ..,0x140` width compare with a `sltiu ..,0xE0` height compare. This
+# game has NEITHER immediate anywhere: zero `sltiu ..,0x140` in the main EXE or
+# in any of the 16 overlays (only one signed `slti ..,320`, in EAB_REL.BIN).
+# Turning it on emitted zero psx_ws_x_margin() call sites -- byte-identical
+# codegen -- so it was removed rather than left in looking load-bearing.
+# auto_backdrop stays off too: its detector keys on the generic 0x66666667
+# divide-by-10 constant, which occurs 52 times in the EXE alone here, and a
+# false positive corrupts unrelated overlay codegen.
 
 [controller]
 default_mode = "digital"

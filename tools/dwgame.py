@@ -27,6 +27,10 @@ PARA = 0x80138460         # PARTNER_PARA
 DIGIMON_DATA = 0x8012CEB4
 DIGIMON_STRIDE = 52
 STATS = PARTNER + 0x38    # Stats.base -- Entity is 0x38 bytes
+MAP_ENTRIES = 0x801292D4  # MapEntry[255], 16 bytes: char file[10] + 6 int8
+MAP_ENTRY_STRIDE = 16
+MAP_ENTRY_COUNT = 0xFF0 // MAP_ENTRY_STRIDE
+MAP_NAME_PTR = 0x801291BC  # char *[64], indexed by MapEntry.loadingName
 
 
 @dataclass(frozen=True)
@@ -84,7 +88,15 @@ _F = [
     Field("is_in_menu", 0x80134EF0, "i32", "unsafe",
           "GATE: the test is 'if (IS_IN_MENU == 1)', so the switch runs for any "
           "value EXCEPT 1. Assert != 1; never write."),
-    Field("current_screen", 0x80134DA8, "i16", "unsafe"),
+    # The map the player is standing in. u8, NOT i16 -- 0x80134DA9 is
+    # PREVIOUS_SCREEN, so reading two bytes here returns
+    # current | (previous << 8) and silently lies for every map above 0.
+    Field("current_screen", 0x80134DA8, "u8", "unsafe"),
+    Field("previous_screen", 0x80134DA9, "u8", "unsafe"),
+    # Warp inputs. changeMap(TARGET_MAP, CURRENT_EXIT) runs from tamer state 5
+    # (tickChangeMap, tamer.c) -- see Game.warp().
+    Field("current_exit", 0x80134DAA, "u8", "safe"),
+    Field("target_map", 0x80134DE0, "u8", "safe"),
     # Menu/boot progress -- these are what makes the title->Continue route
     # assertable instead of a blind button mash timed against pixels.
     Field("menu_state", 0x80134D34, "i16", "unsafe"),
@@ -165,7 +177,19 @@ class Game:
     # ---- lifecycle -------------------------------------------------------
     @classmethod
     def launch(cls, exe=EXE, port=4370, headless=False, memcard_dir=None,
-               log_path=None, boot_timeout=120.0, extra_args=()):
+               log_path=None, boot_timeout=120.0, extra_args=(), env=None):
+        """Start an instance and wait for its debug server.
+
+        Concurrency: several instances can run at once, but they share a
+        working directory, so every per-instance path has to be split or they
+        corrupt each other. Pass a distinct `port` AND `memcard_dir`, and set
+        `env={"PSX_OVERLAY_CAPTURES": "<own path>"}` -- without that last one
+        every instance appends to build-debug/overlay_captures.json at the same
+        time. `env` is merged over os.environ, not a replacement.
+
+        Kill with shutdown(), which kills THIS pid. Never taskkill by image
+        name: that also kills the player's own session if one is open.
+        """
         args = [exe, "--no-launcher", "--debug-port", str(port)]
         if headless:
             args.append("--headless")
@@ -173,8 +197,13 @@ class Game:
             args += ["--memcard-dir", str(memcard_dir)]
         args += list(extra_args)
         log = open(log_path, "wb") if log_path else subprocess.DEVNULL
+        child_env = None
+        if env:
+            child_env = dict(os.environ)
+            child_env.update({str(k): str(v) for k, v in env.items()})
         proc = subprocess.Popen(args, cwd=os.path.dirname(exe),
-                                stdout=log, stderr=subprocess.STDOUT)
+                                stdout=log, stderr=subprocess.STDOUT,
+                                env=child_env)
         d = Dbg(port=port)
         deadline = time.time() + boot_timeout
         while time.time() < deadline:
@@ -252,6 +281,78 @@ class Game:
         raise AttributeError(name)
 
     # ---- game knowledge --------------------------------------------------
+    def map_record(self, map_id):
+        """One MAP_ENTRIES row, read from RAM. Never hardcode a map id list:
+        the disc filename and the loading-screen name both live here, so the
+        table answers "which map is the Arena Lobby" directly."""
+        b = self.d.read(MAP_ENTRIES + map_id * MAP_ENTRY_STRIDE,
+                        MAP_ENTRY_STRIDE)
+        name_id = b[15] if b[15] < 0x80 else b[15] - 0x100
+        return {
+            "id": map_id,
+            "file": b[:10].split(b"\0")[0].decode("ascii", "replace"),
+            "flags": b[12],
+            "name_id": name_id,
+            "name": self.map_name(name_id),
+        }
+
+    def map_name(self, name_id):
+        if name_id < 0 or name_id >= 64:
+            return "?"
+        if not hasattr(self, "_map_names"):
+            self._map_names = {}
+        if name_id not in self._map_names:
+            ptr = int.from_bytes(self.d.read(MAP_NAME_PTR + name_id * 4, 4),
+                                 "little")
+            raw = self.d.read(ptr, 40)
+            txt = raw.split(b"\0")[0].decode("ascii", "replace")
+            self._map_names[name_id] = txt.strip()
+        return self._map_names[name_id]
+
+    def maps_named(self, needle):
+        """Every map id whose loading-screen name contains `needle`
+        (case-insensitive). 'arena' -> [208, 223]; 'item shop' -> [216, 217]."""
+        needle = needle.lower()
+        out = []
+        for i in range(MAP_ENTRY_COUNT):
+            r = self.map_record(i)
+            if r["file"] and needle in r["name"].lower():
+                out.append(i)
+        return out
+
+    def warp(self, map_id, exit_id=0, timeout_frames=1800):
+        """Move the player to another map, the way the game itself does.
+
+        Walking to a destination is not a reasonable way to survey screens: a
+        five-agent walk survey reached neither the arena nor a shop, because
+        the save had barely any of File City built and the partner degenerated
+        before anyone arrived. This drives the game's OWN transition instead --
+        tickChangeMap (tamer.c), tamer state 5 -- so the fade, the map-name
+        card, entity teardown and reload all run exactly as they do when a
+        player walks through a door. It is not a teleport hack around the
+        engine; it is the engine's door code with the destination supplied.
+
+        Order matters: TARGET_MAP and CURRENT_EXIT are read in substate 1,
+        after the fade, so they must be in place BEFORE the state flips. State
+        and substate then go down together (set_atomic) because the game ticks
+        between round trips and would otherwise run substate 1 against a stale
+        substate.
+
+        Returns the map record actually arrived at. Raises Wedge on timeout.
+        """
+        self.set("target_map", map_id)
+        self.set("current_exit", exit_id)
+        self.set_atomic(("tamer_state", 5), ("tamer_substate", 0))
+        deadline = self.d.frame() + timeout_frames
+        while self.d.frame() < deadline:
+            if self.current_screen == map_id and self.tamer_state == 0:
+                self.advance(60)
+                return self.map_record(map_id)
+            time.sleep(0.2)
+        raise Wedge("warp to map %d never completed (current_screen=%s, "
+                    "tamer_state=%s)"
+                    % (map_id, self.current_screen, self.tamer_state))
+
     def digimon_record(self, t):
         b = self.d.read(DIGIMON_DATA + t * DIGIMON_STRIDE, DIGIMON_STRIDE)
         return {
@@ -349,6 +450,43 @@ class Game:
             if not self.d.cmd("input_route_status").get("active", False):
                 return
             time.sleep(poll_s)
+
+    def enter_game(self, tries=10):
+        """Boot -> title -> CONTINUE GAME -> first save slot -> in the world.
+
+        Written as a convergence loop, not a fixed key sequence, because the
+        title flow is NOT frame-deterministic: the boot phase before "Press
+        Start Button" varies by tens of seconds between renderer backends, and
+        how many CROSS presses the card-read screens swallow depends on how
+        fast the memory card answers. A script that hardcodes "start, then five
+        crosses" silently lands on the wrong screen -- that cost a whole
+        widescreen survey here, where every screenshot came back 320x240
+        because the run had never left the title. Poll the one fact that
+        defines success instead: partner_type != 0.
+
+        Two facts make the fixed prefix safe to repeat:
+          * START is inert once the title menu is up (verified: the cursor
+            stays on NEW GAME), so pressing it a dozen times only covers a slow
+            boot -- it can never advance past the menu. Twelve, not four,
+            because a cold OpenGL launch reaches "Press Start Button" a good
+            twenty seconds later than a warm attach does.
+          * DOWN is pressed exactly once, and only after the START burst, so
+            the cursor lands on CONTINUE GAME and never on DELETE GAME.
+        Raises rather than returning a half-loaded game.
+        """
+        for _ in range(12):
+            self.route("6:start,150:none")
+            if self.partner_type:
+                return self.partner_type
+        self.route("6:down,60:none")
+        for _ in range(tries):
+            self.route("6:cross,150:none")
+            if self.partner_type:
+                self.advance(180)
+                return self.partner_type
+        raise Wedge("never reached the world from the title (partner_type "
+                    "stayed 0 after %d CROSS presses) -- is there a save in "
+                    "slot 1 of the memory card dir?" % tries)
 
     def advance(self, frames):
         target = self.d.frame() + frames

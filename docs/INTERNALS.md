@@ -449,9 +449,56 @@ is deliberately untouched because it is an exact target, not a floor).
 
 ## 5. Widescreen
 
-Squash mode is what ships: the GTE compresses projected X and the presenter
-stretches the frame back out. It is **off by default and labelled experimental**
-because screen-space 2D still renders stretched.
+**Squash is still what ships** (`[widescreen] native_wide = false`).
+Native-wide is implemented and measured and is described below; it is held
+back until the defects in `research/widescreen-survey/README.md` are fixed.
+0.3.1 was a build hotfix and deliberately carried no rendering change. The
+wider field of view is rendered into a genuinely wider framebuffer (320 -> 426
+at 16:9, `EXTRA = 2 * round(W*(3n-4d)/(8d))`) and presented 1:1. Nothing is
+stretched, so the entire "screen-space 2D renders stretched" problem class —
+which is what W2 below exists to fight — does not arise.
+
+Squash mode (the GTE compresses projected X, the presenter stretches the frame
+back out) is still selectable and is what shipped through 0.3.0. Everything in
+5.1 and 5.2 describes squash and is retained because squash remains the
+fallback.
+
+### 5.0 The native-wide measurement (what actually got checked)
+
+Native-wide was tried on this game once before and rejected for "stale side
+strips, boundary void and torn menus". Re-measured with `tools/dwgame.py`
+(`enter_game()` plus a fixed 14-step walk plan, so the survey reproduces), on
+both renderer backends:
+
+* OpenGL and software agree to **0.1%** per scene on every measure below, so
+  none of this is a backend artefact. Both present `path=wide, present_w=426,
+  wide_fellback=0` for every sampled frame.
+* The 4:3 image aligns to wide columns **53..372** (best-match search over
+  offsets 0..109; runner-up 52 at a clearly worse score). Both 53-column
+  reveals are therefore real new view.
+* **Not stale.** Walking with a fixed camera, per-frame pixel delta in the left
+  reveal is the same order as in the centre (1.2/0.4/1.1 vs 3.3/2.6/2.7). The
+  reveal renders live and crosses the old 4:3 edge with no seam.
+* **Menus are not torn and not squashed.** The item window measures 301 px in
+  4:3 (columns 9..310) and 303 px in wide (columns 61..364) — same size, same
+  centre, native pixel shapes.
+* **Boundary void is real, and is missing art.** 3 of the 14 camera setups show
+  black in the right reveal, cut flat along the old frustum plane, mid-object.
+  It is not a cull: other cameras in the same rooms draw content out to column
+  404 (canonical x 351), which any screen-space clip at 320 would forbid. Those
+  interiors are simply only modelled as far as the fixed camera could see.
+
+Two knobs were tried and rejected, both recorded in `game.toml`:
+
+* `[widescreen.cull] auto_screen_x` — inert here. It pairs a `sltiu ..,0x140`
+  width compare with a `sltiu ..,0xE0` height compare; this game has **neither
+  immediate anywhere** (zero in the main EXE and in all 16 overlays; one signed
+  `slti ..,320` in `EAB_REL.BIN`). Enabling it emitted zero `psx_ws_x_margin()`
+  call sites, i.e. byte-identical codegen.
+* `[widescreen] nw_hud_corners` — actively harmful here. It re-anchors
+  outer-third 2D prims to the true wide corners, but on this game it shifts
+  **world** polygons: two black vertical slabs tear through the scene and the
+  HP/MP bars separate from their icons.
 
 ### 5.1 W1 — backdrop alignment (shipped in 0.1.7)
 

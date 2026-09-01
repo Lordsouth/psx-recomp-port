@@ -9,6 +9,92 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ---
 
+## Unreleased
+
+**Widescreen is no longer stretched.**
+
+Through 0.3.0 widescreen ran in *squash* mode: the game rendered a wider field
+of view compressed into its normal 320-pixel frame, and the picture was then
+stretched back out on screen. The 3D looked roughly right; every menu, text box
+and HUD element came out horizontally stretched. That is why it shipped off by
+default and labelled experimental.
+
+It now runs in **native-wide**: the wider view is rendered into a genuinely
+wider frame (320 → 426 at 16:9) and shown 1:1. Nothing is stretched. Menus,
+item windows, dialogue boxes and the HUD keep their original pixel shapes, and
+the extra width is real extra view on both sides rather than a squeeze.
+
+**What is still not perfect.** Some interior rooms are only *modelled* as far
+as the original fixed camera could ever see — the set is cut off flat along the
+old screen edge, mid-object. Widening the view there shows black at one side.
+Measured over fourteen camera setups across four rooms, three showed it. No
+setting can fix that one: the geometry was never built, and only new artwork
+would fill it.
+
+*Not verified:* battles, the arena, shops and cut-scenes have not been surveyed
+in widescreen yet — the fourteen sampled setups were all field and interior
+cameras.
+
+---
+
+*Held back from 0.3.1*, which was a build hotfix. The scene survey behind
+this found three defects that are worth fixing before it goes out — see
+`research/widescreen-survey/README.md`.
+
+---
+
+## 0.3.1
+
+**The build works again. 0.3.0 could not be built at all.**
+
+If you downloaded 0.3.0, pointed the launcher at your disc and pressed Build,
+it failed immediately with "psxrecomp generate failed (exit 1)", and a terminal
+window flashed up carrying the real message:
+
+    fatal error: 'generated/InstrId_enum.h' file not found
+
+Nothing was wrong with your disc, your machine or your setup.
+
+Two separate faults had to line up, which is why this took a while to be
+noticed. The script that assembles the download excludes a folder named
+`generated`, meant to keep a folder of machine-generated C out of the package —
+but it matched *every* folder of that name, including one belonging to the
+instruction decoder that is ordinary source code. That started with 0.1.6.
+It caused no harm at the time, because those downloads also contained a
+ready-built copy of the tool that needs those 21 files, so nothing on your
+machine ever had to compile them.
+
+0.3.0 was the release where the second fault hit: the packaging run stopped
+early and left that ready-built tool out. With it missing, the installer builds
+the tool from source — and walks straight into the 21 missing files. No build
+could have succeeded.
+
+For the record, since this deserves to be exact rather than dramatic:
+
+| release   | 21 headers | ready-built tool | can a player build it? |
+|-----------|-----------|------------------|------------------------|
+| 0.1.0-0.1.5 | yes     | yes              | yes                    |
+| 0.1.6, 0.1.7 | **no** | yes              | yes — the fault is dormant |
+| 0.3.0      | **no**   | **no**           | **no**                 |
+| 0.3.1      | yes      | yes              | yes                    |
+
+Fixed: the folder exclusion is anchored to the one folder it was meant for; the
+packaging run no longer stops early (a cleanup step aborted the entire script
+whenever it found nothing to clean, which is what truncated 0.3.0); and stray
+memory-card files are purged automatically instead of by hand. A new release
+check now compiles the package the way your machine does, before anything can
+be published — it passes on 0.1.5 and fails on every broken release.
+
+Reported by u/WishConstant7039, who also supplied the terminal message the
+launcher throws away. Without that line this would have taken far longer to
+find.
+
+Nothing else changed. This release deliberately carries no gameplay or
+rendering change: the point was to get the build working again, and every
+extra edit is another thing that could be wrong.
+
+---
+
 ## 0.3.0
 
 **Fifty-two raisable Digimon.**
