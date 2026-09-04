@@ -67,7 +67,7 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file CMakeLists.txt --project-file game.toml --project-file VERSION \
   --project-file codegen_setup.c --project-file codegen_setup.h \
   --project-file dw_ws_backdrop.c --project-file dw_ws_camera.c \
-  --project-file dw_ws_sliver.c \
+  --project-file dw_ws_sliver.c --project-file dw_roster_flags.c \
   --project-file dw_roster.c --project-file dw_roster_data.inc \
   --project-file dw_evolution.c \
   --project-file README.md --project-file DISC.md --project-file cheats.txt \
