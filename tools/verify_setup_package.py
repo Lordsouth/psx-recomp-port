@@ -68,7 +68,7 @@ CANARIES = (
 )
 
 
-def load_tree(path):
+def load_tree(path, full=False):
     """-> (root_dir, set_of_relative_posix_paths, cleanup_callable)."""
     if os.path.isdir(path):
         rel = set()
@@ -85,10 +85,14 @@ def load_tree(path):
     with zipfile.ZipFile(path) as z:
         names = [n for n in z.namelist() if not n.endswith("/")]
         # Only the framework's source is needed for the header check; a full
-        # extract of ~1800 files is wasted IO on a tight disk.
-        z.extractall(tmp, members=[n for n in names
-                                   if n.lower().endswith(SRC_EXT)
-                                   or n.endswith("CMakeLists.txt")])
+        # extract of ~1800 files is wasted IO on a tight disk. The BUILD check
+        # needs everything -- the .cmake helpers, fmt's support modules -- and
+        # a sources-only extract fails configure with a misleading 'include
+        # could not find requested file', which read as a broken package once.
+        z.extractall(tmp, members=names if full else
+                     [n for n in names
+                      if n.lower().endswith(SRC_EXT)
+                      or n.endswith("CMakeLists.txt")])
     return tmp, set(names), lambda: shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -207,7 +211,7 @@ def main():
                     help="also compile the recompiler from the staged tree")
     args = ap.parse_args()
 
-    root, present, cleanup = load_tree(args.package)
+    root, present, cleanup = load_tree(args.package, full=args.build)
     try:
         print("package: %s (%d files)" % (args.package, len(present)))
 
