@@ -70,6 +70,36 @@ framework's gameplay detector.
 
 Widescreen remains off by default. Turn it on in the launcher's Mods panel.
 
+**The cheat file had codes that did the opposite of what they said.** Every one
+was re-checked against the decompiled game, and this time against the code that
+READS each value rather than just the address it writes. Seven were wrong and
+three were deleted:
+
+* **"Press O to beat the game" fired on D-pad Right.** The pad word the code
+  tests is inverted, so the mask was for the wrong button entirely. Anyone who
+  enabled it ended their run the first time they walked right. "Press Square to
+  lay a pile of poop" had the same fault, firing on Left, and also set every
+  condition flag at once — sick, injured, sleepy — in a value the game saves to
+  your memory card.
+* **"Always have Finish available" made Finish permanently unavailable**, unless
+  your Speed was exactly 199. The check is an equality against a target derived
+  from Speed, and the code pinned one side of it.
+* **"Partner takes no damage" let the first hit through** and then left your
+  partner stuck in its hit reaction. It was pinning the recovery timer rather
+  than the damage.
+* **"Best Happiness" and "Best Discipline" wrote 170** where the game clamps to
+  100, and three evolutions test for exactly 100 — so the cheat quietly blocked
+  them. **"Have all cards"** wrote 15 of each where the maximum is 9.
+* **"All Digimon in city" corrupted your partner's animation** every frame and
+  had nothing to do with recruitment. Removed; "Everyone moves to File City"
+  does the real thing. **"Speed up the game"** did nothing at all. **"Monochromon
+  shop points"** wrote an address nobody had identified, and "Max Merit Points"
+  already covers it.
+* **"Smaller aggro radius" was renamed.** It shrinks your own collision box,
+  which does make enemies notice you later, but also removes your shadow.
+
+The file also now says to back up your saves first, and explains that where a
+cheat and a mod touch the same thing, the cheat wins.
 **The expanded roster was quietly overwriting story flags. That is fixed.**
 
 The mod recorded "you have raised this Digimon" by setting a numbered flag, and
@@ -233,7 +263,9 @@ Myotismon, Guardromon, Panjyamon, Gigadramon, BlueMeramon, Otamamon, Gotsumon,
 SnowAgumon, Saberdramon and more all have finished models, animations,
 textures, voices and battle auras, and the game simply never let you raise
 them. The fifty-second, Machinedramon, fills the game's one genuinely unused
-slot. Sixteen new Rookies, twenty-three new Champions, six new Ultimates.
+slot. Twenty-one Rookies, twenty-four Champions and seven Ultimates; six of
+them have no evolution path in, and one of those, Panjyamon, is reached with
+the Noble Mane item instead.
 
 * **The three dead evolution items work.** Giga Hand ("Digivolve to
   Gigadramon!"), Noble Mane ("Digivolve to Panjyamon!") and Metalbanana
@@ -326,22 +358,30 @@ disc.
 
 ---
 
-## Not in any release
+## Shipped but doing nothing
 
-Work that exists in the repository but has never shipped in a package:
+Work that is in the package and deliberately inert, so nothing here is a
+surprise if you go looking:
 
 * **Native evolution engine** (`dw_evolution.c`, `dw.vanilla.evolution`).
   Groundwork for removing the evolution system's structural limits — six paths
   per Digimon, ids below 128, the 62-row table — by replacing the chooser
   functions with native code. One function is wired and the mechanism is built,
-  but it has not yet been observed running, so the package ships disabled and
-  changes nothing.
-* **Widescreen UI counter-squash.** Built and dormant; it does not work.
+  but that hook has not yet been observed running. The package ships in the
+  zip, off by default, and changes nothing when enabled either.
+* **Widescreen UI counter-squash.** Built and dormant; it does not work, and
+  under native-wide it has nothing to do anyway.
 
 ## What is not verified
 
-Stated plainly, because the automated tests cannot reach it: every roster test
-*forces* an evolution directly, which bypasses the game's own requirement
-scoring. So all 52 species are proven to instantiate correctly and remain
-stable — but whether raising a partner to a particular weight actually yields
-the Digimon the tables say it should has not been confirmed by playing.
+**Closed in 0.3.4**, and left here because the doubt was published: every
+roster test used to *force* an evolution directly, bypassing the game's own
+requirement scoring, so all 52 species were proven to instantiate and stay
+stable while nothing proved that raising a partner a particular way actually
+yields the Digimon the tables promise. `tools/verify_roster_evolution.py` now
+shows the game's own chooser selecting a roster species from requirements,
+with the harness never writing the target.
+
+What is still open is narrower and is listed in the 0.3.4 entry: a full
+training session with one of the new species has not been driven end to end,
+and balance across all 52 is playtesting nobody has done.

@@ -1,12 +1,25 @@
-# Digimon World Vice -- GameShark / PEC cheat codes
+# Digimon World -- GameShark / PEC cheat codes
 #
 # HOW TO USE: flip [ ] to [x] to turn a cheat on, then start the game.
 #             Flip it back to [ ] to turn it off. Nothing else to do.
+#
+# BACK UP YOUR MEMORY CARD FIRST if you care about the save. Several of these
+# write fields the game stores on the card (stats, care state, items, story
+# flags), so their effects survive being turned off again. The cards live in
+# the `saves` folder next to the game; copying that folder is enough.
+#
+# ONE cheat ships enabled: "Skip all movies". Everything else is off.
 #
 # These are per-frame RAM pokes, exactly like a real GameShark: the runtime
 # rewrites the target values every frame on guest VBlank. That is different
 # from the Digimon World Trainer in the launcher's Mods panel, which patches
 # the executable once before boot. Both can be used at the same time.
+#
+# CHEATS vs MODS: a cheat and a Mods-panel feature can both target the same
+# thing, and then the cheat wins, because a mod patches the executable once
+# before boot while a cheat rewrites RAM every frame afterwards. If a mod
+# looks like it stopped working, check here first. Two cheats that write the
+# same field are the same story: the later line in this file wins.
 #
 # Addresses below were cross-checked against the dw_decomp field map, and the
 # `<- field` comments name the actual struct member each code writes:
@@ -92,10 +105,10 @@
 # PARTNER_PARA @ 0x80138460.
 
 [ ] Best Happiness
-8013848A 00AA          # <- happiness  (+0x2A)
+8013848A 0064          # <- happiness  (+0x2A) = 100, the clamp
 
 [ ] Best Discipline
-80138488 00AA          # <- discipline (+0x28)
+80138488 0064          # <- discipline (+0x28) = 100, the clamp
 
 [ ] No Eating And No Pooping
 80138478 00FF          # <- poopLevel  (+0x18)
@@ -177,11 +190,21 @@ E01384AA 000F          # if age (+0x4A) == 15
 E0134EBE 0001
 801BE050 0002
 
-[ ] Smaller aggro radius (enemies notice you late)
-8012CECC 0000
+# RENAMED in 0.3.4. This writes DIGIMON_DATA[0].radius, and record 0 is named
+# "main character" in the game's own table -- it is YOUR radius, not an
+# enemy's. Enemies do notice you later, because the proximity test uses both
+# radii (map.c:1260), but the same field is also the drop-shadow size
+# (map.c:549) and half the interaction box (aabb.c:28), so your shadow
+# disappears and reaching things can get fiddly. Kept, honestly labelled.
+[ ] Shrink your own collision box (enemies notice you late; no shadow)
+8012CECC 0000          # <- DIGIMON_DATA[0].radius, record 0 = the Tamer
 
-[ ] Speed up the game
-80115A4C 0000
+# REMOVED in 0.3.4: "Speed up the game" wrote 0x80115A4C, which is libapi's
+# internal _vsync_last. VSync REWRITES it unconditionally in its own epilogue
+# (0x80091DE0), and the cheat engine only fires on vblank, so the poked value
+# is never the value the frame lock reads. It did nothing. The real lever is a
+# hardcoded immediate in gameLoop's VSync(3) call, which no data poke can
+# reach; frame pacing belongs to the runtime, not to a cheat.
 
 [ ] Auto-kill most enemies
 80155874 0000
@@ -194,46 +217,46 @@ E0134EBE 0001
 80155A7C 0000
 
 [ ] Have all cards
-301BDFAC 00FF
-301BDFAD 00FF
-301BDFAE 00FF
-301BDFAF 00FF
-301BDFB0 00FF
-301BDFB1 00FF
-301BDFB2 00FF
-301BDFB3 00FF
-301BDFB4 00FF
-301BDFB5 00FF
-301BDFB6 00FF
-301BDFB7 00FF
-301BDFB8 00FF
-301BDFB9 00FF
-301BDFBA 00FF
-301BDFBB 00FF
-301BDFBC 00FF
-301BDFBD 00FF
-301BDFBE 00FF
-301BDFBF 00FF
-301BDFC0 00FF
-301BDFC1 00FF
-301BDFC2 00FF
-301BDFC3 00FF
-301BDFC4 00FF
-301BDFC5 00FF
-301BDFC6 00FF
-301BDFC7 00FF
-301BDFC8 00FF
-301BDFC9 00FF
-301BDFCA 00FF
-301BDFCB 00FF
-301BDFCC 00FF
+301BDFAC 0099
+301BDFAD 0099
+301BDFAE 0099
+301BDFAF 0099
+301BDFB0 0099
+301BDFB1 0099
+301BDFB2 0099
+301BDFB3 0099
+301BDFB4 0099
+301BDFB5 0099
+301BDFB6 0099
+301BDFB7 0099
+301BDFB8 0099
+301BDFB9 0099
+301BDFBA 0099
+301BDFBB 0099
+301BDFBC 0099
+301BDFBD 0099
+301BDFBE 0099
+301BDFBF 0099
+301BDFC0 0099
+301BDFC1 0099
+301BDFC2 0099
+301BDFC3 0099
+301BDFC4 0099
+301BDFC5 0099
+301BDFC6 0099
+301BDFC7 0099
+301BDFC8 0099
+301BDFC9 0099
+301BDFCA 0099
+301BDFCB 0099
+301BDFCC 0099
 
 [ ] Have all medals
 801BDFFA FFFF
 801BDFFC FFFF
 
 [ ] Have key items
-301BDFD2 00FF
+301BDFD2 00FF          # <- trigger bits, not card nibbles: FF is correct here
 301BDFD3 00FF
 
 [ ] All Digimon on the chart / all evolved
@@ -243,12 +266,18 @@ E0134EBE 0001
 801BE012 FFFF
 301BE014 00FF
 
-[ ] All Digimon in city
-301557C5 0037
-801557C6 0037
+# REMOVED in 0.3.4. "All Digimon in city" wrote 0x801557C5 and 0x801557C6,
+# which are the high byte of PARTNER_ENTITY.anim.animFrame (+0x1C) and
+# anim.frameCount (+0x1E) -- the partner's ANIMATION counters, rewritten every
+# frame. It had nothing to do with recruitment. "Everyone moves to File City"
+# below does the real thing, through the recruit trigger flags.
 
-[ ] Monochromon shop points (3908)
-8013500C 0F44
+# REMOVED in 0.3.4: "Monochromon shop points" wrote 0x8013500C, which has no
+# symbol in the decompilation (MAIN_D_8013500C) and is written from nineteen
+# places -- a working variable, not a persistent counter. The real merit
+# counter is MERIT at 0x80134FC4, which "Max Merit Points" above already sets
+# correctly. Shipping a poke at an unidentified address is exactly what this
+# project's first golden rule forbids.
 
 
 # ----------------------------------------------------------- known gaps ----
@@ -286,11 +315,18 @@ E0134EBE 0001
 8013847E 0000          # <- virusBar (+0x1E)
 
 [ ] Perfect balance of happiness and discipline
-8013848A 0065          # <- happiness  (+0x2A) = 101
+8013848A 0064          # <- happiness  (+0x2A) = 100 (was 101, above the clamp)
 80138488 0030          # <- discipline (+0x28) = 48
 
+# CORRECTED in 0.3.4. The gate is an EQUALITY: battle_main.c:650 fires only
+# when finisherProgress == finisherGoal, and battle_setup.c:100 sets
+# finisherGoal = 3000 - Speed. The old value 0x0AF1 (2801) matched only at
+# exactly Speed 199; at any other Speed it made Finish permanently
+# UNavailable, the opposite of the name. Pinning both fields equal makes it
+# hold at any Speed.
 [ ] Always have Finish available
-8013D65A 0AF1
+8013D658 0001          # <- fighter[0].finisherGoal     (+0x18)
+8013D65A 0001          # <- fighter[0].finisherProgress (+0x1A), kept equal
 
 [ ] Max quantity in all 10 item slots
 50000A01 0000          # repeat 10x, address +1 each
@@ -312,16 +348,26 @@ E0134EBE 0001
 301BDF2C 0063          #   <- Item Keeper store, item ids 0..127 = 99
                        #      (SCRIPT_STATE+0x54, 0x801BDF2C..0x801BDFAB)
 
+# CORRECTED in 0.3.4. 0x80135450 is the RAW pad word and it is ACTIVE LOW --
+# PadRead (0x80091BF8) reads it and NORs it to make POLLED_INPUT, which is the
+# active-high value the game itself tests. So the mask here must be INVERTED:
+# Circle is bit 0x2000, hence 0xDFFF. The old value 0xFFDF is ~0x0020 = D-pad
+# RIGHT, so this code ended the run the first time you walked right.
 [ ] Press O to beat the game
-D0135450 FFDF          # if pad (0x80135450) has Circle held
+D0135450 DFFF          # if Circle, and only Circle, is held
 80134EB4 0003          #   set the ending flag
 
+# CORRECTED in 0.3.4, twice over. 0xFF7F is ~0x0080 = D-pad LEFT, not Square
+# (see the note above); Square is bit 0x8000, so the mask is 0x7FFF. And the
+# old write set the entire low halfword -- sick AND injured AND sleepy AND
+# needs-toilet AND nine undefined bits -- in a field the game saves to the
+# memory card. Only 0x08 means "needs the toilet".
 [ ] Press Square to lay a pile of poop
-D0135450 FF7F          # if pad has Square held
-80138460 FFFF          #   <- PartnerPara.condition (+0x00)
+D0135450 7FFF          # if Square, and only Square, is held
+30138460 0008          #   <- PartnerPara.condition (+0x00), the poop bit only
 
 # ------------------------------------------------------------ new digimon ----
-# Requires the "New Digimon" mod (Mods panel) so slot 114 exists. Enable the
+# Requires the "Expanded Roster" mod (Mods panel) so slot 114 exists. Enable the
 # cheat, then the body appears when the partner model next LOADS: quit to the
 # title and Continue, or start a new game. (Saving in this game happens ONLY
 # through Sleep -- menu -> Sleep when the partner shows the ZZZ bubble; the
@@ -366,6 +412,10 @@ D0135450 FF7F          # if pad has Square held
 
 # -------- training ---------------------------------------------------------
 
+# NOTE: this holds INVENTORY SLOT 0, overwriting whatever is in it, every
+# frame. Anything you were carrying there is gone while the cheat is on, and
+# the inventory is saved to the memory card. Put nothing you care about in the
+# first slot.
 [ ] Always carry the Training Manual (+10% to every training result)
 3013D474 0021          # <- INVENTORY_ITEM_TYPES[0]   = 0x21 Trn. manual
 3013D492 0063          # <- INVENTORY_ITEM_AMOUNTS[0] = 99
@@ -391,8 +441,19 @@ D0135450 FF7F          # if pad has Square held
 
 # -------- battle -----------------------------------------------------------
 
+# CORRECTED in 0.3.4. The old code pinned invulnerableTimer (+0x26), which is
+# the post-hit recovery countdown, not a damage shield: battle_main.c:1032
+# decrements it and only restores the fighter when it reaches 0, and the
+# cleanup at :1592 runs only when it is <= 0. Holding it at 1000 meant the
+# first hit still landed and the fighter then never left its hit reaction.
+#
+# Damage actually accumulates into hpDamageBuffer (+0x2E, battle_main.c:2192)
+# and effective HP is currentHP - hpDamageBuffer everywhere it matters --
+# battle_setup.c:329 and :379, battle_main.c:3686 -- with fainting tested as
+# that difference reaching 0. Holding the buffer at zero is what "no damage"
+# means.
 [ ] Partner takes no damage
-8013D666 03E8          # <- fighter[0].invulnerableTimer (+0x26) held open
+8013D66E 0000          # <- fighter[0].hpDamageBuffer (+0x2E), pending damage
 
 [ ] No attack cooldown
 8013D668 0000          # <- fighter[0].cooldown (+0x28)

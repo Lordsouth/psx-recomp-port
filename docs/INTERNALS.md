@@ -88,16 +88,39 @@ A manifest can also select a statically-linked plugin by id. The plugin gets:
 * **function-entry hooks** on any guest address listed in `game.toml`'s
   `[recompiler] mod_function_entry_funcs`, receiving the CPU state — so we can
   read and rewrite argument registers as a guest function is called,
+* **function-exit hooks** (`mod_function_exit_funcs`), which fire at the
+  function's own `jr $ra`. For state a plugin must perturb for exactly one
+  call and then put back,
+* **whole-function replacement** (`mod_function_replace_funcs`): the callback
+  returns nonzero to claim the call, having written `$v0` and published `$ra`
+  into `cpu->pc`. Never combine this with a code patch on the same function —
+  patching marks the range executable-dirty, dispatch then refuses the
+  compiled body, and the hook lives inside the body that was refused,
 * an **Expansion-1 arena**: up to 1 MB of memory the real console never had,
   wired into every generated load/store path. The first allocation is
   deterministically `0x9F000000`, which is what lets a manifest hard-code
   addresses into it.
 
-**A plugin's activation callback only runs if a manifest selects it** with a
-`[[plugin]]` block. Function-entry hooks fire regardless — that asymmetry cost
-an evening.
+**A plugin's activation and VBlank callbacks only run if a manifest selects it**
+with a `[[plugin]]` block. Function hooks — entry, exit and replacement — fire
+regardless. That asymmetry has now cost two evenings: the first time an
+activation callback silently did nothing, the second time a VBlank callback
+did, and the only symptom was a table in guest RAM still reading its stock
+value in a live battle. If a callback appears not to exist, check the manifest
+before the code.
 
-Two plugins live here: `dw_ws_backdrop.c` (§5.1) and `dw_roster.c` (§4.1).
+Six plugins live here:
+
+| File | What it does |
+|---|---|
+| `dw_roster.c` | the Expansion-1 arena and the grown tables (§4.1) |
+| `dw_roster_flags.c` | re-banks the new species' raised flags off the game's story flags (§4.1) |
+| `dw_evolution.c` | proof of the replacement primitive; ships disabled |
+| `dw_ws_backdrop.c` | fade plate, parked HUD, the clock and field gauges as single widgets, the battle bars' slide table (§5) |
+| `dw_ws_camera.c` | both camera clamps, the tile-ladder shift, the load-time nudge (§5) |
+| `dw_ws_sliver.c` | the fifth backdrop tile column, as a VRAM sliver (§5) |
+
+`codegen_setup.c` is glue for the launcher build, not a plugin.
 
 ---
 
@@ -151,11 +174,17 @@ Kuwagamon → Off/MP/Brain).
 
 ## 4. Mod packages
 
-### 4.1 `dw.vanilla.roster` — Machinedramon as a raisable partner
+### 4.1 `dw.vanilla.roster` — 52 raisable Digimon
 
-**1 feature, 189 patches, 1 plugin.** The headline feature: the game contains
-exactly one free type id — slot **114**, a developer stub named `tAKA` — and
-this makes it Machinedramon, the complete-but-unobtainable Ultimate.
+**1 feature, 245 patches, 1 manifest-declared plugin** (`dw.roster`) **plus a
+second plugin source** (`dw_roster_flags.c`) that reaches the game through
+`mod_function_replace_funcs` and therefore needs no manifest block.
+
+This began as one Digimon and grew into the whole enemy roster. Slot **114** is
+the game's only free type id — a developer stub named `tAKA` — and it becomes
+Machinedramon, the complete-but-unobtainable Ultimate; that came first and is
+why the table-relocation machinery below is described around it. Types 63-113
+are the other 51: finished Digimon the game shipped as enemies only.
 
 Three obstacles, three mechanisms:
 
@@ -450,12 +479,13 @@ is deliberately untouched because it is an exact target, not a floor).
 ## 5. Widescreen
 
 **Native-wide is what ships since 0.3.2** (`[widescreen] native_wide = true`).
-The defects catalogued in `research/widescreen-survey/README.md` are fixed by
-four game plugins -- `dw_ws_backdrop.c` (fade plate, parked HUD, the clock as
-one widget), `dw_ws_camera.c` (both camera clamps, the tile-ladder shift, the
-load-time nudge) and `dw_ws_sliver.c` (the fifth backdrop column, uploaded as
-a stacked VRAM sliver whenever the game's four-column ring falls short) --
-and one framework primitive per need (`mod_function_exit_funcs`,
+The defects catalogued in the widescreen survey are fixed by three game
+plugins -- `dw_ws_backdrop.c` (fade plate, parked HUD, the clock and the field
+gauges each as ONE widget, and the battle bars' slide table),
+`dw_ws_camera.c` (both camera clamps, the tile-ladder shift, the load-time
+nudge) and `dw_ws_sliver.c` (the fifth backdrop column, uploaded as a stacked
+VRAM sliver whenever the game's four-column ring falls short) -- and one
+framework primitive per need (`mod_function_exit_funcs`,
 `psx_mod_ws_native_wide_offset`, `psx_mod_vram_write`). Still open: ~1.2 s
 of 4:3 after a wild battle, a GTE-hysteresis timeout in the runtime's present
 classifier; GAME_STATE reads 0 on the title screen as well as the field, so
@@ -465,10 +495,21 @@ at 16:9, `EXTRA = 2 * round(W*(3n-4d)/(8d))`) and presented 1:1. Nothing is
 stretched, so the entire "screen-space 2D renders stretched" problem class —
 which is what W2 below exists to fight — does not arise.
 
-Squash mode (the GTE compresses projected X, the presenter stretches the frame
-back out) is still selectable and is what shipped through 0.3.0. Everything in
-5.1 and 5.2 describes squash and is retained because squash remains the
-fallback.
+**A player cannot select squash.** It is what shipped through 0.3.1, but the
+mode is fixed at codegen (`game.toml [widescreen] native_wide`), and the mod
+offers only an aspect. Sections 5.1 and 5.2 describe squash and are kept
+because the code is still there and still gated, not because anyone can turn
+it on.
+
+**Only 16:9 and 16:10 are offered.** The reveal per side is
+`(w*(3n-4d) + 4d) / (8d)`, so at w = 320 that is 32 px, 53 px, and 120 px for
+21:9. The tile ring covers 512 px and needs the origin's leftslack in
+`[m, 192-m]`, an interval that is EMPTY for `m > 96`; the 106 px sliver lifts
+the practical bound to about 78. 21:9 clears neither, and it is not a tuning
+constant away — it is the ring's size. The game ships its own copy of the
+framework's widescreen manifest, under `mods/packages/`, with that choice
+removed. If the builtin's version is ever bumped past 1.0.0 the override stops
+applying silently, because the loader takes the highest semver.
 
 ### 5.0 The native-wide measurement (what actually got checked)
 
@@ -551,7 +592,7 @@ with printf archaeology) are in `research/widescreen-w2-dossier.md`.
 
 ## 6. The cheat library
 
-`cheats.txt` holds **60** GameShark-style codes applied per frame by the
+`cheats.txt` holds **57** GameShark-style codes applied per frame by the
 runtime's cheat engine. Change `[ ]` to `[x]` and restart.
 
 ### 6.1 Engine
@@ -575,7 +616,9 @@ grants both gym upgrades), item shop stocks 99 of everything.
 ### 6.3 Inherited codes that were wrong
 
 Verifying every address against the decomp found four real defects in codes
-this project had been shipping:
+this project had been shipping. A second sweep in 0.3.4 went further and
+checked the code that READS each field, which found seven more — see 6.3b.
+The first four:
 
 * **The standalone Digipine-effect code set the boost flag with value 0** —
   and because gains are multiplied by `value / 10`, that **zeroed all training
@@ -588,16 +631,55 @@ this project had been shipping:
   never unlock.
 * **"Max Merit Points" wrote 999** where the clamp is 9999.
 
-A further four codes are flagged as suspect and still under review; see
-`research/rel_cheats.txt`.
+### 6.3b The 0.3.4 sweep — right address, wrong value
+
+The four above were wrong addresses. These were the opposite, which is why the
+first pass missed them: the address resolved to the right field and the value
+was still wrong, because nothing had checked what READS it.
+
+| Code | Was | Now | Why |
+|---|---|---|---|
+| Press O to beat the game | `D0135450 FFDF` | `DFFF` | `0x80135450` is the RAW pad word and is ACTIVE LOW; `PadRead` (0x80091BF8) NORs it into `POLLED_INPUT`. `FFDF` is `~0x0020` = D-pad **Right**, so the code ended the run the first time the player walked right. Circle is bit 0x2000 |
+| Press Square to lay a pile of poop | `D0135450 FF7F`, `80138460 FFFF` | `7FFF`, `30138460 0008` | Same inversion — `FF7F` is D-pad **Left**. And the write set every condition bit at once, in a field saved to the memory card; only 0x08 is "needs the toilet" |
+| Always have Finish available | `8013D65A 0AF1` | goal and progress both `0001` | The gate is an EQUALITY (`battle_main.c:650`) against `finisherGoal = 3000 - Speed` (`battle_setup.c:100`). 2801 matches only at Speed 199; at any other Speed the code made Finish permanently **un**available |
+| Partner takes no damage | `8013D666 03E8` | `8013D66E 0000` | `+0x26` is `invulnerableTimer`, the post-hit recovery countdown — pinning it meant the first hit still landed and the fighter never recovered. Damage accumulates in `hpDamageBuffer` (+0x2E) and effective HP is `currentHP - hpDamageBuffer` |
+| Best Happiness / Best Discipline | `00AA` (170) | `0064` (100) | `tickConditionBoundaries` clamps both to 100 every frame, and three evolution branches test `== 100` exactly (`evolution.c:260-267`), so 170 silently blocked them |
+| Have all cards | `00FF` ×33 | `0099` ×33 | Cards are packed nibbles, two per byte (`script_ops.c:416`), and the game never counts past 9 (`:374`). `FF` put 15 in both halves |
+| Smaller aggro radius | (name) | renamed | It writes `DIGIMON_DATA[0].radius`, and record 0 is named "main character" — the player's own radius, which is also the drop-shadow size and half the interaction box |
+
+And three were deleted outright rather than fixed:
+
+* **All Digimon in city** wrote `0x801557C5` and `0x801557C6` — the high byte
+  of the partner's `anim.animFrame` and its `frameCount`. It corrupted the
+  partner's animation every frame and had nothing to do with recruitment;
+  "Everyone moves to File City" does the real thing.
+* **Speed up the game** wrote libapi's `_vsync_last`, which VSync rewrites in
+  its own epilogue (0x80091DE0). A pure no-op.
+* **Monochromon shop points** wrote an address with no symbol, written from
+  nineteen places. `MERIT` is at `0x80134FC4` and "Max Merit Points" already
+  sets it.
+
+The lesson generalises: **an address being right does not make a value right.**
+Resolve the symbol, then read the code that consumes the field.
 
 ### 6.4 Verifying a code before shipping it
 
 Resolve the address to its `dw_decomp` symbol and offset, cross-check the
 containing struct's size against where the *next* symbol starts, and check the
-value against the game's own clamp. The pattern is in
-`scratchpad/verify_cheat_addrs.py`; all 24 base addresses in the current library
-were verified this way.
+value against the game's own clamp — then, separately, check the code that
+READS the field, because an address can be right and a value still wrong.
+That last step is what the 0.3.4 sweep added, and it is where the remaining
+defects were: a finisher code that only worked at one exact Speed, care values
+above a clamp the game applies every frame, and two pad-gated codes whose
+button masks were the wrong buttons entirely.
+
+The pad buffer is worth knowing because it caught the worst of them.
+`0x80135450` holds the RAW pad word, which is ACTIVE LOW — `PadRead`
+(`0x80091BF8`) reads it and `nor`s it to produce `POLLED_INPUT`
+(`0x80134EE4`), which is the active-high one the game's own code tests. So a
+`D0` conditional on `0x80135450` must use the INVERTED mask: Circle is bit
+`0x2000`, so "Circle alone" is `0xDFFF`, not `0x2000`. Getting that backwards
+is how a code meant to fire on Circle fired on D-pad Right.
 
 ---
 
@@ -617,6 +699,28 @@ different executables.
 | `gen_trainer.py` | `dw.vanilla.trainer` |
 | `gen_qol_mods.py`, `gen_gameplay_mods.py` | the QoL and gameplay packages |
 | `gen_vice_mod.py` | a local-only package that must never be redistributed |
+
+### 7.1b Verification tools
+
+These drive the game and read guest memory, so a claim in this document can be
+re-checked rather than believed. Each takes `--port` and runs against a
+sandbox memory card seeded from `saves/`; none of them touches your own saves.
+
+| Tool | Answers |
+|---|---|
+| `ws_sweep.py` | does the widescreen backdrop cover the frame **while walking**? Stops every 12 frames in four directions. Aspect-agnostic |
+| `verify_roster_evolution.py` | does the game's own chooser pick a roster species from requirements, and does its model actually stream? |
+| `verify_roster_triggers.py` | do the roster's raised flags land clear of the game's story flags? Reads the bits either side of an evolution |
+| `verify_roster_training.py` | is the relocated training table what a gym actually reads? |
+| `verify_model.py` | are a model file's bytes resident in guest RAM? |
+| `scan_trigger_ids.py` | which trigger ids do the disc scripts use? Run before widening any guard that writes one |
+| `extract_disc_file.py` | pull a file off the disc image by its ISO path, so a probe comes from the same disc as the build |
+
+The pattern they all follow: **a verdict is a guest-memory read, never a**
+**screenshot**, and a probe that cannot fail is not a probe. Each one takes a
+control measurement first where a control is possible — the model check is
+meaningless unless the bytes are absent beforehand, and it says so and stops
+rather than reporting a pass.
 
 ### 7.2 `check_mod_collisions.py` — run before every release
 
@@ -770,34 +874,49 @@ user's PATH, and the fail-closed packaging guard.
   nothing — which is what made the first run of this report a "retarget
   failure" that was really an absence.
 * **Four inherited cheats remain suspect** (§6.3).
-* **Prosperity Points ignore new recruits** — the recruit loop's bound was
-  deliberately not widened, since widening it sweeps trigger ids other events
-  use.
+* ~~Prosperity Points ignore new recruits.~~ **Stale — they have counted since
+  0.3.0.** The recruit loop's bound WAS widened
+  (`tools/gen_roster_mod.py:640`, `0x800EFAD4` `slti 0x3B -> 0x72`), and the
+  trigger-id worry that this text records was checked in 0.3.4 and is
+  unfounded for THIS band: ids 0x103..0x139 are the same `0xC8 + species`
+  recruit family the loop already reads. The band that really did collide was
+  the raised-flags one, which is a different guard and is fixed separately
+  (above).
 
-### The next flagship
+### The flagship, as shipped
 
-**Fifty-one finished, unreachable Digimon are already on the disc.** Types
+**This section described future work until 0.3.0, when it was done.** It is
+kept because the reasoning still explains the shape of the roster mod, but read
+it as history: the 51 species below are raisable today, and what remains is the
+short list at the end.
+
+**Fifty-one finished, unreachable Digimon were already on the disc.** Types
 63–113 — Panjyamon, Gigadramon, MetalEtemon, Myotismon, Guardromon, Tentomon,
 BlueMeramon, Meteormon and more — have complete records, their own models,
-textures, skeletons, voices and battle auras. They are enemy-only purely
+textures, skeletons, voices and battle auras. They were enemy-only purely
 because the partner-line tables stopped short.
 
-**Every table wall is now down.** All eight type-indexed tables that capped the
+**Every table wall is down.** All eight type-indexed tables that capped the
 partner line are relocated and grown to 180 entries (§4.1), verified
-byte-identical to the stock images over their stock ranges. What remains is
-**authoring**, not engineering: per species, an `EVO_REQ_DATA` row (14 fields),
+byte-identical to the stock images over their stock ranges. The authoring is
+done too: per species, an `EVO_REQ_DATA` row (14 fields),
 a `RAISE_DATA` row (28 bytes), `EVO_GAINS_DATA` (7 fields), a training-animation
 pair in each of the two overlay tables, and evolution branches grafted onto
-existing Champions. A donor-copy pass keyed on level, attribute and family gets
-a working first cut; balance is playtesting.
+existing Champions. It came from a donor-copy pass keyed on level, attribute
+and family; balance is still playtesting.
 
 Two things are not solved by the relocation:
 
-* **Evo-chart icons.** The chart is a fixed 61-slot layout with baked screen
-  positions, so there is no free position for a new species and copying a donor
-  entry draws the newcomer on top of that donor. Slot 114's entry is
-  deliberately left zero. What that actually draws has not been looked at.
-* **Prosperity Points** still ignore new recruits (above).
+* **Evo-chart icons — for all 52, not just slot 114.** The chart is a fixed
+  61-slot layout with baked screen positions, so there is no free position for
+  a new species and copying a donor entry draws the newcomer on top of that
+  donor. `EVOCHART_ICONS` is relocated and grown with the other tables, but no
+  icon row is authored for **any** of the 52 — the generator has no
+  evochart-authoring path, only the relocation and the cursor fix. Slot 114's
+  entry is deliberately left zero and what that draws has not been looked at.
+  The player-facing consequence is stated in the changelog: the chart still
+  shows 62 cells, so the new Digimon do not all appear on it.
+* ~~Prosperity Points still ignore new recruits.~~ Stale; see above.
 
 Full analysis in `research/rel_flagship.txt`. Tier-3 (type ids beyond 179) was
 costed and **rejected**: 304 relocation sites, ALLTIM exactly full, and no
@@ -806,6 +925,11 @@ models for the new slots.
 ---
 
 ## 10. Research archive
+
+**Every `research/...` path in this document is one of these, and none of them
+ships in the package.** They are cited so the reasoning can be traced by anyone
+working on the port, not because a player can open them. If you have only the
+released zip, the citation is a dead end and that is expected.
 
 `research/` (outside this repository, not packaged) holds the raw investigation
 output behind everything above: the reference census of every table reference

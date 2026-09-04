@@ -71,6 +71,7 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file dw_roster.c --project-file dw_roster_data.inc \
   --project-file dw_evolution.c \
   --project-file README.md --project-file DISC.md --project-file cheats.txt \
+  --project-file DEVELOPING.md \
   --project-file CHANGELOG.md \
   --project-dir seeds --project-dir mods --project-dir tools --project-dir docs
 ```
@@ -78,8 +79,10 @@ psxrecomp/tools/package_setup_host.sh \
 `PSXRECOMP_FORCE_SETUP_HOST` is what keeps game code out: the host links without
 the generated C (~17 MB, against ~29 MB for the full product).
 
-The packager needs the `zip` binary. Without it, staging still completes and you
-can archive `dist/stage-setup-<artifact>/` yourself.
+The packager uses the `zip` binary when there is one and falls back to Python
+otherwise, so stock Git Bash without the `zip` package is fine. It says which it
+used. That fallback exists because a hand-built archive once shipped without
+directory records and a player could not extract it.
 
 ### Check the staged tree before archiving
 
@@ -104,14 +107,18 @@ stretched, which is what made menus and the HUD look wrong through 0.3.1.
 Native-wide renders into a genuinely wider framebuffer (320 -> 426 at 16:9) and
 presents 1:1, so nothing is stretched.
 
-The defects that had to be fixed are measured and recorded in
-`research/widescreen-survey/README.md`. They live in `dw_ws_backdrop.c` (fade
-plate, parked HUD, the clock and the field gauges as single widgets, the battle
-bars' slide table), `dw_ws_camera.c` (both camera clamps, the tile-ladder
-shift, the load-time nudge) and `dw_ws_sliver.c` (the fifth backdrop column,
-uploaded to a VRAM sliver when the four-column ring falls short) as hooks on
-the game's own functions; none of them is a code patch. Do NOT enable
-`nw_hud_corners` -- it was tested here and shifts world polygons.
+The defects that had to be fixed live in `dw_ws_backdrop.c` (fade plate, parked
+HUD, the clock and the field gauges as single widgets, the battle bars' slide
+table), `dw_ws_camera.c` (both camera clamps, the tile-ladder shift, the
+load-time nudge) and `dw_ws_sliver.c` (the fifth backdrop column, uploaded to a
+VRAM sliver when the four-column ring falls short) as hooks on the game's own
+functions; none of them is a code patch. Do NOT enable `nw_hud_corners` -- it
+was tested here and shifts world polygons.
+
+They are measured and recorded in `research/widescreen-survey/README.md`. **That
+tree sits outside this repository and is not packaged**, and every `research/...`
+path in these docs is the same: cited so the reasoning can be traced by someone
+with the working tree, not because the file ships to anyone.
 
 **Only 16:9 and 16:10 are offered**, via a game-owned copy of the framework's
 widescreen manifest under `mods/packages/psx.enhancement.widescreen`. 21:9 asks

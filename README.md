@@ -87,6 +87,10 @@ arrow keys = D-Pad. Rebind them in the launcher's Controls page.
 
 **Handy keys:** `F7` save state, `F8` rewind, `Alt+Enter` fullscreen.
 
+Save states and rewind capture the game **as modded**. If you take a state with
+mods on, load it with the same mods on. Ordinary memory-card saves are the ones
+to keep for the long term.
+
 ---
 
 ## Mods
@@ -103,11 +107,28 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 | **Guaranteed Item Drops** | Every Digimon you defeat drops its item |
 | **Quality of Life** | Make your partner live longer than the stock 15 in-game days; slow the world clock so hunger, tiredness and ageing all relax together |
 | **Gameplay** | Better odds of learning techniques in battle; lower the stat requirements for evolutions |
-| **Widescreen** | 16:9. The wider view is rendered at full width and shown 1:1, so nothing is stretched — menus, text boxes and the HUD keep their original shapes, and the extra width is real extra view on both sides |
+| **Widescreen** | 16:9 or 16:10. The wider view is rendered at full width and shown 1:1, so nothing is stretched — menus, text boxes and the HUD keep their original shapes, and the extra width is real extra view on both sides. Two rough edges remain, listed under Mods below |
 | **Fast Loading** | Shorter loads. **Off by default and best left off on this game** -- it speeds up real time whenever it thinks a load is happening, and on Digimon World it stays engaged, running the whole game at 4x. |
 
 Turning a mod off restores the original game exactly — every change is a guarded
-patch, nothing is permanent.
+patch, nothing is permanent. Two things a save can carry across, though: a save
+made with **Expanded Roster** on expects it to stay on (see below), and if you
+raised one of the new Digimon on 0.3.3 or earlier, the flags that recorded it
+stay set. Neither breaks anything.
+
+### What is still rough in Widescreen
+
+Worth knowing before you turn it on, so nothing looks like a fault in your copy:
+
+* For about a second after a wild battle the picture drops back to 4:3 before
+  widening again.
+* A few interiors were only ever built as far as the original camera could see,
+  so their edges can be dark. That is missing scenery on the disc, not a
+  rendering fault, and nothing in the port can invent it.
+
+Anything else you see in widescreen is worth reporting. The picture should not
+be stretched, the sides should not go black while you walk, and no piece of the
+HUD should sit out on its own.
 
 ### Raising the new Digimon
 
@@ -121,11 +142,16 @@ and the new Ultimates hang off Champions you already know. As always **weight
 decides**, so each new option sits at its own weight; the classic evolutions are
 untouched and still happen at the weights they always did.
 
-Sixteen new Rookies, twenty-three new Champions, six new Ultimates, and
-Machinedramon. Five more (Sharmamon, ClearAgumon, Darkrizamon, SandYanmamon and
-SnowGoburimon) are fully built but have no way in: the game has only four
-In-Training Digimon with four free evolution slots each, and that is a hard
-limit of the original design.
+The fifty-two are twenty-one Rookies, twenty-four Champions and seven
+Ultimates. Forty-six of them you reach by raising: sixteen Rookies,
+twenty-three Champions and all seven Ultimates, Machinedramon included.
+
+Six have no evolution path in. **Panjyamon** is reached with the Noble Mane
+item instead, described below. The other five — Sharmamon, ClearAgumon,
+Darkrizamon, SandYanmamon and SnowGoburimon — are fully built but genuinely
+unreachable: the game has only four In-Training Digimon with four evolution
+slots each, and that is a hard limit of the original design, not something the
+mod chose.
 
 These evolve from a Champion, the same way any other Ultimate does:
 
@@ -169,12 +195,18 @@ stay on. If you turn it off, that save's partner data no longer lines up.
 Either keep it enabled for that playthrough, or start a separate file.
 
 **Cheats:** open `cheats.txt` in Notepad and change `[ ]` to `[x]` on any code,
-then restart. Sixty GameShark-style codes are included, grouped by what they
-affect, and many of them exist nowhere else — they were derived from a
-decompilation of the game rather than copied from published code lists. Two
-worth knowing: **"Skip all movies"** takes you straight to the title screen
-instead of sitting through the two-minute intro, and **"Freeze the game clock"**
-stops hunger, tiredness, ageing and the lifespan countdown all at once.
+then restart. The codes are grouped by what they affect, and many exist nowhere
+else — they were derived from a decompilation of the game rather than copied
+from published lists, and the published ones were re-checked against it rather
+than trusted. Two worth knowing: **"Skip all movies"** is on by default and
+takes you straight to the title instead of the two-minute intro, and **"Freeze
+the game clock"** stops hunger, tiredness, ageing and the lifespan countdown all
+at once.
+
+Back up your `saves` folder before using them. Several write things the game
+keeps on the memory card, so their effects outlive switching the cheat off. And
+if a Mods-panel feature seems to stop working, check here first: a cheat rewrites
+memory every frame, so where the two overlap the cheat wins.
 
 ---
 
@@ -199,9 +231,35 @@ from 0.1.5 onward.
 quarantining the compiler. Antivirus is the usual culprit: it sees a program
 writing and running new executables.
 
+If the message on screen is not enough to go on, the full compiler output is in
+**`psxrecomp-build.log`**, written next to the game. That file is what to attach
+when reporting a build problem; the one line the launcher shows is usually not
+the line that matters.
+
 **Stuck on the intro movie** — the movie runs about two minutes and only then
-shows "Press Start Button" for a short window. Enable the "Skip all movies"
-cheat described above to go straight to the title.
+shows "Press Start Button" for a short window. The "Skip all movies" cheat is
+already on by default and takes you straight to the title; if you are sitting
+through the intro, check it has not been switched off in `cheats.txt`.
+
+---
+
+## Reporting a problem
+
+Open an issue on the
+[project page](https://gitlab.com/ethan4love/psx-recomp-port/-/issues). What
+makes a report actionable:
+
+* **Which version**, from the launcher's title bar or the `VERSION` file.
+* **Which mods and cheats were on.** Most reports so far have turned out to
+  depend on one specific toggle.
+* **If the build failed:** attach `psxrecomp-build.log` from next to the game.
+  The launcher shows one line and throws the rest away, and the discarded part
+  is normally the one that identifies the fault. A player attaching that log is
+  what identified the 0.3.0 build failure.
+* **If it is something you can see:** a screenshot, and roughly where you were.
+
+Every player-reported bug so far has been fixed in the next release, and the
+changelog says who reported what.
 
 ---
 

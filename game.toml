@@ -218,7 +218,7 @@ ui_offset_packet_span = 24
 default_mode = "digital"
 
 # Online mount gate: digests + track count + optional TOC fingerprint
-# (see docs/NETPLAY.md).
+# (see psxrecomp/docs/NETPLAY.md -- the framework's, not this repo's).
 [netplay]
 require_cue = true
 required_tracks = 1
