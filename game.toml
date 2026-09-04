@@ -37,7 +37,7 @@ known_sha1 = [
 # Deep widescreen: emit a plugin entry hook in setPosDataPolyFT4 (the shared
 # FT4 positioner). dw_ws_backdrop.c filters by return address to the two
 # world-anchored callers and squashes backdrop X like the GTE squashes 3D.
-mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC"]
+mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC", "0x80096F90"]
 # Native function replacement (dw_evolution.c). A listed function opens with
 #   if (psx_mod_function_replace(cpu, ADDR)) return;
 # so a plugin can compute the result, write $v0, publish $ra into cpu->pc and
@@ -65,7 +65,12 @@ mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A281
 # re-applied on exit. Measuring 20 maps is what caught the omission: every map
 # settling through this path clamped to the vanilla bound and showed an 88-91%
 # left void.
-mod_function_exit_funcs = ["0x800D78BC", "0x800D6A4C"]
+# 0x800D57EC = renderMap: builds the 12 backdrop tile quads and links them into
+# ot[0xfff]. dw_ws_sliver.c runs on its exit and, whenever the four-column tile
+# ring still falls short of the wide view (at most 41 px on the right), uploads
+# that strip of column T+4 to a VRAM sliver and links up to three more quads
+# into the same bucket -- the fifth column the ring never had room for.
+mod_function_exit_funcs = ["0x800D78BC", "0x800D6A4C", "0x800D57EC"]
 mod_function_replace_funcs = ["0x800E2544", "0x800D7F68"]
 # 0x800D7F68 = cameraIsAtEdge (map.c:2341-2370): a 212-byte leaf with no calls,
 # and the single per-frame chokepoint for the camera scroll clamp. dw_ws_camera.c
@@ -81,6 +86,16 @@ mod_function_replace_funcs = ["0x800E2544", "0x800D7F68"]
 # out of the wide frame, so widgets the game hides off-screen (the clock while a
 # menu is open, the HP/MP bars with no enemy) stay hidden instead of reappearing
 # sliced by the reveal. Identity at 4:3 and in squash mode.
+# 0x80096F90 = GsSortSprite: the clock is one widget drawn as seven pieces, and
+# its needle is a GsSPRITE that never passes through renderRectPolyFT4.
+# dw_ws_backdrop.c decides once per frame whether the WHOLE dial is parked
+# outside the 4:3 frame and moves every piece, needle included, by the same
+# amount -- a per-piece rule left the hand behind in the reveal and split the
+# dial mid-slide on every map change. NOT hooked: renderGameClock itself. Its
+# symbol is 0x800DD2A4 but the recompiler's function starts at 0x800DD2A8 (the
+# compiler hoisted a gp load above the prologue), so an entry hook keyed on the
+# symbol is emitted nowhere and silently never fires; the plugin keys its frame
+# boundary on the ACTIVE_FRAMEBUFFER flip instead.
 # 0x800EEBDC = initializeHeap: runs once, after the BSS memfill, before
 # any table consumer -- dw_roster.c fills its enhancement arena there.
 seeds = "seeds/ghidra_funcs.txt"
@@ -140,16 +155,19 @@ spu_hq = true
 # allow. Nothing in the renderer can fix it; only new geometry could.
 [widescreen]
 gte_game_mode = true
-# NATIVE-WIDE IS ON. The four defects the scene survey found are fixed and
-# measured (research/widescreen-survey/README.md):
+# NATIVE-WIDE IS ON. The defects the scene survey found are fixed and measured
+# (research/widescreen-survey/README.md):
 #   * full-screen 2D plates were drawn 320 wide, so every fade left both
 #     reveals lit -- 29.6/0.6/64.9 -> 0.0/0.0/0.0
-#   * widgets the game parks off-screen came back sliced -- columns 0..7 now
-#     zero in every state
+#   * widgets the game parks off-screen came back sliced -- the clock now
+#     parks as ONE widget, needle included (dw_ws_backdrop.c)
 #   * the map-edge camera clamp was hardcoded to 320 -- right reveal at a
 #     clamped camera 100% void -> 7.6%
-#   * the backdrop tile window could not cover 426 at every alignment --
-#     left edge covered on 20 of 20 sampled maps, mean void 0.7%
+#   * the four-column backdrop tile ring cannot cover 426 at every alignment
+#     -- the missing strip of the fifth column is now uploaded to a spare VRAM
+#     sliver and drawn with the tiles (dw_ws_sliver.c): 0-3% right void at
+#     all 44 sweep stops where the ring fell short, pixel-aligned
+#   * still open: ~1.2 s of 4:3 after a wild battle (runtime GTE hysteresis)
 native_wide = true
 
 # nw_hud_corners stays OFF (and is not listed). It re-anchors outer-third 2D

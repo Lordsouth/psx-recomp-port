@@ -9,6 +9,45 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ---
 
+## 0.3.4
+
+**Widescreen: the black band on the right is gone, and the clock hides in one
+piece.**
+
+0.3.3 was not the finished article it was described as. Two things were wrong,
+both mine, both found by playing rather than by the arrival-frame measurement
+the 0.3.2 notes were based on:
+
+* **Walking right opened a black band in the right reveal.** The game keeps
+  only four columns of backdrop in video memory, and four columns cannot cover
+  a 16:9 view at every camera position -- roughly a third of positions fall
+  short by up to 50 pixels. 0.3.2 moved that shortfall from the left edge to
+  the right edge and then measured only the left. Now the missing strip is
+  drawn: whenever the four columns fall short, the first pixels of the fifth
+  column are read from the map data already in memory, uploaded to a spare
+  strip of video memory the earlier survey had cleared, and drawn as part of
+  the backdrop. Measured on a fine camera sweep: at all 44 stops where the ring
+  fell short (deficits of 5 to 50 px, three maps) the right reveal read the
+  same 0-3% dark as the stops beside it, and the strip's pixels matched the
+  game's own rendering of the same columns to the pixel.
+* **The clock hand stayed behind when the clock hid.** Opening a menu or
+  changing map slides the clock off the left edge; the fix in 0.3.3 moved the
+  dial pieces but not the hand, which is drawn by a different routine, so the
+  hand sat alone in the reveal -- and mid-slide the dial pieces came apart.
+  The clock now parks as a single widget: one decision per frame, applied to
+  every piece, hand included.
+
+The framework grew one primitive for this, `psx_mod_vram_write`, so a game
+plugin can upload texture data the game never had a slot for.
+
+Known and left open: for about 1.2 s after a wild battle the frame is shown
+4:3 before widening again. Cosmetic; it is a hysteresis timeout in the
+framework's gameplay detector.
+
+Widescreen remains off by default. Turn it on in the launcher's Mods panel.
+
+---
+
 ## 0.3.3
 
 **Fixes the clock hand coming off the clock in widescreen.**

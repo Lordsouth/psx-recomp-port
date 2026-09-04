@@ -449,10 +449,17 @@ is deliberately untouched because it is an exact target, not a floor).
 
 ## 5. Widescreen
 
-**Squash is still what ships** (`[widescreen] native_wide = false`).
-Native-wide is implemented and measured and is described below; it is held
-back until the defects in `research/widescreen-survey/README.md` are fixed.
-0.3.1 was a build hotfix and deliberately carried no rendering change. The
+**Native-wide is what ships since 0.3.2** (`[widescreen] native_wide = true`).
+The defects catalogued in `research/widescreen-survey/README.md` are fixed by
+four game plugins -- `dw_ws_backdrop.c` (fade plate, parked HUD, the clock as
+one widget), `dw_ws_camera.c` (both camera clamps, the tile-ladder shift, the
+load-time nudge) and `dw_ws_sliver.c` (the fifth backdrop column, uploaded as
+a stacked VRAM sliver whenever the game's four-column ring falls short) --
+and one framework primitive per need (`mod_function_exit_funcs`,
+`psx_mod_ws_native_wide_offset`, `psx_mod_vram_write`). Still open: ~1.2 s
+of 4:3 after a wild battle, a GTE-hysteresis timeout in the runtime's present
+classifier; GAME_STATE reads 0 on the title screen as well as the field, so
+the runtime's gameplay-state gate cannot replace the detector here. The
 wider field of view is rendered into a genuinely wider framebuffer (320 -> 426
 at 16:9, `EXTRA = 2 * round(W*(3n-4d)/(8d))`) and presented 1:1. Nothing is
 stretched, so the entire "screen-space 2D renders stretched" problem class —

@@ -1104,11 +1104,13 @@ def main():
         'name = "Expanded Roster"',
         'author = "DigimonWorldVanilla"',
         'description = "Grows every type-indexed partner table beyond its '
-        'stock size, then makes seven Digimon raisable: Machinedramon in the '
-        'game\'s one unused slot, plus Gigadramon, Myotismon, WaruSeadramon, '
-        'WaruMonzaemon, MetalEtemon and Tekkamon -- finished Digimon that '
-        'shipped on the disc as enemies only. Powered by table relocation '
-        'into enhancement memory."',
+        'stock size, then makes %d Digimon raisable: %d that shipped on the '
+        'disc as enemies only, with finished models, animations, textures, '
+        'voices and battle auras the game never let you raise, plus '
+        'Machinedramon in the one unused slot. Sixteen new Rookies, '
+        'twenty-three new Champions, six new Ultimates. Powered by table '
+        'relocation into enhancement memory."'
+        % (len(NEW_SPECIES) + 1, len(NEW_SPECIES)),
         'resolver = "declarative"',
         'save_compatibility = "isolated"',
         "",
@@ -1117,12 +1119,14 @@ def main():
         "",
         "[[feature]]",
         'id = "roster"',
-        'name = "Seven new raisable Digimon"',
+        'name = "%d new raisable Digimon"' % (len(NEW_SPECIES) + 1),
         'description = "Relocates and grows all eight type-indexed partner '
-        'tables, then authors seven species into the headroom: model, '
-        'skeleton, battle auras, stats, training animations and an evolution '
-        'path from a Champion for each. The touched functions run interpreted '
-        'until the background compiler rebuilds them natively."',
+        'tables, then authors %d species into the headroom: model, skeleton, '
+        'battle auras, stats, training animations and an evolution path for '
+        'each. Weight still decides, and the classic evolutions still happen '
+        'exactly as they always did. The touched functions run interpreted '
+        'until the background compiler rebuilds them natively."'
+        % len(NEW_SPECIES),
         'group = "Roster"',
         "default_enabled = false",
         "",

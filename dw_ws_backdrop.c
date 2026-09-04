@@ -83,11 +83,120 @@ extern int32_t psx_mod_ws_native_wide_offset(void);
 #define DW_RA_MAP_OVERLAY_WORLD 0x800B507Cu /* buildMapOverlayPrim mode 0 */
 #define DW_RA_FADE 0x800ACFE8u              /* renderFade's full-screen quad */
 #define DW_RENDER_RECT_POLY_FT4 0x800B8928u /* shared HUD quad builder */
+#define DW_GS_SORT_SPRITE 0x80096F90u       /* libgs GsSortSprite */
+#define DW_RENDER_GAME_CLOCK 0x800DD2A4u    /* clock.c, not decompiled */
+#define DW_RENDER_GAME_CLOCK_END 0x800DD5E0u /* updatePlaytime follows it */
+#define DW_CLOCK_SPRITE 0x80150C8Cu         /* GsSPRITE: the needle; x int16 @+4 */
+#define DW_CLOCK_OFFSET_X 0x80134E1Eu       /* int16 slide: -135 shown, -220 hidden */
+#define DW_ACTIVE_FRAMEBUFFER 0x80134ECCu   /* flips every presented frame */
 
 /* Per-side reveal when NATIVE-WIDE is actually presenting, else 0. */
 static int32_t dw_ws_native_wide_margin(void) {
     const int32_t off = psx_mod_ws_native_wide_offset();
     return off > 0 ? off : 0;
+}
+
+static int32_t dw_read_i16(uint32_t addr) {
+    return (int32_t)(int16_t)psx_mod_read_half(addr);
+}
+
+/* The clock is one widget drawn as SEVEN pieces -- four dial quads, the
+ * needle (a GsSPRITE, sorted through GsSortSprite, not the quad helper), and
+ * two hour-marker quads -- every one of them positioned from the same slide
+ * offset CLOCK_OFFSET_X, which renderGameClock steps by 50 px a frame between
+ * -135 (shown) and -220 (hidden). Two lessons from shipping the per-quad rule
+ * on it:
+ *
+ *   * The needle went through a different draw path and was never moved, so
+ *     it stayed behind in the reveal when the dial was pushed out -- a player
+ *     reported the hand sitting alone on the left of the screen.
+ *   * Mid-slide, the pieces reach "fully outside the 4:3 frame" on different
+ *     frames, so a per-piece rule pushes the leftmost sliver out a frame
+ *     before the rest and the dial visibly comes apart on every map change.
+ *
+ * So the clock is parked as a UNIT: the union of its pieces, measured relative
+ * to the slide offset on each frame (the geometry is constant, so the previous
+ * frame's union is exact), decides once per frame, and every piece -- quads
+ * and needle alike -- gets the same shift. renderGameClock rewrites the
+ * needle's x from the slide offset every frame (sh @0x800DD524), so shifting
+ * the sprite in place cannot accumulate.
+ */
+static int dw_in_clock(uint32_t ra) {
+    return ra >= DW_RENDER_GAME_CLOCK && ra < DW_RENDER_GAME_CLOCK_END;
+}
+
+static int32_t dw_clock_union_lo, dw_clock_union_hi; /* x - s .. x + w - s */
+static int dw_clock_union_known;
+static int32_t dw_clock_acc_lo, dw_clock_acc_hi;
+static int dw_clock_acc_any;
+static int dw_clock_decided;
+static int32_t dw_clock_shift;
+static int32_t dw_clock_fb = -1;
+
+/* Frame boundary = the game's own double-buffer flip. ACTIVE_FRAMEBUFFER
+ * toggles once per presented frame, and every clock piece of one frame is
+ * drawn between two flips. This is observed from guest state rather than an
+ * entry hook on renderGameClock because the recompiler's boundary for that
+ * function is 0x800DD2A8, not 0x800DD2A4: the compiler hoisted a gp-relative
+ * load above the prologue, so a hook keyed on the symbol's address is emitted
+ * nowhere and silently never fires. Measured, not guessed -- the first cut of
+ * this did exactly that. */
+static void dw_clock_frame_check(void) {
+    const int32_t fb = (int32_t)psx_mod_read_byte(DW_ACTIVE_FRAMEBUFFER);
+    if (fb == dw_clock_fb)
+        return;
+    dw_clock_fb = fb;
+    if (dw_clock_acc_any) {
+        dw_clock_union_lo = dw_clock_acc_lo;
+        dw_clock_union_hi = dw_clock_acc_hi;
+        dw_clock_union_known = 1;
+    }
+    dw_clock_acc_any = 0;
+    dw_clock_decided = 0;
+    dw_clock_shift = 0;
+}
+
+/* Decide once per frame, from the slide offset the frame's pieces will use. */
+static int32_t dw_clock_decide(int32_t margin) {
+    dw_clock_frame_check();
+    if (!dw_clock_decided) {
+        const int32_t s = dw_read_i16(DW_CLOCK_OFFSET_X);
+        dw_clock_shift = 0;
+        if (dw_clock_union_known) {
+            const int32_t lo = DW_SCREEN_W / 2 + s + dw_clock_union_lo;
+            const int32_t hi = DW_SCREEN_W / 2 + s + dw_clock_union_hi;
+            if (hi <= 0)
+                dw_clock_shift = -margin;         /* parked off the left  */
+            else if (lo >= DW_SCREEN_W)
+                dw_clock_shift = margin;          /* parked off the right */
+        }
+        dw_clock_decided = 1;
+    }
+    return dw_clock_shift;
+}
+
+static void dw_clock_note_piece(int32_t x, int32_t w) {
+    const int32_t s = dw_read_i16(DW_CLOCK_OFFSET_X);
+    const int32_t lo = x - s, hi = x + w - s;
+    dw_clock_frame_check();
+    if (!dw_clock_acc_any || lo < dw_clock_acc_lo)
+        dw_clock_acc_lo = lo;
+    if (!dw_clock_acc_any || hi > dw_clock_acc_hi)
+        dw_clock_acc_hi = hi;
+    dw_clock_acc_any = 1;
+}
+
+static void dw_ws_needle_park_hook(struct CPUState* cpu, uint32_t address) {
+    const int32_t margin = dw_ws_native_wide_margin();
+    int32_t shift;
+    (void)address;
+    if (margin <= 0 || cpu->gpr[4] != DW_CLOCK_SPRITE) /* $a0 = GsSPRITE* */
+        return;
+    shift = dw_clock_decide(margin);
+    if (shift == 0)
+        return;
+    psx_mod_write_half(DW_CLOCK_SPRITE + 4,
+                       (uint16_t)(dw_read_i16(DW_CLOCK_SPRITE + 4) + shift));
 }
 
 /* Deep widescreen, phase 3: keep parked HUD parked.
@@ -137,6 +246,15 @@ static void dw_ws_hud_park_hook(struct CPUState* cpu, uint32_t address) {
      * did: it moved the clock face while the needle -- drawn by GsSortSprite,
      * not this helper -- stayed where it was, so the hand came off the clock.
      * A player reported it before this was caught. */
+    if (dw_in_clock(cpu->gpr[31])) {
+        /* The clock moves as one widget: see dw_clock_decide. */
+        int32_t shift;
+        dw_clock_note_piece(x, w);
+        shift = dw_clock_decide(margin);
+        if (shift != 0)
+            cpu->gpr[4] = (uint32_t)(x + shift);
+        return;
+    }
     sx = x + DW_SCREEN_W / 2;
     if (sx + w <= 0)
         cpu->gpr[4] = (uint32_t)(x - margin);       /* parked off the left  */
@@ -178,4 +296,6 @@ PSX_MOD_CONSTRUCTOR(dw_ws_backdrop_register) {
         "dw.ws.backdrop-align", DW_SET_POS_DATA_POLY_FT4, dw_ws_backdrop_hook);
     psx_mod_register_function_entry_plugin(
         "dw.ws.hud-park", DW_RENDER_RECT_POLY_FT4, dw_ws_hud_park_hook);
+    psx_mod_register_function_entry_plugin(
+        "dw.ws.hud-park", DW_GS_SORT_SPRITE, dw_ws_needle_park_hook);
 }
