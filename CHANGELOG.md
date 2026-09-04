@@ -64,6 +64,19 @@ backdrop streams four tile columns that top out around 96 even with the new
 fifth-column patch. Picking it did not give you a wider game, it gave you the
 old black edges back. 16:9 and 16:10 both work and 16:10 is now measured too.
 
+**The game no longer fills your drive with crash reports.** A freeze detector
+was writing a 106 MB diagnostic file whenever it thought the game had hung —
+and on this game it thinks that while the title screen sits idle, so a normal
+session could shed half a gigabyte describing a game that was running
+perfectly. It had quietly accumulated 24 GB on one machine. The detector still
+watches and still reports, it just no longer writes the file unless you ask it
+to.
+
+**Linux builds work again.** Two fixes a player sent in and that had never
+been applied, despite a reply saying they had: a missing include that only
+broke on Linux, and a hard build failure when an optional rewind component is
+absent. That one is now a warning — you get a game without the rewind feature
+instead of no game at all.
 Known and left open: for about 1.2 s after a wild battle the frame is shown
 4:3 before widening again. Cosmetic; it is a hysteresis timeout in the
 framework's gameplay detector.
