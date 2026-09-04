@@ -20,9 +20,35 @@ import os
 from PIL import Image
 
 NATIVE_W = 320          # canonical PSX display width for this game
-WIDE_W = 426            # 16:9 at 240 lines
-REVEAL = (WIDE_W - NATIVE_W) // 2      # 53 columns per side
+NATIVE_H = 240          # never widened: native-wide adds columns only
+WIDE_W = 426            # 16:9 at 240 lines -- the DEFAULT, not an assumption
+REVEAL = (WIDE_W - NATIVE_W) // 2      # 53 columns per side at 16:9
 BLACK = 14              # max channel value still counted as void
+
+
+def geometry(size):
+    """(wide_width, reveal, supersample) for a presented frame, derived from
+    the image rather than assumed.
+
+    The frame HEIGHT is the invariant: native-wide adds columns and never
+    rows, so scale = h / 240 and the wide width follows. Deriving it from the
+    width instead only works at one aspect -- this file hardcoded 426 and so
+    reported every 16:10 frame (384 px) as "presented 4:3", which reads as a
+    pass when nothing was measured at all.
+
+    Returns (None, None, None) when the frame is not a whole multiple of the
+    native size.
+    """
+    w, h = size
+    if h % NATIVE_H:
+        return None, None, None
+    sc = h // NATIVE_H
+    if sc < 1 or w % sc:
+        return None, None, None
+    wide = w // sc
+    if wide < NATIVE_W or (wide - NATIVE_W) % 2:
+        return None, None, None
+    return wide, (wide - NATIVE_W) // 2, sc
 
 
 def _cols(px, h, sc, c0, c1, ystep=4, xstep=1):
@@ -48,18 +74,22 @@ def measure(path):
     im = Image.open(path).convert("RGB")
     w, h = im.size
     out = {"path": os.path.basename(path), "size": (w, h)}
-    if w % WIDE_W != 0:
+    wide, reveal, sc = geometry(im.size)
+    if wide is None or reveal == 0:
         out["wide"] = False
         out["left"] = out["centre"] = out["right"] = None
-        out["scale"] = w / float(NATIVE_W) if w % NATIVE_W == 0 else None
+        out["scale"] = sc
+        out["wide_w"] = wide
+        out["reveal"] = reveal
         return out
-    sc = w // WIDE_W
     px = im.load()
     out["wide"] = True
     out["scale"] = sc
-    out["left"] = round(_cols(px, h, sc, 0, REVEAL, xstep=2), 1)
-    out["centre"] = round(_cols(px, h, sc, REVEAL, WIDE_W - REVEAL, xstep=2), 1)
-    out["right"] = round(_cols(px, h, sc, WIDE_W - REVEAL, WIDE_W, xstep=2), 1)
+    out["wide_w"] = wide
+    out["reveal"] = reveal
+    out["left"] = round(_cols(px, h, sc, 0, reveal, xstep=2), 1)
+    out["centre"] = round(_cols(px, h, sc, reveal, wide - reveal, xstep=2), 1)
+    out["right"] = round(_cols(px, h, sc, wide - reveal, wide, xstep=2), 1)
     return out
 
 
@@ -78,12 +108,12 @@ def void_edge(path, side="right"):
     """
     im = Image.open(path).convert("RGB")
     w, h = im.size
-    if w % WIDE_W:
+    wide, reveal, sc = geometry(im.size)
+    if wide is None or reveal == 0:
         return None
-    sc = w // WIDE_W
     px = im.load()
-    outer = WIDE_W - 1 if side == "right" else 0
-    inner = WIDE_W - REVEAL if side == "right" else REVEAL - 1
+    outer = wide - 1 if side == "right" else 0
+    inner = wide - reveal if side == "right" else reveal - 1
     step = -1 if side == "right" else 1
     hits = {}
     voided = sampled = 0

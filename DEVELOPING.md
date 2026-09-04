@@ -104,11 +104,44 @@ stretched, which is what made menus and the HUD look wrong through 0.3.1.
 Native-wide renders into a genuinely wider framebuffer (320 -> 426 at 16:9) and
 presents 1:1, so nothing is stretched.
 
-Four defects had to be fixed before it could be turned on, all measured and all
-recorded in `research/widescreen-survey/README.md`. Three of them live in
-`dw_ws_backdrop.c` and `dw_ws_camera.c` as hooks on the game's own functions;
-none of them is a code patch. Do NOT enable `nw_hud_corners` -- it was tested
-here and shifts world polygons.
+The defects that had to be fixed are measured and recorded in
+`research/widescreen-survey/README.md`. They live in `dw_ws_backdrop.c` (fade
+plate, parked HUD, the clock and the field gauges as single widgets, the battle
+bars' slide table), `dw_ws_camera.c` (both camera clamps, the tile-ladder
+shift, the load-time nudge) and `dw_ws_sliver.c` (the fifth backdrop column,
+uploaded to a VRAM sliver when the four-column ring falls short) as hooks on
+the game's own functions; none of them is a code patch. Do NOT enable
+`nw_hud_corners` -- it was tested here and shifts world polygons.
+
+**Only 16:9 and 16:10 are offered**, via a game-owned copy of the framework's
+widescreen manifest under `mods/packages/psx.enhancement.widescreen`. 21:9 asks
+for 120 px of reveal per side and the tile ring tops out near 96 even with the
+sliver, so it degraded rather than widened. If the framework's builtin manifest
+version is ever bumped past 1.0.0 that override stops applying silently, since
+the loader takes the highest semver -- check the staged manifest, not the source
+one.
+
+**Two traps when adding a hook here**, both of which have cost a release:
+
+* A `mod_function_entry_funcs` address must be a function START as the
+  recompiler discovered it. `renderGameClock`'s symbol is 0x800DD2A4 but its
+  recompiled body begins at 0x800DD2A8, because a gp-relative load was hoisted
+  above the prologue. A hook on the symbol is emitted nowhere and never fires,
+  with no warning. Check with
+  `grep "func_<addr>(CPUState" generated/*.c` before relying on one.
+* **Nothing below 0x80090800 is statically recompiled**, so no overlay address
+  can carry a hook at all. Reach overlay behaviour through data it reads (the
+  battle bars' slide table) or through a main-executable function it calls.
+
+To re-measure coverage after any change here, use a walking sweep, never
+arrival frames:
+
+```bash
+py -3.12 tools/ws_sweep.py --port 4390 --maps 1,2,5,12 --steps 30
+```
+
+It is aspect-agnostic: it reads the reveal from the running game and the
+geometry from the frames, so the same command verifies 16:10.
 
 `geometry_correction` stays off: it is framework-withdrawn and measured at 0.2%
 coverage here, so it buys nothing.
@@ -135,6 +168,26 @@ Two failure modes worth knowing, both of which cost hours here:
 * An invalid manifest is dropped **silently** — the package simply never
   applies, with nothing logged. Unescaped quotes in a description are enough to
   do it. `python -c "import tomllib; tomllib.load(open(path,'rb'))"` catches it.
+
+### Trigger ids: run this whenever a guard bound changes
+
+```bash
+py -3.12 tools/scan_trigger_ids.py <DG.SCN> <MAPHEAD.SCN>
+```
+
+Trigger flags live in `ScriptState.triggers[100]` and are memcpy'd to the
+memory card, so an id a mod writes that a disc script also uses is a
+save-persistent bug in both directions. The roster shipped one from 0.3.0 to
+0.3.3: widening `setDigimonRaised`'s bound put the new species' flags straight
+onto the "Jijimon announced X joined the city" family, so raising a new Digimon
+ate a story scene and watching that scene biased the evolution chooser.
+
+The tool decodes the shipped bytecode rather than pattern-matching, and reports
+every id the scripts touch against the bands a guard change opens up. Extract
+the two script files with
+`tools/extract_disc_file.py --path /SCN/DG.SCN`. Never widen a
+trigger-writing bound without running it: the id space directly above a vanilla
+range is exactly where the game put the next family.
 
 ### Run all three gates before every release
 

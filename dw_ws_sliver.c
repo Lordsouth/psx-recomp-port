@@ -107,6 +107,25 @@ extern int32_t psx_mod_ws_native_wide_offset(void);
 #define DW_POLY_FT4_LEN 9u
 #define DW_POLY_FT4_CODE 0x2Cu
 
+/* The same cap dw_ws_camera.c applies, and it must stay the same number.
+ *
+ * Above it the camera tier latches OFF -- no widened map-edge clamp, no
+ * tile-ladder shift -- and without the ladder shift the ring is no longer
+ * aligned to the wide view's LEFT edge, which is the whole reason the deficit
+ * lands on the right where this file can serve it. A sliver still drawing
+ * under those conditions patches one edge of a frame that is voiding on the
+ * other, which reads as a half-fixed bug rather than an unsupported setting.
+ * So the tier engages and disengages as a unit.
+ *
+ * The bound this file could support alone is m <= 78 or so (2m - 65 <= 106
+ * plus the ladder's measured hysteresis lag); the ring's own structural bound
+ * is m <= 96. Neither admits 21:9's 120 px, which is why the game ships its
+ * own widescreen manifest offering 16:9 and 16:10 only
+ * (mods/packages/psx.enhancement.widescreen). 64 is kept because those are the
+ * two aspects that are actually offered and measured; raising it would ship an
+ * untested path. */
+#define DW_MARGIN_MAX 64
+
 struct dw_strip { int32_t row, vis0, vish; };
 
 static uint16_t dw_pixels[DW_SLIVER_MAX_HW * DW_TILE_PX];
@@ -137,7 +156,7 @@ static void dw_sliver_render_exit(struct CPUState* cpu, uint32_t address) {
     (void)address;
 
     m = psx_mod_ws_native_wide_offset();
-    if (m <= 0)
+    if (m <= 0 || m > DW_MARGIN_MAX)
         return;
     w = dw_i8(DW_MAP_WIDTH);
     h = dw_i8(DW_MAP_HEIGHT);

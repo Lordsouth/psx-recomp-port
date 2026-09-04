@@ -1,0 +1,82 @@
+format_version = 5
+id = "psx.enhancement.widescreen"
+version = "1.0.0"
+name = "Widescreen"
+author = "psxrecomp"
+description = "Renders the game at a wide aspect. Digimon World has the per-title work done -- nothing is stretched, the backdrop covers the wider view, and HUD pieces the game hides stay hidden -- so this is a real widening rather than the generic experimental tier. Off by default."
+resolver = "declarative"
+save_compatibility = "shared"
+
+# GAME-OWNED OVERRIDE of the framework's builtin package of the same id.
+#
+# Why it exists: the builtin offers 16:9, 16:10 and 21:9 to every title
+# (mods/builtin/packages/psx.enhancement.widescreen/1.0.0/manifest.toml,
+# game_id "*"). This game cannot honour 21:9, and the failure is structural,
+# not a missing tuning constant:
+#
+#   The reveal per side is off = (w*(3n-4d) + 4d) / (8d) at w = 320, so
+#   16:10 -> 32 px, 16:9 -> 53 px, 21:9 -> 120 px.
+#
+#   The backdrop streams as a ring of FOUR 128-px tile columns = 512 px, and
+#   the widened view spans [C-m, C+320+m). Coverage needs the ring origin's
+#   leftslack in [m, 192-m], which is EMPTY for m > 96 -- no policy, no
+#   alignment, no camera nudge can cover a 560-wide frame from 512 px of
+#   tiles. The fifth-column sliver (dw_ws_sliver.c) adds at most 106 px on the
+#   right, which lifts the bound to about m <= 78; a VRAM census found nowhere
+#   to put more. 120 clears neither bound.
+#
+#   Worse than a void: at 120 the game's own plugins latch off entirely
+#   (dw_ws_camera.c DW_MARGIN_MAX), so the widened map-edge clamp and the
+#   tile-ladder shift stop too, and the LEFT reveal -- which the sliver does
+#   not serve -- voids at most camera positions.
+#
+# So 21:9 is not offered here. Offering a choice that silently degrades is
+# worse than not offering it: a player would rightly read a black band as a
+# bug in the port rather than as a limit of the aspect they picked.
+#
+# The plugin id below is the framework's own registration
+# (runtime/src/mod_builtin_widescreen.c), which reads this option and calls
+# psx_ws_engage_aspect. Only the choice list differs from the builtin.
+[[target]]
+game_id = "*"
+
+[[feature]]
+id = "widescreen"
+name = "Widescreen"
+description = "Widens the field of view. 3D, menus, text boxes and the HUD all keep their original proportions; the extra width is real extra view on both sides. Known limits: about a second of 4:3 after a wild battle, and a few interiors were only modelled as far as the original camera could see, so their edges can be dark."
+group = "Video"
+default_enabled = false
+
+[[option]]
+feature = "widescreen"
+id = "aspect"
+label = "Aspect ratio"
+description = "16:9 is the tested default. 16:10 reveals a little less and needs no backdrop patching at all. Wider than 16:9 is not offered: this game's backdrop cannot cover it."
+group = "Video"
+type = "choice"
+default = "16:9"
+
+[[option.choice]]
+value = "16:9"
+label = "16:9"
+
+[[option.choice]]
+value = "16:10"
+label = "16:10"
+
+[[plugin]]
+feature = "widescreen"
+id = "psx.widescreen"
+
+# The game's own per-frame work for this feature. It has to be declared here,
+# in the package whose feature it belongs to, because plugin CALLBACKS are
+# plan-selected: only ids a manifest names are dispatched. Function-entry hooks
+# fire regardless, which is what makes the omission easy to miss -- the rest of
+# dw_ws_backdrop.c kept working while this one silently never ran, and the only
+# symptom was a table that still read its stock value in a live battle.
+#
+# What it does: holds the battle HP/MP bars' PARKED slide position out past the
+# widened frame. See dw_ws_backdrop.c, dw_btl_bars_vblank.
+[[plugin]]
+feature = "widescreen"
+id = "dw.ws.btl-bars"

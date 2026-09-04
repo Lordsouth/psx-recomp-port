@@ -40,11 +40,74 @@ the 0.3.2 notes were based on:
 The framework grew one primitive for this, `psx_mod_vram_write`, so a game
 plugin can upload texture data the game never had a slot for.
 
+**The rest of the HUD got the same treatment.** Having found the clock's hand
+by having it reported, we went looking for every other widget the game hides by
+sliding it off-screen, rather than waiting to be told about the next one. An
+exhaustive scan of the whole game found two more, and cleared everything else:
+
+* **The battle HP and MP bars sat in the right reveal for most of every
+  fight.** They are drawn by the battle overlay, which never calls the routine
+  the clock fix hooks, so nothing was touching them at all. Their position
+  comes from a table of slide positions read by exactly two instructions in the
+  game, so moving the parked entry moves the whole bar coherently.
+* **The discipline and happiness gauges came apart for one frame** each time a
+  menu opened or closed: the frame of the gauge stayed while most of its pips
+  jumped. Same cause as the clock, so the same fix.
+
+The enemy's health bars, the finisher gauge and the battle command menu were
+checked and are fine. They are noted as fine so nobody re-checks them.
+
+**21:9 is no longer offered for this game.** It was in the list because the
+widescreen mod is shared by every game the framework runs, and this one cannot
+honour it: 21:9 asks for 120 pixels of extra view per side, and the game's
+backdrop streams four tile columns that top out around 96 even with the new
+fifth-column patch. Picking it did not give you a wider game, it gave you the
+old black edges back. 16:9 and 16:10 both work and 16:10 is now measured too.
+
 Known and left open: for about 1.2 s after a wild battle the frame is shown
 4:3 before widening again. Cosmetic; it is a hysteresis timeout in the
 framework's gameplay detector.
 
 Widescreen remains off by default. Turn it on in the launcher's Mods panel.
+
+**The expanded roster was quietly overwriting story flags. That is fixed.**
+
+The mod recorded "you have raised this Digimon" by setting a numbered flag, and
+for the new Digimon those numbers landed on flags the game was already using —
+mostly the ones that remember which recruitment announcements Jijimon has given
+you. The flags are saved to your memory card, so it stuck, and it went both
+ways: raising one of the new Digimon could silently cost you a scene, and
+watching a recruitment scene could make the game think you had already raised a
+Digimon you had never seen, which nudged your partner away from evolving into
+it.
+
+The new Digimon now have flags of their own, in a range nothing else touches.
+Found by decoding the game's own scripts and checking every number the mod could
+write against every number the scripts use, rather than by assuming the space
+above the original range was free. It was not: 88 of the 117 numbers were in
+use.
+
+If you have already raised one of the new Digimon on an older version, the
+flags it set stay set. Nothing is broken, but those scenes do not come back.
+
+**Two long-standing claims about the expanded roster are now proven rather than
+argued.** Neither changes the game; both were listed as unverified since 0.3.0,
+and one of them was load-bearing for a soft-lock nobody had ruled out.
+
+* Machinedramon's body really does stream for the new slot. Guest memory is
+  searched for fingerprints of the model file taken off the disc, with a
+  control beforehand so the check can fail.
+* You can reach him by raising, not just by a test harness forcing it. With the
+  partner's stats meeting the requirements, the game's own chooser picks him.
+  Worth knowing if you go looking: Agumon cannot reach any of the new species.
+  Twelve stock Digimon can, Greymon among them.
+
+A third claim is only half closed, and is listed here rather than quietly
+carried: the training tables the new Digimon need really are relocated and the
+gym really does read them from the new location, checked with the training code
+loaded and a new Digimon as the partner. A full training session with one has
+still not been driven end to end. Nothing suggests it is broken; it is simply
+not proven, and the difference matters.
 
 ---
 

@@ -680,19 +680,95 @@ user's PATH, and the fail-closed packaging guard.
 ## 9. Known issues and open work
 
 * **W2 UI counter-squash does not work** (§5.2). Dormant.
-* **Machinedramon's model has never been confirmed on screen.** The loader
-  remap is implemented and the data is verified in RAM, but nobody has watched
-  the body stream in. Treat any claim otherwise as unverified.
+* ~~Machinedramon's model has never been confirmed on screen.~~ **CLOSED
+  2026-09-04.** `tools/verify_roster_evolution.py` dumps guest RAM and searches
+  it for three byte probes taken from `MUGE.MMD` on the vanilla disc, with a
+  control taken while the partner is still the setup species: absent on all
+  three before, found at 0x80024800 / 0x80025800 / 0x80028800 after — the file
+  loaded contiguously. The body is also on screen in the run's frames.
+
+  Take the probe file off **your own** disc (`tools/extract_disc_file.py`,
+  `/CHDAT/MMD3/MUGE.MMD`, 78588 bytes). A copy of the same name from a modified
+  disc measured 79774 bytes here and shares no prefix; probing with it would
+  have failed for a reason unrelated to the roster.
+* ~~Requirement-driven evolution has never been confirmed by play.~~ **CLOSED
+  2026-09-04.** Same tool, and it never writes `EVOLUTION_TARGET`. Greymon is
+  one of twelve stock species the roster wires to a new target
+  (`to[] = [114, -1, 12, 26, -1, -1]`); with the partner's stats shaped to meet
+  Machinedramon's requirements and `evoTimer` past the Champion threshold of
+  144, the game's own `getChampionEvolutionTarget` wrote 114, and the sequence
+  ran to a guest-written `partner_type` of 114. A Python transcription of the
+  chooser predicted 114 independently, so the requirement arithmetic is
+  understood rather than merely observed.
+
+  Worth knowing for anyone testing this by hand: **Agumon cannot reach any
+  roster species.** Its `to[]` is entirely stock. The twelve stock sources that
+  can are types 2, 5, 6, 7, 8, 10, 11, 16, 30, 39, 44 and 50.
 * **`save_compatibility` is declared but not enforced** by the framework, so a
   save made with the roster enabled and loaded with it disabled reads a stale
   table set. Documented in `cheats.txt`; a framework-level fix is the real
   answer.
-* **The overlay table retarget has not been seen working in a gym.** The
-  expected-byte guards are proven against the real disc image, every rewritten
-  instruction pair decodes to the intended arena address, and the arena content
-  is verified byte-exact — but nothing has yet driven the game into a training
-  gym with a relocated `TRAINING_ANIM_IDS`. Proven on paper and at the guard,
-  not on screen.
+* ~~The widened raised-flag guard's trigger ids were never audited against the
+  disc scripts.~~ **AUDITED 2026-09-04, and it was a real collision. Fixed.**
+
+  `research/roster-band-authoring.md` carried a "VERIFY BEFORE SHIPPING" note
+  to check that trigger id 0x272 was script-unused. It is not.
+  `tools/scan_trigger_ids.py` decodes the shipped bytecode in `DG.SCN` and
+  `MAPHEAD.SCN` -- 1834 sections, zero decode errors -- and finds **88 of the
+  117 widened ids referenced by disc scripts**, 45 of them in the range this
+  roster's 52 species actually reach. They are the "Jijimon announced that X
+  joined the city" family at `0x23C + species`, plus treasure-chest flags
+  higher up.
+
+  Because trigger flags are memory-card persistent the aliasing ran both ways:
+  raising a new species marked a recruitment announcement as already seen, and
+  seeing an announcement made `hasDigimonRaised()` true for a species the
+  player never owned -- which `evolution.c:401` uses to score evolution
+  targets, so story progress biased what the partner became.
+
+  `dw_roster_flags.c` replaces `setDigimonRaised` and `hasDigimonRaised` and
+  re-banks the new species onto ids `0x2CD..`, above the highest id any script
+  references (0x2CC) and inside `triggers[100]`'s 800-bit range. The manifest's
+  byte patch at 0x800FF7FC is gone and must stay gone -- a patched function is
+  refused by native dispatch, and the replacement hook lives inside the body
+  that would be refused.
+
+  **Migration:** a save made before this fix keeps whatever the old aliasing
+  set. Those announcements stay skipped and species raised under the old scheme
+  read as un-raised. Nothing is corrupted; nothing is recovered either.
+* **The overlay table retarget is now seen live in a gym — but a full training
+  session with a new species is still not proven.** Partly closed 2026-09-04 by
+  `tools/verify_roster_training.py`; be precise about which part.
+
+  *Proven.* With a type-114 partner in Green Gym (map 112) and TRN actually
+  resident, all five `TRAINING_ANIM_IDS` read sites in the LOADED overlay carry
+  the arena's high half-word — `0x8008B91C`, `0x8008B9FC`, `0x8008BC30`,
+  `0x8008BE38`, `0x8008BF50` all read 0x9F00. The relocated entry for type 114
+  reads anim 0x2E, frame 0x0A. That matters because the failure mode is
+  specifically a frame byte of **zero**: offense training's state 2 advances
+  only when its counter EQUALS the table's frame byte, and that state has no
+  timeout and no input escape, so a zero parks the session until an int16
+  counter wraps. With the stock 68-entry table, type 114 reads 92 bytes past
+  the end — in TRN into the string "Technique mastered." (anim 101, frame 32),
+  in TRN2 into anim 0, **frame 0**. The relocation is what stops that, and the
+  relocation is live.
+
+  *Not proven.* An offense session run to completion. One attempt started a
+  session and parked in state 2 for 845 ticks with no stat gain, but the
+  stock-partner control never reached a machine, so that observation cannot be
+  attributed: the walk that finds a machine is a blind search (the trigger
+  coordinates live in the on-disc map script, not in the decompilation), and a
+  blind CROSS may start any exercise — HP training is a button-mash minigame
+  that will sit waiting for input a scripted route never supplies. **Do not
+  cite that run as evidence of a soft-lock, and do not cite the passing checks
+  as evidence there is none.** Settling it needs the machine's coordinates, or
+  the memory-arm route in the tool's docstring.
+
+  Note the overlay does NOT load on arrival: probing found the region all
+  zeroes through 900 frames of standing on map 112, and populated immediately
+  after walking into the machine. A test that warps and reads is reading
+  nothing — which is what made the first run of this report a "retarget
+  failure" that was really an absence.
 * **Four inherited cheats remain suspect** (§6.3).
 * **Prosperity Points ignore new recruits** — the recruit loop's bound was
   deliberately not widened, since widening it sweeps trigger ids other events

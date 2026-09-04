@@ -1571,13 +1571,6 @@ replace = "73 00"
 [[patch]]
 feature = "roster"
 target = "main_exe"
-address = 0x800FF7FC
-expected = "3f 00 81 2c"
-replace = "b4 00 81 2c"
-
-[[patch]]
-feature = "roster"
-target = "main_exe"
 address = 0x8012B6B3
 expected = "ff"
 replace = "40"

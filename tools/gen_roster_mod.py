@@ -523,11 +523,28 @@ def authored_research(rd):
     """Constants sourced from the data-authoring research (research/roster-*):
     evolution wiring, guard widening, disc fixes, and the 114 entries."""
     extra = []
-    # 5. raised-flag guard: sltiu $at,$a0,0x3f -> 0xb4 so setDigimonRaised
-    #    records types up to 179 (hasDigimonRaised is already unbounded).
-    g = 0x800FF7FC
-    assert rd(g, 4) == struct.pack("<I", 0x2C81003F)
-    extra += word_patch(g, 0x2C81003F, 0x2C8100B4)
+    # 5. raised-flag guard: DELIBERATELY NOT PATCHED ANY MORE.
+    #
+    #    This used to widen sltiu $at,$a0,0x3f -> 0xb4 so setDigimonRaised
+    #    recorded the new types. The trigger id is species + 0x200, and the
+    #    ids above the vanilla range are NOT free: decoding the shipped
+    #    bytecode (tools/scan_trigger_ids.py) finds 88 of the 117 widened ids
+    #    referenced by disc scripts -- mostly the "Jijimon announced X joined
+    #    the city" family at 0x23C + species, which is exactly the range this
+    #    roster's 52 species land in. Trigger flags are memory-card
+    #    persistent, so raising a new species silently consumed a story scene,
+    #    and an announcement made hasDigimonRaised() true for a species the
+    #    player never had -- which evolution.c:401 uses to score evolution
+    #    targets.
+    #
+    #    dw_roster_flags.c now REPLACES setDigimonRaised and hasDigimonRaised
+    #    (game.toml mod_function_replace_funcs) and re-banks the new species
+    #    onto trigger ids 0x2CD.., which no script touches. Do not reinstate
+    #    a patch here: patching a function is what stops its replacement hook
+    #    from ever running.
+    assert rd(0x800FF7FC, 4) == struct.pack("<I", 0x2C81003F), (
+        "setDigimonRaised guard is not the stock instruction; the replacement "
+        "in dw_roster_flags.c assumes the vanilla body")
     # 6. evolution wiring. to[] slots skip -1 entries, so any free byte works
     #    (evolution.c:73) -- but the SOURCE must be a Champion, since the level
     #    dispatch has no Ultimate branch (see NEW_SPECIES).

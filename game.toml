@@ -71,7 +71,19 @@ mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A281
 # that strip of column T+4 to a VRAM sliver and links up to three more quads
 # into the same bucket -- the fifth column the ring never had room for.
 mod_function_exit_funcs = ["0x800D78BC", "0x800D6A4C", "0x800D57EC"]
-mod_function_replace_funcs = ["0x800E2544", "0x800D7F68"]
+# 0x800FF7F8 = setDigimonRaised and 0x800FF824 = hasDigimonRaised. The roster
+# used to widen one immediate here (sltiu 0x3F -> 0xB4) so the new species got
+# a raised-flag. The id it lands on is species + 0x200, and the space above the
+# vanilla range is NOT free: decoding the shipped scripts finds 88 of the 117
+# widened ids in use, mostly the "Jijimon announced X joined the city" family.
+# The flags are memory-card persistent, so raising a new species silently ate a
+# story scene and, through evolution.c:401, an announcement biased which
+# Digimon the partner evolved into. dw_roster_flags.c replaces both functions
+# and re-banks the new species onto 0x2CD.., which no script touches. The old
+# byte patch is GONE from the manifest and must stay gone: a patched function
+# is refused by native dispatch, and the replacement lives inside the body that
+# would be refused. tools/scan_trigger_ids.py re-runs the audit.
+mod_function_replace_funcs = ["0x800E2544", "0x800D7F68", "0x800FF7F8", "0x800FF824"]
 # 0x800D7F68 = cameraIsAtEdge (map.c:2341-2370): a 212-byte leaf with no calls,
 # and the single per-frame chokepoint for the camera scroll clamp. dw_ws_camera.c
 # widens its X arm by the native-wide reveal so the map edge stays inside the

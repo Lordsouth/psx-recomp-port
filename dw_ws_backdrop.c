@@ -89,8 +89,22 @@ extern int32_t psx_mod_ws_native_wide_offset(void);
 #define DW_CLOCK_SPRITE 0x80150C8Cu         /* GsSPRITE: the needle; x int16 @+4 */
 #define DW_CLOCK_OFFSET_X 0x80134E1Eu       /* int16 slide: -135 shown, -220 hidden */
 #define DW_ACTIVE_FRAMEBUFFER 0x80134ECCu   /* flips every presented frame */
+#define DW_RENDER_STATUS_BARS 0x800A936Cu   /* discipline/happiness gauges */
+#define DW_RENDER_STATUS_BARS_END 0x800A97E0u /* setImmortalHour follows it */
+#define DW_STATUS_UI_OFFSET_X 0x80134C50u   /* int16 slide: 75 shown, 240 hidden */
+#define DW_BTL_SLIDE_TABLE 0x80073280u      /* BTL_D_80073280, int16[8] */
+#define DW_BTL_SLIDE_N 8
+#define DW_BTL_SLIDE_MAX_SHIFT 128          /* sanity bound when restoring */
 
-/* Per-side reveal when NATIVE-WIDE is actually presenting, else 0. */
+/* Per-side reveal when NATIVE-WIDE is actually presenting, else 0.
+ *
+ * DELIBERATELY UNCAPPED, unlike dw_ws_camera.c and dw_ws_sliver.c, which stop
+ * at DW_MARGIN_MAX. Those two depend on the backdrop tile ring's geometry and
+ * become incoherent past a reveal the ring can cover. Everything in THIS file
+ * -- widening the fade plate, pushing parked HUD out of the wider frame --
+ * depends only on how wide the presented frame is, and is right at any width.
+ * Capping them would reintroduce the fade leak and the sliced clock at exactly
+ * the aspects that need them most. */
 static int32_t dw_ws_native_wide_margin(void) {
     const int32_t off = psx_mod_ws_native_wide_offset();
     return off > 0 ? off : 0;
@@ -186,6 +200,99 @@ static void dw_clock_note_piece(int32_t x, int32_t w) {
     dw_clock_acc_any = 1;
 }
 
+/* The field status cluster: the discipline and happiness gauges, bottom right.
+ *
+ * renderStatusBars (0x800A936C) slides them out on STATUS_UI_OFFSET_X, which
+ * steps by 50 a frame between 75 (shown) and 240 (hidden), and builds them
+ * from EIGHT quads through the same helper as the clock. Their union relative
+ * to the slide is a constant [0, 75], so unlike the clock this needs no
+ * accumulator -- the decision is arithmetic on the offset alone.
+ *
+ * The per-piece rule tears it at exactly two offsets. At S = 125 the two frame
+ * quads sit at screen 285 and stay, while the 16 gauge pips from index 9 on
+ * sit at 321 or beyond and jump 53 px; at S = 140 that is 24 pips of 25. One
+ * frame on every hide and one on every show, which is the same defect that
+ * came off the clock -- pieces of one widget crossing the frame edge on
+ * different frames.
+ *
+ * Note renderGameClock TAIL-CALLS this function (jal at 0x800DD5C0), so its
+ * quads carry return addresses inside renderStatusBars while the call chain
+ * began in the clock. That is why the clock's window test uses the return
+ * address of the quad rather than anything about the call stack: the two
+ * widgets share a render callback but not a slide offset, and each must be
+ * judged on its own. */
+static int dw_in_status_bars(uint32_t ra) {
+    return ra >= DW_RENDER_STATUS_BARS && ra < DW_RENDER_STATUS_BARS_END;
+}
+
+static int32_t dw_status_shift(int32_t margin) {
+    /* screen span is [160 + S, 235 + S]; parked once the near edge clears the
+     * vanilla frame. */
+    return (DW_SCREEN_W / 2 + dw_read_i16(DW_STATUS_UI_OFFSET_X)) >= DW_SCREEN_W
+               ? margin : 0;
+}
+
+/* The battle partner's HP and MP bars.
+ *
+ * These are the widget the scene survey filed as "grey HUD chrome running to
+ * wide column 425, the frame's last column", and nothing in this file was ever
+ * touching them: BTL_renderPartnerStatusBars builds its quads inline with
+ * AddPrim and its digits through BTL_renderNumber, so renderRectPolyFT4 -- the
+ * helper both rules above hook -- is called ZERO times anywhere in the battle
+ * overlay. The bars are simply revealed, for most of every fight.
+ *
+ * They also cannot be hooked directly. Nothing below 0x80090800 is statically
+ * recompiled (generated/SLUS_010.32_full.ranges), so a function-entry hook on
+ * an overlay address is emitted nowhere and silently never fires -- the same
+ * trap as renderGameClock's 0x800DD2A4 boundary, one address range further
+ * out.
+ *
+ * What makes a fix possible without touching the overlay's code at all: the
+ * two bars take their X from ONE eight-entry table of slide positions,
+ * BTL_D_80073280 = {160, 129, 104, 83, 66, 55, 48, 46}, indexed by a per-bar
+ * phase counter, and entry 0 is the parked position. The table is read from
+ * exactly two instructions in the whole game, both inside that one function.
+ * So moving the parked position moves every piece of a parked bar coherently,
+ * by construction -- quads, icon, fill and digits alike, with no per-piece rule
+ * to get wrong and nothing to split mid-slide, because only the parked entry
+ * changes and the seven visible ones are untouched.
+ *
+ * Writing it from a VBlank callback rather than once per battle is what avoids
+ * a one-frame flash: the table is already patched whenever the renderer reads
+ * it, instead of being patched a frame after the bar first parks.
+ *
+ * The signature guard is not decoration. 0x80073280 is overlay RAM: when BTL
+ * is not resident those bytes belong to whatever else was loaded there, so the
+ * seven entries this does NOT write must all match before the one it does is
+ * touched. Idempotent, and it puts the stock value back when widescreen goes
+ * off. */
+static const int16_t dw_btl_slide[DW_BTL_SLIDE_N] = {
+    160, 129, 104, 83, 66, 55, 48, 46
+};
+
+static void dw_btl_bars_vblank(void) {
+    const int32_t margin = dw_ws_native_wide_margin();
+    int32_t parked;
+    int i;
+
+    if (!psx_mod_game_started())
+        return;
+    for (i = 1; i < DW_BTL_SLIDE_N; i++) {
+        if (dw_read_i16(DW_BTL_SLIDE_TABLE + (uint32_t)i * 2) != dw_btl_slide[i])
+            return;                       /* not the battle overlay's table */
+    }
+    parked = dw_read_i16(DW_BTL_SLIDE_TABLE);
+    if (margin > 0) {
+        if (parked == dw_btl_slide[0])
+            psx_mod_write_half(DW_BTL_SLIDE_TABLE,
+                               (uint16_t)(dw_btl_slide[0] + margin));
+    } else if (parked != dw_btl_slide[0] &&
+               parked > dw_btl_slide[0] &&
+               parked <= dw_btl_slide[0] + DW_BTL_SLIDE_MAX_SHIFT) {
+        psx_mod_write_half(DW_BTL_SLIDE_TABLE, (uint16_t)dw_btl_slide[0]);
+    }
+}
+
 static void dw_ws_needle_park_hook(struct CPUState* cpu, uint32_t address) {
     const int32_t margin = dw_ws_native_wide_margin();
     int32_t shift;
@@ -255,6 +362,12 @@ static void dw_ws_hud_park_hook(struct CPUState* cpu, uint32_t address) {
             cpu->gpr[4] = (uint32_t)(x + shift);
         return;
     }
+    if (dw_in_status_bars(cpu->gpr[31])) {
+        const int32_t shift = dw_status_shift(margin);
+        if (shift != 0)
+            cpu->gpr[4] = (uint32_t)(x + shift);
+        return;
+    }
     sx = x + DW_SCREEN_W / 2;
     if (sx + w <= 0)
         cpu->gpr[4] = (uint32_t)(x - margin);       /* parked off the left  */
@@ -298,4 +411,5 @@ PSX_MOD_CONSTRUCTOR(dw_ws_backdrop_register) {
         "dw.ws.hud-park", DW_RENDER_RECT_POLY_FT4, dw_ws_hud_park_hook);
     psx_mod_register_function_entry_plugin(
         "dw.ws.hud-park", DW_GS_SORT_SPRITE, dw_ws_needle_park_hook);
+    psx_mod_register_vblank_plugin("dw.ws.btl-bars", dw_btl_bars_vblank);
 }
