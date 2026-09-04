@@ -9,6 +9,44 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ---
 
+## 0.3.5
+
+**The cheats are in the Mods panel.**
+
+A player asked where the cheat list was in the launcher. It was not there:
+the 57 codes lived in `cheats.txt`, and picking one meant finding that file,
+editing it in Notepad and restarting. Nothing on screen said the cheats
+existed at all.
+
+Tick **Cheats** in the Mods panel and the whole list appears as checkboxes,
+grouped by what they affect -- Battle, Stats, Items, Training, Care, City,
+Partner, Movies, Raise sim, Misc. Every code that was in the file is there,
+including the one that fills the Item Keeper's bank with 99 of every item.
+
+`cheats.txt` still works and still decides while that feature is off, so
+nothing anyone already set up has changed. Turning it on hands the whole list
+to the launcher instead, and then the file's own `[x]` marks stop mattering --
+including the one on "Skip all movies", which is why that cheat can now be
+switched off from the panel like any other.
+
+**The file stays the single source of truth for the codes.** The mod carries
+cheat *names*, never addresses: its option list is generated from `cheats.txt`
+by a tool that the release process re-runs to prove the two still agree. This
+project has shipped a wrong cheat address more than once, and the one thing
+worth guaranteeing here was that there is still only one place where an
+address is written down.
+
+Worth knowing before ticking it: these are per-frame memory pokes, exactly
+like a real GameShark. Several write things the game keeps on the memory
+card, so their effects outlive switching the cheat off -- back up your `saves`
+folder first. And where a cheat and another mod touch the same value, the
+cheat wins, because it rewrites that value every frame.
+
+No other behaviour changed in this release. Widescreen, the expanded roster
+and everything else are exactly as they were in 0.3.4.
+
+---
+
 ## 0.3.4
 
 **Widescreen: the black band on the right is gone, and the clock hides in one

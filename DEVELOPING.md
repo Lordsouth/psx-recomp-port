@@ -70,6 +70,7 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file dw_ws_sliver.c --project-file dw_roster_flags.c \
   --project-file dw_roster.c --project-file dw_roster_data.inc \
   --project-file dw_evolution.c \
+  --project-file dw_cheats.c --project-file dw_cheats_data.inc \
   --project-file README.md --project-file DISC.md --project-file cheats.txt \
   --project-file DEVELOPING.md \
   --project-file CHANGELOG.md \
@@ -196,7 +197,7 @@ the two script files with
 trigger-writing bound without running it: the id space directly above a vanilla
 range is exactly where the game put the next family.
 
-### Run all three gates before every release
+### Run all four gates before every release
 
 ```bash
 py -3.12 tools/check_mod_collisions.py
@@ -208,6 +209,10 @@ py -3.12 tools/verify_disc_patches.py
 
 ```bash
 py -3.12 tools/verify_setup_package.py dist/digimon-world-<version>-win-x64.zip
+```
+
+```bash
+py -3.12 tools/gen_cheats_mod.py --check
 ```
 
 The first catches two co-enablable features writing the same byte differently —
@@ -237,6 +242,15 @@ before a player reported it, because the release process looked at the package
 as a file list and never as a compiler sees it. The exclusion is now anchored
 (`--exclude '/generated'`) and this gate is what keeps it that way; it passes
 on 0.1.5 and fails on 0.1.6, 0.2.0 and 0.3.0.
+
+The fourth keeps the cheat mod honest. `dw.vanilla.cheats` turns every cheat
+in `cheats.txt` into a launcher toggle, and its manifest is **generated** from
+that file by `tools/gen_cheats_mod.py` -- deliberately carrying names and no
+codes, so it cannot disagree with the file about an address. What it can do is
+go stale: rename or delete a cheat and the option still exists, pointing at a
+name nothing matches. `--check` fails on exactly that. Regenerate with the same
+tool and no flag, then commit both `mods/packages/dw.vanilla.cheats/` and
+`dw_cheats_data.inc`.
 
 The first two are also worth running after regenerating any manifest, not only
 at release time — they are seconds each. So is the header half of the third;

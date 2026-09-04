@@ -108,6 +108,7 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 | **Quality of Life** | Make your partner live longer than the stock 15 in-game days; slow the world clock so hunger, tiredness and ageing all relax together |
 | **Gameplay** | Better odds of learning techniques in battle; lower the stat requirements for evolutions |
 | **Widescreen** | 16:9 or 16:10. The wider view is rendered at full width and shown 1:1, so nothing is stretched — menus, text boxes and the HUD keep their original shapes, and the extra width is real extra view on both sides. Two rough edges remain, listed under Mods below |
+| **Cheats** | All 57 GameShark-style codes as toggles, grouped by what they affect — infinite HP, freeze the clock, max stats, every card and item, and more. Off by default; while it is off, `cheats.txt` decides instead |
 | **Fast Loading** | Shorter loads. **Off by default and best left off on this game** -- it speeds up real time whenever it thinks a load is happening, and on Digimon World it stays engaged, running the whole game at 4x. |
 
 Turning a mod off restores the original game exactly — every change is a guarded
@@ -194,14 +195,21 @@ One caveat worth understanding: a save created with this mod on expects it to
 stay on. If you turn it off, that save's partner data no longer lines up.
 Either keep it enabled for that playthrough, or start a separate file.
 
-**Cheats:** open `cheats.txt` in Notepad and change `[ ]` to `[x]` on any code,
-then restart. The codes are grouped by what they affect, and many exist nowhere
-else — they were derived from a decompilation of the game rather than copied
-from published lists, and the published ones were re-checked against it rather
-than trusted. Two worth knowing: **"Skip all movies"** is on by default and
-takes you straight to the title instead of the two-minute intro, and **"Freeze
-the game clock"** stops hunger, tiredness, ageing and the lifespan countdown all
-at once.
+**Cheats:** tick **Cheats** in the Mods panel and choose from the list — every
+code is there, grouped by what it affects. Turning that on hands the whole cheat
+list to the launcher.
+
+You can still do it the old way: open `cheats.txt` in Notepad, change `[ ]` to
+`[x]` on any code and restart. Leave the Mods entry off and that file keeps
+deciding, exactly as it always did.
+
+Many of these codes exist nowhere else — they were derived from a decompilation
+of the game rather than copied from published lists, and the published ones were
+re-checked against it rather than trusted.
+
+Two worth knowing: **"Skip all movies"** is on by default and takes you
+straight to the title instead of the two-minute intro, and **"Freeze the game
+clock"** stops hunger, tiredness, ageing and the lifespan countdown at once.
 
 Back up your `saves` folder before using them. Several write things the game
 keeps on the memory card, so their effects outlive switching the cheat off. And
