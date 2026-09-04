@@ -75,12 +75,9 @@ was re-checked against the decompiled game, and this time against the code that
 READS each value rather than just the address it writes. Seven were wrong and
 three were deleted:
 
-* **"Press O to beat the game" fired on D-pad Right.** The pad word the code
-  tests is inverted, so the mask was for the wrong button entirely. Anyone who
-  enabled it ended their run the first time they walked right. "Press Square to
-  lay a pile of poop" had the same fault, firing on Left, and also set every
-  condition flag at once — sick, injured, sleepy — in a value the game saves to
-  your memory card.
+* **"Press Square to lay a pile of poop" set every condition flag at once** —
+  hungry, injured, sick and more — in a value the game saves to your memory
+  card. It now sets only the one it should.
 * **"Always have Finish available" made Finish permanently unavailable**, unless
   your Speed was exactly 199. The check is an equality against a target derived
   from Speed, and the code pinned one side of it.

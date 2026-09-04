@@ -348,22 +348,39 @@ E0134EBE 0001
 301BDF2C 0063          #   <- Item Keeper store, item ids 0..127 = 99
                        #      (SCRIPT_STATE+0x54, 0x801BDF2C..0x801BDFAB)
 
-# CORRECTED in 0.3.4. 0x80135450 is the RAW pad word and it is ACTIVE LOW --
-# PadRead (0x80091BF8) reads it and NORs it to make POLLED_INPUT, which is the
-# active-high value the game itself tests. So the mask here must be INVERTED:
-# Circle is bit 0x2000, hence 0xDFFF. The old value 0xFFDF is ~0x0020 = D-pad
-# RIGHT, so this code ended the run the first time you walked right.
+# 0x80135450 is the RAW pad word and it is ACTIVE LOW: PadRead (0x80091BF8)
+# reads it and NORs it to make POLLED_INPUT, so the mask here is inverted.
+#
+# The bit layout is the PsyQ one, NOT the raw hardware mask, because the pad
+# buffer is byte-swapped relative to it. Read it off the game's own code:
+#   inventory.c:766-773  moveMenuCursor -- 0x1000 moves a menu cursor UP and
+#                        0x4000 moves it DOWN, so those are the D-PAD
+#   map.c:1272           newly-pressed 0x40 extends the interaction box along
+#                        the way the player faces, so 0x40 is CROSS
+#   script_common.c:404+ 0x40 confirm, 0x10 cancel, 0x1000/0x4000 up/down,
+#                        0x800 Start
+# So: Triangle 0x10, Circle 0x20, Cross 0x40, Square 0x80; Up 0x1000,
+# Right 0x2000, Down 0x4000, Left 0x8000. "Circle alone" is therefore
+# ~0x0020 = 0xFFDF.
+#
+# A 0.3.4 pass briefly changed this to 0xDFFF on the assumption that the
+# hardware layout applied (Circle = 0x2000). It does not, and 0xDFFF is D-pad
+# RIGHT -- which would have ended the run the first time the player walked
+# right. Reverted the same day. The lesson is in docs/INTERNALS.md 6.4: read
+# the code that CONSUMES the field, not a convention you expect it to follow.
 [ ] Press O to beat the game
-D0135450 DFFF          # if Circle, and only Circle, is held
+D0135450 FFDF          # if Circle (0x20 active-high), and only Circle, is held
 80134EB4 0003          #   set the ending flag
 
-# CORRECTED in 0.3.4, twice over. 0xFF7F is ~0x0080 = D-pad LEFT, not Square
-# (see the note above); Square is bit 0x8000, so the mask is 0x7FFF. And the
-# old write set the entire low halfword -- sick AND injured AND sleepy AND
-# needs-toilet AND nine undefined bits -- in a field the game saves to the
-# memory card. Only 0x08 means "needs the toilet".
+# The gate is unchanged and correct -- Square is 0x80 active-high, so the raw
+# active-low word is ~0x0080 = 0xFF7F. See the layout note above; a 0.3.4 pass
+# briefly changed it to 0x7FFF (D-pad LEFT) and it was reverted.
+#
+# CORRECTED in 0.3.4: the old write set the entire low halfword -- hungry AND
+# injured AND sick AND needs-toilet AND nine undefined bits -- in a field the
+# game saves to the memory card. Only 0x08 means "needs the toilet".
 [ ] Press Square to lay a pile of poop
-D0135450 7FFF          # if Square, and only Square, is held
+D0135450 FF7F          # if Square (0x80 active-high), and only Square, is held
 30138460 0008          #   <- PartnerPara.condition (+0x00), the poop bit only
 
 # ------------------------------------------------------------ new digimon ----
@@ -403,8 +420,11 @@ D0135450 7FFF          # if Square, and only Square, is held
 801384A8 03E7          # <- remainingLifetime (+0x48) held at 999 hours
 
 [ ] Perfect condition (never sick, injured, sleepy or needing the toilet)
-80138460 0000          # <- PartnerPara.condition (+0x00), u32: bit 0x04
-80138462 0000          #    sleepy, 0x08 poop, 0x20 injured, 0x40 sick
+80138460 0000          # <- PartnerPara.condition (+0x00), u32. Bits: 0x01
+80138462 0000          #    overdue for sleep, 0x02 very tired, 0x04 HUNGRY
+                       #    (partner_impl.c:412 -- not "sleepy" as this said
+                       #    before 0.3.4), 0x08 needs the toilet, 0x20
+                       #    injured, 0x40 sick
 
 [ ] Infinite training energy
 8013849C 0050          # <- energyLevel (+0x3C) = 80, the highest energyCap

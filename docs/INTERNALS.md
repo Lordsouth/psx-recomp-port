@@ -639,8 +639,7 @@ was still wrong, because nothing had checked what READS it.
 
 | Code | Was | Now | Why |
 |---|---|---|---|
-| Press O to beat the game | `D0135450 FFDF` | `DFFF` | `0x80135450` is the RAW pad word and is ACTIVE LOW; `PadRead` (0x80091BF8) NORs it into `POLLED_INPUT`. `FFDF` is `~0x0020` = D-pad **Right**, so the code ended the run the first time the player walked right. Circle is bit 0x2000 |
-| Press Square to lay a pile of poop | `D0135450 FF7F`, `80138460 FFFF` | `7FFF`, `30138460 0008` | Same inversion — `FF7F` is D-pad **Left**. And the write set every condition bit at once, in a field saved to the memory card; only 0x08 is "needs the toilet" |
+| Press Square to lay a pile of poop | `80138460 FFFF` | `30138460 0008` | The write set every condition bit at once — hungry, injured, sick, needs-toilet and nine undefined bits — in a field saved to the memory card. Only 0x08 is "needs the toilet". The pad gate was left alone; see below |
 | Always have Finish available | `8013D65A 0AF1` | goal and progress both `0001` | The gate is an EQUALITY (`battle_main.c:650`) against `finisherGoal = 3000 - Speed` (`battle_setup.c:100`). 2801 matches only at Speed 199; at any other Speed the code made Finish permanently **un**available |
 | Partner takes no damage | `8013D666 03E8` | `8013D66E 0000` | `+0x26` is `invulnerableTimer`, the post-hit recovery countdown — pinning it meant the first hit still landed and the fighter never recovered. Damage accumulates in `hpDamageBuffer` (+0x2E) and effective HP is `currentHP - hpDamageBuffer` |
 | Best Happiness / Best Discipline | `00AA` (170) | `0064` (100) | `tickConditionBoundaries` clamps both to 100 every frame, and three evolution branches test `== 100` exactly (`evolution.c:260-267`), so 170 silently blocked them |
@@ -659,8 +658,42 @@ And three were deleted outright rather than fixed:
   nineteen places. `MERIT` is at `0x80134FC4` and "Max Merit Points" already
   sets it.
 
-The lesson generalises: **an address being right does not make a value right.**
-Resolve the symbol, then read the code that consumes the field.
+### 6.3c The one this sweep got wrong
+
+Recorded because it is the most instructive thing in this section.
+
+The sweep also "corrected" the two pad-gated codes — `D0135450 FFDF` (Circle)
+and `FF7F` (Square) — to `DFFF` and `7FFF`, on the reasoning that the pad word
+is active low and Circle is bit 0x2000. The first half is right and the second
+is wrong, and the result would have shipped a code that ends the player's run
+the first time they walk right. It was caught by an independent re-derivation
+and reverted the same day.
+
+**`POLLED_INPUT` does not use the raw hardware mask.** The pad buffer is
+byte-swapped relative to it, so the game sees the PsyQ layout. Read it off the
+game's own code rather than assuming:
+
+| Evidence | Conclusion |
+|---|---|
+| `inventory.c:766-773` `moveMenuCursor`: 0x1000 moves a menu cursor **up**, 0x4000 moves it **down** | those two are the D-pad, not face buttons |
+| `map.c:1272`: newly-pressed 0x40 extends the interaction box along the way the player faces | 0x40 is **Cross** |
+| `script_common.c:404+`: 0x40 confirm, 0x10 cancel, 0x1000/0x4000 up/down, 0x800 Start | the PsyQ PADL/PADR layout throughout |
+
+So: Triangle 0x10, Circle **0x20**, Cross 0x40, Square **0x80**; Up 0x1000,
+Right 0x2000, Down 0x4000, Left 0x8000. A `D0` gate on the raw word inverts
+that, giving `FFDF` for Circle and `FF7F` for Square — the values that were
+already there.
+
+What made the mistake possible is that the wrong reading is *self-consistent*:
+under the hardware mask, `map.c:1998-2001`'s 0x1000/0x2000/0x4000/0x8000 reads
+as "the camera follows while a face button is held", which is odd but not
+obviously absurd. Under the right one it reads as "while a direction is held",
+which is obviously correct. **A convention that merely fits is not evidence.**
+
+The lesson generalises past this one code: **an address being right does not
+make a value right, and a plausible convention is not a derivation.** Resolve
+the symbol, then read the code that consumes the field — and prefer the reading
+under which the game makes sense.
 
 ### 6.4 Verifying a code before shipping it
 
@@ -673,13 +706,15 @@ defects were: a finisher code that only worked at one exact Speed, care values
 above a clamp the game applies every frame, and two pad-gated codes whose
 button masks were the wrong buttons entirely.
 
-The pad buffer is worth knowing because it caught the worst of them.
+The pad buffer is worth knowing because this sweep got it wrong (§6.3c).
 `0x80135450` holds the RAW pad word, which is ACTIVE LOW — `PadRead`
 (`0x80091BF8`) reads it and `nor`s it to produce `POLLED_INPUT`
-(`0x80134EE4`), which is the active-high one the game's own code tests. So a
-`D0` conditional on `0x80135450` must use the INVERTED mask: Circle is bit
-`0x2000`, so "Circle alone" is `0xDFFF`, not `0x2000`. Getting that backwards
-is how a code meant to fire on Circle fired on D-pad Right.
+(`0x80134EE4`), the active-high value the game's own code tests — **and that
+value uses the PsyQ layout, not the raw hardware mask.** Circle is `0x20`,
+Square `0x80`, Cross `0x40`, Triangle `0x10`; the D-pad is `0x1000`/`0x2000`/
+`0x4000`/`0x8000`. So a `D0` gate on the raw word is the inverse: `0xFFDF`
+for Circle. Derive it from `inventory.c:766-773` and `map.c:1272`, never from
+the hardware convention.
 
 ---
 
