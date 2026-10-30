@@ -39,10 +39,18 @@ cmake --build psxrecomp/recompiler/build
 py -3.12 psxrecomp/psxrecomp_cli.py generate --config game.toml --project-root . --disc "<path to your .cue>"
 cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DPSX_RECOMP_UI=ON -DRECOMP_UI_ENABLE_MODS=ON
 cmake --build build-release --target psx-runtime
+python tools/stage_overlay_toolchain.py build-release
 ```
 
 `generate` reads your disc and emits ~1.8M lines of C (47 shards); the build
 then compiles them. Expect 10–30 minutes the first time.
+
+The last line puts `overlay_toolchain/` (embedded Python, TinyCC, the
+recompiler) beside the exe, which is what the setup wizard's rebuild does for
+players. Without it, overlays the static build did not cover stay interpreted.
+`game.toml` deliberately has no `overlay_autocompile_cmd`: an explicit command
+overrides this bundle, and the old `py -3.12` one failed on every machine
+without exactly that interpreter.
 
 Python 3.10 or newer. Some tools want `tomllib` (3.11+); without it they fall
 back to `pip install tomli`.

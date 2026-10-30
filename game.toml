@@ -118,10 +118,12 @@ strict = true
 window_title = "Digimon World Recompiled"
 memcard_dir = "saves"
 
-# Tier-2 overlays: capture + background-compile to native DLLs (gcc on PATH
-# via the launcher bat). py -3.12 pinned: py -3 is 3.8 here, no tomllib.
+# Tier-2 overlays: capture + background-compile to native DLLs. No
+# overlay_autocompile_cmd on purpose: an explicit command overrides the
+# overlay_toolchain/ (embedded Python + tcc + recompiler) the setup wizard's
+# rebuild stages beside the exe, and a fixed `py -3.12` failed for every player
+# without exactly that interpreter. Dev builds: see DEVELOPING.md.
 overlay_cache = true
-overlay_autocompile_cmd = "py -3.12 psxrecomp/tools/compile_overlays.py --game-toml game.toml --recompiler psxrecomp/recompiler/build/psxrecomp-game.exe --runtime-include psxrecomp/runtime/include --out-dir cache"
 
 [video]
 renderer = "opengl"
