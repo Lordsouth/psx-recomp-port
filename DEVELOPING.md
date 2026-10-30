@@ -60,7 +60,7 @@ cmake -S . -B build-setup -G Ninja -DCMAKE_BUILD_TYPE=Release \
 cmake --build build-setup --target psx-runtime
 
 psxrecomp/tools/package_setup_host.sh \
-  --build-dir build-setup --artifact win-x64 \
+  --build-dir build-setup --artifact windows-x64 \
   --zip-prefix digimon-world \
   --exe-name Digimon_World_Recompiled \
   --display-name "Digimon World Recompiled" \
@@ -218,7 +218,7 @@ py -3.12 tools/verify_disc_patches.py
 ```
 
 ```bash
-py -3.12 tools/verify_setup_package.py dist/digimon-world-<version>-win-x64.zip
+py -3.12 tools/verify_setup_package.py dist/digimon-world-<version>-windows-x64.zip
 ```
 
 ```bash

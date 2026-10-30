@@ -7,7 +7,7 @@ high-resolution rendering, save states, rewind, and a mod menu.
 ### Getting it
 
 Check the [Releases](https://gitlab.com/ethan4love/psx-recomp-port/-/releases)
-page for a setup package (`digimon-world-*-win-x64.zip`). If none is attached,
+page for a setup package (`digimon-world-*-windows-x64.zip`). If none is attached,
 build one yourself — see [DEVELOPING.md](DEVELOPING.md).
 
 Either way there is **no playable download**: the port is generated from your
@@ -32,7 +32,7 @@ version and how to check yours is right.
 ## Installing
 
 These steps assume you have the **setup package**
-(`digimon-world-*-win-x64.zip`) from Releases, or one you built yourself per
+(`digimon-world-*-windows-x64.zip`) from Releases, or one you built yourself per
 [DEVELOPING.md](DEVELOPING.md). It contains no game data either way.
 
 **1. Extract the zip.** Right-click → Extract All. Put it somewhere you'll keep

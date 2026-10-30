@@ -27,8 +27,8 @@ match its hash):
            package builds rather than merely looks complete.
 
 Usage:
-    py -3.12 tools/verify_setup_package.py dist/stage-setup-win-x64
-    py -3.12 tools/verify_setup_package.py dist/digimon-world-0.3.1-win-x64.zip
+    py -3.12 tools/verify_setup_package.py dist/stage-setup-windows-x64
+    py -3.12 tools/verify_setup_package.py dist/digimon-world-0.4.0-windows-x64.zip
     py -3.12 tools/verify_setup_package.py <path> --build
 """
 
@@ -227,8 +227,11 @@ def check_build(root):
     gen = ["-G", "Ninja"] if shutil.which("ninja") else []
     try:
         for stage, cmd in (
+            # Tests off: a player's setup builds the emitters, never the test
+            # suite, and two upstream interp tests do not link on mingw clang.
             ("configure", ["cmake", "-S", src, "-B", build,
-                           "-DCMAKE_BUILD_TYPE=Release"] + gen),
+                           "-DCMAKE_BUILD_TYPE=Release",
+                           "-DBUILD_TESTING=OFF"] + gen),
             ("build", ["cmake", "--build", build]),
         ):
             p = subprocess.run(cmd, capture_output=True, text=True)
