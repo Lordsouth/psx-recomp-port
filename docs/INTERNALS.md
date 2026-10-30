@@ -568,7 +568,7 @@ it on.
 `[m, 192-m]`, an interval that is EMPTY for `m > 96`; the 106 px sliver lifts
 the practical bound to about 78. 21:9 clears neither, and it is not a tuning
 constant away — it is the ring's size. The game ships its own copy of the
-framework's widescreen manifest, under `mods/packages/`, with that choice
+framework's widescreen manifest, under `mods/preloaded/packages/`, with that choice
 removed. If the builtin's version is ever bumped past 1.0.0 the override stops
 applying silently, because the loader takes the highest semver.
 
@@ -859,7 +859,7 @@ non-redistributable, then **asserts** afterwards that no marker and no
 never-ship package survived — failing the build rather than silently
 redistributing another work's bytes.
 
-`verify_setup_package.py` adds the positive half: under `mods/packages` only
+`verify_setup_package.py` adds the positive half: under `mods/preloaded/packages` only
 `manifest.toml` files may ship, plus the Digimon World 1.5 BPS at its exact
 path and SHA-256. Any other file there fails the gate.
 

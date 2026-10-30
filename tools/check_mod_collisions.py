@@ -25,7 +25,7 @@ import tomllib
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 SEARCH = [
-    os.path.join(ROOT, "mods", "packages"),
+    os.path.join(ROOT, "mods", "preloaded", "packages"),
     os.path.normpath(os.path.join(ROOT, "psxrecomp", "mods", "builtin",
                                   "packages")),
 ]

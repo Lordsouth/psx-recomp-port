@@ -15,7 +15,7 @@ project(DigimonWorldVanilla LANGUAGES C CXX)
 # recomp-ui is cloned at ./recomp-ui, so PSX_RECOMP_UI stays at its default ON
 # and runtime.cmake auto-detects RECOMP_UI_ROOT. This is what draws the launcher
 # and, with RECOMP_UI_ENABLE_MODS (framework-seeded ON), the Mods panel that
-# toggles mods/packages/dw.vanilla.trainer.
+# toggles mods/preloaded/packages/dw.vanilla.trainer.
 # Netplay — single-player title, stays off:
 # if(EXISTS "${PSXRECOMP_ROOT}/lib/recomp-net/CMakeLists.txt")
 #     set(PSX_NETPLAY ON CACHE BOOL "…" FORCE)
@@ -54,6 +54,10 @@ psxrecomp_add_game_runtime(psx-runtime
     # APP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/assets/psxrecomp.ico"
     GEN_MARKER "generated/SLUS_010.32_dispatch.c"
     GEN_FULL_GLOB "generated/SLUS_010.32_full_*.c"
+    # mods/preloaded/packages is staged into <exe>/mods/bundled after the framework
+    # builtins, so the game's psx.enhancement.widescreen (no 21:9) overrides
+    # the builtin of the same id and version.
+    PRELOADED_MODS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/mods/preloaded"
     ${_dw_codegen_setup}
 )
 
@@ -69,16 +73,3 @@ foreach(_PSX_RUNTIME_CONFIG game.toml game_options.toml)
             VERBATIM)
     endif()
 endforeach()
-
-# Stage this game's own mod packages beside the exe. runtime.cmake only stages
-# the framework's builtin catalog (psxrecomp/mods/builtin/packages); a title's
-# packages are its own to install. mods/state.toml is launcher-owned user state
-# and is deliberately NOT copied, so toggles survive a rebuild.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mods/packages")
-    add_custom_command(TARGET psx-runtime POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/mods/packages"
-            "$<TARGET_FILE_DIR:psx-runtime>/mods/packages"
-        COMMENT "Staging game mod packages"
-        VERBATIM)
-endif()

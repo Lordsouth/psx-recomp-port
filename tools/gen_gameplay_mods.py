@@ -233,7 +233,7 @@ def main():
           % (emitted, len(EVO_CHOICES) - 1))
 
     dest_dir = os.path.normpath(os.path.join(
-        HERE, "..", "mods", "packages", PKG_ID, PKG_VER))
+        HERE, "..", "mods", "preloaded", "packages", PKG_ID, PKG_VER))
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, "manifest.toml")
     with open(dest, "w", encoding="utf-8", newline="\n") as f:

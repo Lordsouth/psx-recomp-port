@@ -47,7 +47,7 @@ ROOT = os.path.normpath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 from extract_disc_file import SECTOR, USER_OFF, USER_SIZE, parse_record, walk  # noqa: E402
 
-PKG_GLOB = os.path.join(ROOT, "mods", "packages", "*", "*", "manifest.toml")
+PKG_GLOB = os.path.join(ROOT, "mods", "preloaded", "packages", "*", "*", "manifest.toml")
 SELF = "dw.1_5"
 ALWAYS_EXCLUSIVE = {"dw.vanilla.roster"}
 NOT_SHIPPED = {"dw.vanilla.vice"}

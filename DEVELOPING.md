@@ -90,7 +90,7 @@ directory records and a player could not extract it.
 
 ### Check the staged tree before archiving
 
-`--project-dir mods` sweeps in **everything** under `mods/packages`, including
+`--project-dir mods` sweeps in **everything** under `mods/preloaded/packages`, including
 generated manifests that embed another project's bytes and must never be
 redistributed. The framework working tree can also carry stray `.mcd` memory
 cards holding real saves. Both were present the first time this was packaged.
@@ -100,10 +100,10 @@ no `generated/*.c` and no BIOS dump. The only `.bin` should be
 `psxrecomp/bios/openbios.bin`, which is open source.
 
 `--project-dir mods` also carries
-`mods/packages/dw.1_5/1.0.0/assets/digimon_world_1_5_test1.bps`, the Digimon
+`mods/preloaded/packages/dw.1_5/1.0.0/assets/digimon_world_1_5_test1.bps`, the Digimon
 World 1.5 patch. It ships on purpose: it is the mod author's own file, holds
 only 1.5's changes, and is applied to the player's disc at run time. It is the
-only non-manifest file allowed under `mods/packages`; the third gate below
+only non-manifest file allowed under `mods/preloaded/packages`; the third gate below
 fails on anything else there, or on a BPS whose hash changed.
 
 ## Notes on the configuration
@@ -132,7 +132,7 @@ path in these docs is the same: cited so the reasoning can be traced by someone
 with the working tree, not because the file ships to anyone.
 
 **Only 16:9 and 16:10 are offered**, via a game-owned copy of the framework's
-widescreen manifest under `mods/packages/psx.enhancement.widescreen`. 21:9 asks
+widescreen manifest under `mods/preloaded/packages/psx.enhancement.widescreen`. 21:9 asks
 for 120 px of reveal per side and the tile ring tops out near 96 even with the
 sliver, so it degraded rather than widened. If the framework's builtin manifest
 version is ever bumped past 1.0.0 that override stops applying silently, since
@@ -174,7 +174,7 @@ still runs correctly — overlay code just stays in the interpreter.
 
 ## Mod manifests
 
-`tools/gen_*.py` regenerate the manifests under `mods/packages/`, reading every
+`tools/gen_*.py` regenerate the manifests under `mods/preloaded/packages/`, reading every
 guard byte from **this project's own extracted executable**. Regenerate rather
 than hand-editing, and never copy a manifest between builds of different
 executables — the tables are not interchangeable.
@@ -233,7 +233,7 @@ py -3.12 tools/check_dw15_compat.py
 
 It needs the stock disc and the 1.5 image (the BPS applied with Flips or Rom
 Patcher JS) and lists the features that must be off while Digimon World 1.5 is
-on. Keep the `conflicts` lists in `mods/packages/dw.1_5/1.0.0/manifest.toml`
+on. Keep the `conflicts` lists in `mods/preloaded/packages/dw.1_5/1.0.0/manifest.toml`
 equal to its output.
 
 The first catches two co-enablable features writing the same byte differently —
@@ -270,7 +270,7 @@ that file by `tools/gen_cheats_mod.py` -- deliberately carrying names and no
 codes, so it cannot disagree with the file about an address. What it can do is
 go stale: rename or delete a cheat and the option still exists, pointing at a
 name nothing matches. `--check` fails on exactly that. Regenerate with the same
-tool and no flag, then commit both `mods/packages/dw.vanilla.cheats/` and
+tool and no flag, then commit both `mods/preloaded/packages/dw.vanilla.cheats/` and
 `dw_cheats_data.inc`.
 
 The first two are also worth running after regenerating any manifest, not only

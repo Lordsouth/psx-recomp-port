@@ -33,7 +33,7 @@ Overlays are patched through `disc_user`, whose offsets are
 ISO directory here rather than hardcoded.
 
 REDISTRIBUTION. The generated manifest embeds Vice's bytes. It is written to
-mods/packages/ which is gitignored for exactly this reason -- keep the
+mods/preloaded/packages/ which is gitignored for exactly this reason -- keep the
 generator, never commit its output.
 
   py -3.12 tools/gen_vice_mod.py            # write the manifest
@@ -287,7 +287,7 @@ def main():
                 "",
             ]
 
-    dest_dir = os.path.join(ROOT, "mods", "packages", PKG_ID, PKG_VER)
+    dest_dir = os.path.join(ROOT, "mods", "preloaded", "packages", PKG_ID, PKG_VER)
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, "manifest.toml")
     with open(dest, "w", encoding="utf-8", newline="\n") as f:

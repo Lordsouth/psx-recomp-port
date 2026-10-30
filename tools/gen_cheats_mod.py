@@ -18,7 +18,7 @@ Regenerate whenever cheats.txt changes:
 
     py -3.12 tools/gen_cheats_mod.py
 
-Writes mods/packages/dw.vanilla.cheats/1.0.0/manifest.toml and
+Writes mods/preloaded/packages/dw.vanilla.cheats/1.0.0/manifest.toml and
 dw_cheats_data.inc. `--check` verifies they are current without writing, which
 is what the release gate runs.
 """
@@ -31,7 +31,7 @@ import unicodedata
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHEATS = os.path.join(ROOT, "cheats.txt")
-PKG = os.path.join(ROOT, "mods", "packages", "dw.vanilla.cheats", "1.0.0",
+PKG = os.path.join(ROOT, "mods", "preloaded", "packages", "dw.vanilla.cheats", "1.0.0",
                    "manifest.toml")
 INC = os.path.join(ROOT, "dw_cheats_data.inc")
 

@@ -1162,7 +1162,7 @@ def main():
     out += overlay_retarget(ovl_sites, ovl_images)
     out += AUTHORED["extra_patches"]
 
-    dest_dir = os.path.join(ROOT, "mods", "packages", PKG_ID, PKG_VER)
+    dest_dir = os.path.join(ROOT, "mods", "preloaded", "packages", PKG_ID, PKG_VER)
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, "manifest.toml")
     with open(dest, "w", encoding="utf-8", newline="\n") as f:

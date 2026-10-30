@@ -26,7 +26,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
-PKG_DIR = os.path.join(ROOT, "mods", "packages")
+PKG_DIR = os.path.join(ROOT, "mods", "preloaded", "packages")
 
 # Packages that exist in the tree but are never shipped to players.
 NOT_SHIPPED = {"dw.vanilla.vice"}

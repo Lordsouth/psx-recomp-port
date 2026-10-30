@@ -14,7 +14,7 @@ and the launcher surfaced only "psxrecomp generate failed (exit 1)". Nothing in
 the release process looked at the package as a compiler sees it, so three
 releases went out before a player reported it.
 
-Checks, cheap first (plus a mod-payload check: under mods/packages only
+Checks, cheap first (plus a mod-payload check: under mods/preloaded/packages only
 manifests ship, and the one allowed binary, the Digimon World 1.5 BPS, must
 match its hash):
 
@@ -182,20 +182,20 @@ def check_canaries(present):
     return [c for c in CANARIES if c not in present]
 
 
-# The only non-manifest files allowed under mods/packages, by exact path and
+# The only non-manifest files allowed under mods/preloaded/packages, by exact path and
 # SHA-256: the Digimon World 1.5 author's own BPS. Anything else there is a
 # payload nobody reviewed for redistribution, so it fails the gate.
 MOD_PAYLOADS = {
-    "mods/packages/dw.1_5/1.0.0/assets/digimon_world_1_5_test1.bps":
+    "mods/preloaded/packages/dw.1_5/1.0.0/assets/digimon_world_1_5_test1.bps":
         "be45b36408f473da7200bcf0b120b634521d43ad1fe51e885439db0bc2cd0efe",
 }
 
 
 def check_mod_payloads(package, root, present):
-    """-> list of problems with files under mods/packages."""
+    """-> list of problems with files under mods/preloaded/packages."""
     bad = []
     for rel in sorted(present):
-        if not rel.startswith("mods/packages/") or rel.endswith("/manifest.toml"):
+        if not rel.startswith("mods/preloaded/packages/") or rel.endswith("/manifest.toml"):
             continue
         want = MOD_PAYLOADS.get(rel)
         if want is None:
@@ -274,7 +274,7 @@ def main():
             print("OK: every quoted include resolves inside the package.")
 
         payloads = check_mod_payloads(args.package, root, present)
-        print("\nchecked mods/packages for non-manifest files")
+        print("\nchecked mods/preloaded/packages for non-manifest files")
         if payloads:
             print("FAIL: mod packages carry files that must not ship as-is")
             for p in payloads:
