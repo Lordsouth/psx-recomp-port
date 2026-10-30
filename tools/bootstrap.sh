@@ -14,9 +14,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PSXRECOMP_URL="https://gitlab.com/ethan4love/psxrecomp.git"
-PSXRECOMP_REF="fix/bss-memfill-overlap"
-RECOMP_UI_URL="https://github.com/mstan/recomp-ui.git"
+PSXRECOMP_URL="https://github.com/Lordsouth/psxrecomp.git"
+PSXRECOMP_REF="feat/dw15-mod"
+# Fork of mstan/recomp-ui: the Mods page shows what a toggle turned off.
+RECOMP_UI_URL="https://github.com/Lordsouth/recomp-ui.git"
+RECOMP_UI_REF="feat/dw15-mod"
 
 if [[ -e psxrecomp ]]; then
   echo "psxrecomp/ already present -- leaving it alone"
@@ -28,8 +30,8 @@ fi
 if [[ -e recomp-ui ]]; then
   echo "recomp-ui/ already present -- leaving it alone"
 else
-  echo "cloning recomp-ui"
-  git clone "${RECOMP_UI_URL}" recomp-ui
+  echo "cloning recomp-ui (${RECOMP_UI_REF})"
+  git clone --branch "${RECOMP_UI_REF}" "${RECOMP_UI_URL}" recomp-ui
 fi
 
 echo

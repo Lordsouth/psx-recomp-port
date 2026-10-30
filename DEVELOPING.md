@@ -15,9 +15,11 @@ bash tools/bootstrap.sh
 
 That clones two things next to this repo:
 
-* [ethan4love/psxrecomp](https://gitlab.com/ethan4love/psxrecomp),
-  branch `fix/bss-memfill-overlap`
-* [mstan/recomp-ui](https://github.com/mstan/recomp-ui)
+* [Lordsouth/psxrecomp](https://github.com/Lordsouth/psxrecomp),
+  branch `feat/dw15-mod`
+* [Lordsouth/recomp-ui](https://github.com/Lordsouth/recomp-ui), branch
+  `feat/dw15-mod` -- mstan/recomp-ui plus the Mods-page message for a toggle
+  that turns other features off
 
 The psxrecomp checkout is a **fork, and it has to be**. Upstream cannot build
 this game at all: it rejects the executable outright, because the header's BSS
