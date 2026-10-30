@@ -1,0 +1,2 @@
+# Hashed by tools/verify_setup_package.py: keep these byte-exact on every checkout.
+mods/preloaded/packages/*/*/licenses/* -text
