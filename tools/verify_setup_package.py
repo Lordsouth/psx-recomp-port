@@ -183,11 +183,16 @@ def check_canaries(present):
 
 
 # The only non-manifest files allowed under mods/preloaded/packages, by exact path and
-# SHA-256: the Digimon World 1.5 author's own BPS. Anything else there is a
-# payload nobody reviewed for redistribution, so it fails the gate.
+# SHA-256: the Digimon World 1.5 author's own BPS, and the SIL OFL texts its
+# Chinese glyphs (Ark Pixel, Cubic 11) require alongside them. Anything else
+# there is a payload nobody reviewed for redistribution, so it fails the gate.
 MOD_PAYLOADS = {
     "mods/preloaded/packages/dw.1_5/1.0.0/assets/digimon_world_1_5_test1.bps":
         "be45b36408f473da7200bcf0b120b634521d43ad1fe51e885439db0bc2cd0efe",
+    "mods/preloaded/packages/dw.1_5/1.0.0/licenses/LICENSE-OFL-ArkPixel.txt":
+        "3ab41567e68e3988ba1ef16dd2644eca95ca5648ea12e7d46e6287fc0bbe5aee",
+    "mods/preloaded/packages/dw.1_5/1.0.0/licenses/LICENSE-OFL-Cubic11.txt":
+        "2b6e5938e5cffa0b9e183bd05f8c363e174e7ebed1a0556e2855fd1707fa2188",
 }
 
 
@@ -210,9 +215,10 @@ def check_mod_payloads(package, root, present):
         if hashlib.sha256(data).hexdigest() != want:
             bad.append("mod payload hash mismatch  %s" % rel)
     for rel in MOD_PAYLOADS:
-        manifest = rel.split("/assets/")[0] + "/manifest.toml"
+        # mods/preloaded/packages/<id>/<version>/manifest.toml
+        manifest = "/".join(rel.split("/")[:5]) + "/manifest.toml"
         if manifest in present and rel not in present:
-            bad.append("mod payload missing (package would not load)  %s" % rel)
+            bad.append("mod payload missing  %s" % rel)
     return bad
 
 
@@ -280,7 +286,7 @@ def main():
             for p in payloads:
                 print("   " + p)
         else:
-            print("OK: only manifests, plus the allowed Digimon World 1.5 BPS.")
+            print("OK: only manifests, plus the allowed Digimon World 1.5 BPS and its font licences.")
 
         rc = 1 if (gone or missing or payloads) else 0
 

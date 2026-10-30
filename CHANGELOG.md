@@ -32,18 +32,41 @@ disc file is never written. Untick it and you are back to the original game.
   against the 1.5 disc; the rest of the Trainer, Quality of Life, Tech Mastery
   and Widescreen passed.
 
+**Overlays now compile to native code for everyone.** Parts of the game that
+load from disc mid-play (battles, training, menus) are compiled to native code
+in the background. That step used to need the `py` launcher with exactly
+Python 3.12 installed; without it, every attempt failed silently and those
+parts stayed in the slower interpreter. It now uses the Python and compiler
+bundled with the setup package, so it works on any machine.
+
+**The framework is updated** to the latest upstream psxrecomp (two months of
+work: 60 fps rendering, HD movie replacement, audio-sync and widescreen
+fixes, and more). Speed in normal play is unchanged, measured side by side.
+
 Also:
 
 * Cheats no longer write to memory before the game has started. 1.5 parks its
   new code where the game later keeps its variables, so a cheat poking that
   spot while the disc was still loading (as "Skip all movies" does by default)
   could have damaged it.
-* The release gate `tools/verify_setup_package.py` now fails if anything other
-  than a manifest ships under `mods/packages`, with one exception: the 1.5
-  patch file, checked by hash.
+* The setup package is now named `digimon-world-*-windows-x64.zip`.
+* The game's mods moved to `mods/preloaded/packages` and are staged by the
+  framework. Done the old way, the updated framework replaced this game's
+  Widescreen with its generic one (which offers 21:9, which this game cannot
+  cover) and, on first launch, would have deleted the game's mod sources that
+  the setup wizard rebuilds from.
+* 1.5's patch contains glyphs from two SIL OFL fonts (Ark Pixel, Cubic 11);
+  their licence texts now ship beside it, as the OFL requires.
+* The release gate `tools/verify_setup_package.py` fails if anything other than
+  a manifest ships under `mods/preloaded/packages`, except the 1.5 patch and
+  its two licence files, each checked by hash.
 
-Known at the time: one cheat, "Shrink your own collision box", writes a
-Digimon record 1.5 changed, so it may affect a different Digimon there.
+Known at the time:
+
+* One cheat, "Shrink your own collision box", writes a Digimon record 1.5
+  changed, so it may affect a different Digimon there.
+* With 1.5 ticked, the launcher's memory card preview still shows the normal
+  cards. The game itself uses `saves/dw15/`.
 
 ---
 

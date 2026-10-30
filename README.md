@@ -301,7 +301,8 @@ recompiler doing the real work here. Game internals mapped with
 Digimon World 1.5 is by Capablemite
 ([YouTube](https://www.youtube.com/@capablemite)); the mod ships the author's
 own patch file, unchanged. Its Chinese text uses Ark Pixel Font (TakWolf) and
-Cubic 11 (ACh-K), SIL Open Font License 1.1.
+Cubic 11 (ACh-K), SIL Open Font License 1.1; the licence texts are in
+`mods/preloaded/packages/dw.1_5/1.0.0/licenses/`.
 
 Digimon World is © Bandai. This project ships no game content and is not
 affiliated with or endorsed by Bandai.

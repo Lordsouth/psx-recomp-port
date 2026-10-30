@@ -93,3 +93,6 @@ starvation_dump.jsonl
 
 # Generated Vice mod embeds bytes from the Vice hack -- never commit it.
 /mods/preloaded/packages/dw.vanilla.vice/
+
+# Download cache of tools/stage_overlay_toolchain.py (pinned Python + tcc)
+/.cache/

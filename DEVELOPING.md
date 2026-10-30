@@ -110,9 +110,11 @@ no `generated/*.c` and no BIOS dump. The only `.bin` should be
 `--project-dir mods` also carries
 `mods/preloaded/packages/dw.1_5/1.0.0/assets/digimon_world_1_5_test1.bps`, the Digimon
 World 1.5 patch. It ships on purpose: it is the mod author's own file, holds
-only 1.5's changes, and is applied to the player's disc at run time. It is the
-only non-manifest file allowed under `mods/preloaded/packages`; the third gate below
-fails on anything else there, or on a BPS whose hash changed.
+only 1.5's changes, and is applied to the player's disc at run time. Beside it,
+`licenses/` carries the SIL OFL texts for the Ark Pixel and Cubic 11 glyphs the
+patch contains, which the OFL requires to travel with them. Those three are the
+only non-manifest files allowed under `mods/preloaded/packages`; the third gate
+below fails on anything else there, on a changed hash, or on one missing.
 
 ## Notes on the configuration
 
