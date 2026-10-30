@@ -14,7 +14,9 @@ and the launcher surfaced only "psxrecomp generate failed (exit 1)". Nothing in
 the release process looked at the package as a compiler sees it, so three
 releases went out before a player reported it.
 
-Two checks, cheap first:
+Checks, cheap first (plus a mod-payload check: under mods/packages only
+manifests ship, and the one allowed binary, the Digimon World 1.5 BPS, must
+match its hash):
 
   headers  Every quoted #include in the staged framework's C/C++ resolves to a
            file that is actually in the package. This is the check that would
@@ -31,6 +33,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import os
 import re
 import shutil
@@ -179,6 +182,40 @@ def check_canaries(present):
     return [c for c in CANARIES if c not in present]
 
 
+# The only non-manifest files allowed under mods/packages, by exact path and
+# SHA-256: the Digimon World 1.5 author's own BPS. Anything else there is a
+# payload nobody reviewed for redistribution, so it fails the gate.
+MOD_PAYLOADS = {
+    "mods/packages/dw.1_5/1.0.0/assets/digimon_world_1_5_test1.bps":
+        "be45b36408f473da7200bcf0b120b634521d43ad1fe51e885439db0bc2cd0efe",
+}
+
+
+def check_mod_payloads(package, root, present):
+    """-> list of problems with files under mods/packages."""
+    bad = []
+    for rel in sorted(present):
+        if not rel.startswith("mods/packages/") or rel.endswith("/manifest.toml"):
+            continue
+        want = MOD_PAYLOADS.get(rel)
+        if want is None:
+            bad.append("unexpected mod payload  %s" % rel)
+            continue
+        if os.path.isdir(package):
+            with open(os.path.join(root, rel), "rb") as f:
+                data = f.read()
+        else:
+            with zipfile.ZipFile(package) as z:
+                data = z.read(rel)
+        if hashlib.sha256(data).hexdigest() != want:
+            bad.append("mod payload hash mismatch  %s" % rel)
+    for rel in MOD_PAYLOADS:
+        manifest = rel.split("/assets/")[0] + "/manifest.toml"
+        if manifest in present and rel not in present:
+            bad.append("mod payload missing (package would not load)  %s" % rel)
+    return bad
+
+
 def check_build(root):
     """Configure and build the recompiler from the staged tree."""
     src = os.path.join(root, "psxrecomp", "recompiler")
@@ -233,7 +270,16 @@ def main():
         else:
             print("OK: every quoted include resolves inside the package.")
 
-        rc = 1 if (gone or missing) else 0
+        payloads = check_mod_payloads(args.package, root, present)
+        print("\nchecked mods/packages for non-manifest files")
+        if payloads:
+            print("FAIL: mod packages carry files that must not ship as-is")
+            for p in payloads:
+                print("   " + p)
+        else:
+            print("OK: only manifests, plus the allowed Digimon World 1.5 BPS.")
+
+        rc = 1 if (gone or missing or payloads) else 0
 
         if args.build:
             print("\nbuilding the recompiler from the staged tree ...")

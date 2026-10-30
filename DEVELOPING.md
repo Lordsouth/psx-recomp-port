@@ -71,6 +71,7 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file dw_roster.c --project-file dw_roster_data.inc \
   --project-file dw_evolution.c \
   --project-file dw_cheats.c --project-file dw_cheats_data.inc \
+  --project-file dw_dw15.c \
   --project-file README.md --project-file DISC.md --project-file cheats.txt \
   --project-file DEVELOPING.md \
   --project-file CHANGELOG.md \
@@ -95,6 +96,13 @@ cards holding real saves. Both were present the first time this was packaged.
 Before archiving, confirm the staged tree has no game executable, no disc image,
 no `generated/*.c` and no BIOS dump. The only `.bin` should be
 `psxrecomp/bios/openbios.bin`, which is open source.
+
+`--project-dir mods` also carries
+`mods/packages/dw.1_5/1.0.0/assets/digimon_world_1_5_test1.bps`, the Digimon
+World 1.5 patch. It ships on purpose: it is the mod author's own file, holds
+only 1.5's changes, and is applied to the player's disc at run time. It is the
+only non-manifest file allowed under `mods/packages`; the third gate below
+fails on anything else there, or on a BPS whose hash changed.
 
 ## Notes on the configuration
 
@@ -214,6 +222,17 @@ py -3.12 tools/verify_setup_package.py dist/digimon-world-<version>-win-x64.zip
 ```bash
 py -3.12 tools/gen_cheats_mod.py --check
 ```
+
+And whenever a manifest, a `game.toml` hook or the 1.5 BPS changes:
+
+```bash
+py -3.12 tools/check_dw15_compat.py
+```
+
+It needs the stock disc and the 1.5 image (the BPS applied with Flips or Rom
+Patcher JS) and lists the features that must be off while Digimon World 1.5 is
+on. Keep the `conflicts` lists in `mods/packages/dw.1_5/1.0.0/manifest.toml`
+equal to its output.
 
 The first catches two co-enablable features writing the same byte differently —
 a single collision makes the runtime discard the **entire** mod plan, so one

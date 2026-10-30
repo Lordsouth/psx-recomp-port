@@ -99,6 +99,7 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 
 | Mod | What it does |
 |---|---|
+| **Digimon World 1.5** | Capablemite's fan mod (Test Build 1.3.1) on your own disc: Veemon, Wormmon, Renamon and Guilmon lines, new eggs and special attacks. Has its own memory cards — see below |
 | **Expanded Roster** | **Adds 52 Digimon.** Machinedramon fills the game's one unused slot; the other 51 — Tentomon, Myotismon, Guardromon, Gigadramon, Panjyamon, BlueMeramon, Otamamon, Gotsumon and more — are finished Digimon that were on the disc all along as enemies only. All of them become partners you can genuinely raise and evolve into — see below |
 | **Trainer** | Fifteen independent toggles: never hungry, tired, sick or dead; no lifespan loss; plus the Training group below |
 | **Perfect Training** | Every training session pays the jackpot rate. The slot minigame secretly grades your reels into a reward multiplier, from 0.5x for a miss up to 10x for triple sevens — this makes every spin pay the top rate |
@@ -116,6 +117,26 @@ patch, nothing is permanent. Two things a save can carry across, though: a save
 made with **Expanded Roster** on expects it to stay on (see below), and if you
 raised one of the new Digimon on 0.3.3 or earlier, the flags that recorded it
 stay set. Neither breaks anything.
+
+### Digimon World 1.5
+
+**Digimon World 1.5** is Capablemite's fan mod, Test Build 1.3.1: Digimon from
+*Adventure 02* and *Tamers* on File Island, four new partner lines, new eggs,
+new special attacks, a four-page Digivolution Chart. You do not need a patched
+disc. Keep using your normal one; tick the mod and the launcher applies 1.5 to
+it in memory each time you play. Your disc file is never changed.
+
+* **Start a new game.** Saves from the original game may not work in 1.5.
+* **It has its own memory cards**, in `saves/dw15/`. Your normal saves in
+  `saves/` are not touched, and they come back when you untick it.
+* **Some mods cannot run with it**, because 1.5 rewrote the parts of the game
+  they edit: Expanded Roster (it uses the same free Digimon slots), Evolution
+  Unbound, Guaranteed Item Drops and the Native Evolution Engine. Ticking 1.5
+  turns them off. The rest of the Trainer, Quality of Life, Tech Mastery and
+  Widescreen work with it.
+* It is a test build. Report 1.5's own bugs to its author on the
+  [Digimon World 1.5 Discord](https://discord.gg/kPwvkk6dV); report anything
+  that only happens in this port here.
 
 ### What is still rough in Widescreen
 
@@ -276,6 +297,11 @@ changelog says who reported what.
 Built with [psxrecomp](https://github.com/mstan/psxrecomp) by mstan — the static
 recompiler doing the real work here. Game internals mapped with
 [dw_decomp](https://github.com/jype0/dw_decomp) by jype0.
+
+Digimon World 1.5 is by Capablemite
+([YouTube](https://www.youtube.com/@capablemite)); the mod ships the author's
+own patch file, unchanged. Its Chinese text uses Ark Pixel Font (TakWolf) and
+Cubic 11 (ACh-K), SIL Open Font License 1.1.
 
 Digimon World is © Bandai. This project ships no game content and is not
 affiliated with or endorsed by Bandai.

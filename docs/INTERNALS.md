@@ -109,7 +109,7 @@ did, and the only symptom was a table in guest RAM still reading its stock
 value in a live battle. If a callback appears not to exist, check the manifest
 before the code.
 
-Six plugins live here:
+Seven plugins live here:
 
 | File | What it does |
 |---|---|
@@ -119,6 +119,7 @@ Six plugins live here:
 | `dw_ws_backdrop.c` | fade plate, parked HUD, the clock and field gauges as single widgets, the battle bars' slide table (§5) |
 | `dw_ws_camera.c` | both camera clamps, the tile-ladder shift, the load-time nudge (§5) |
 | `dw_ws_sliver.c` | the fifth backdrop tile column, as a VRAM sliver (§5) |
+| `dw_dw15.c` | moves the memory cards to `saves/dw15/` while Digimon World 1.5 is on (§4.4) |
 
 `codegen_setup.c` is glue for the launcher build, not a plugin.
 
@@ -474,6 +475,66 @@ roll) and Evolution Unbound (scales the six stat requirements across all 63
 `EVO_REQ_DATA` entries; `-1` means "not required" and is preserved, and weight
 is deliberately untouched because it is an exact target, not a floor).
 
+### 4.4 `dw.1_5` — Digimon World 1.5 (Test Build 1.3.1)
+
+**1 feature, 1 `[[disc_delta]]`, 1 plugin** (`dw.dw15`). The fan mod by
+Capablemite, shipped as the author's own BPS
+(`assets/digimon_world_1_5_test1.bps`, unchanged).
+
+**How it applies.** With the feature on, the framework checks the player's
+stock disc against `source_sha256`, applies the BPS in memory, checks the
+result against `target_sha256`, and serves the changed and added sectors in
+place of the stock ones. 1.5 changes 20 files: ten overlays and five data files
+in place, and five files that grow and move past the old end of the disc (the
+executable among them), plus about 11 MB of new sectors no file points at. The
+player's disc file is never written.
+
+**The executable.** 1.5's `SLUS_010.32` is 0xB9000 bytes of text against
+0xA4800, with 25,189 bytes changed inside the stock range. Its entry point
+`0x80135000` is a stub in what the stock game uses as BSS. It copies three
+blocks out of that staging area and jumps to the stock entry `0x800A4240`:
+
+| From | To | Bytes |
+|---|---|---|
+| `0x80135100` | `0x801F0000` | 40960 |
+| `0x8013F100` | `0x801FA000` | 12032 |
+| `0x80142000` | `0x80089000` | 30720 |
+
+After entry the staging area is ordinary BSS again, so the game's variables
+there (`MOVIE_COMPLETED`, `PARTNER_PARA`) keep their stock addresses. Before
+entry it is code, which is why the cheat engine now waits for the game's entry
+point (`psx_cheats.c`): "Skip all movies" pokes `0x80135304` every frame, and
+during the BIOS load that byte is part of the block copied to `0x801F0204`.
+
+**Conflicts.** `tools/check_dw15_compat.py` (§7.5) compares every guarded
+write, every `game.toml` hook and the ranges the widescreen plugins depend on
+against the 1.5 disc. Four features cannot run with it:
+
+| Feature | Why |
+|---|---|
+| `dw.vanilla.roster/roster` | same free Digimon slots; 223 of its patches also hit changed bytes |
+| `dw.vanilla.gameplay/evolution-unbound` | 1.5 rewrote `EVO_REQ_DATA` |
+| `dw.vanilla.trainer/guaranteed-drops` | 1.5 changed 138 of the `DIGIMON_DATA` drop bytes it guards |
+| `dw.vanilla.evolution/native-evolution` | 1.5 changed `getFreshEvolutionTarget`, the replaced function |
+
+Everything else passed, widescreen included: none of its seven hooked
+functions, three matched call sites, two bracketed functions or the BTL bar
+slide table changed. Of the cheats, only "Shrink your own collision box"
+writes a byte 1.5 changed (a `DIGIMON_DATA` record).
+
+The manifest's package-level `conflicts` names the roster and evolution
+packages, which the loader enforces today by refusing to launch with both on.
+The feature-level `conflicts` list (all four) is not read yet; the framework
+has no per-feature exclusivity.
+
+**Saves.** `save_compatibility = "isolated"` is declarative only; the runtime
+does not act on it. `dw_dw15.c`'s activation callback calls
+`psx_mod_set_memcard_subdir("dw15")`, so the cards become
+`<memcard_dir>/dw15/card1.mcd` and `card2.mcd` (an explicit card path keeps its
+file name inside a `dw15/` folder next to it). Activation runs after every
+launcher session and before the cards are opened, and the request is cleared
+once used, so a session with 1.5 off opens the stock cards.
+
 ---
 
 ## 5. Widescreen
@@ -797,6 +858,23 @@ The setup packager purges any staged mod package whose manifest marks itself
 non-redistributable, then **asserts** afterwards that no marker and no
 never-ship package survived — failing the build rather than silently
 redistributing another work's bytes.
+
+`verify_setup_package.py` adds the positive half: under `mods/packages` only
+`manifest.toml` files may ship, plus the Digimon World 1.5 BPS at its exact
+path and SHA-256. Any other file there fails the gate.
+
+### 7.5 `check_dw15_compat.py` — run when a manifest, hook or the BPS changes
+
+Lists the features that cannot run with Digimon World 1.5 (§4.4). Needs the
+stock disc and the 1.5 image, and checks both against the manifest's hashes.
+A feature conflicts when a guarded write covers a byte 1.5 changed, a
+`disc_user` write lands in a file 1.5 moved, or a hook or plugin-read range it
+owns sits in changed code. Hook owners are a table in the tool; a new
+`game.toml` hook without an owner is an error.
+
+```
+py -3.12 tools/check_dw15_compat.py
+```
 
 ---
 

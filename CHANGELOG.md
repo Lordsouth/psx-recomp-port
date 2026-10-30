@@ -9,6 +9,44 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ---
 
+## 0.4.0 (draft)
+
+**Digimon World 1.5 is in the Mods panel.**
+
+Capablemite's fan mod, Test Build 1.3.1, is one tick away: Veemon, Wormmon,
+Renamon and Guilmon lines, new eggs, new special attacks, a four-page
+Digivolution Chart and a second Tech page. There is no patcher and no second
+disc. You keep your normal disc; with the mod on, the launcher checks it,
+applies the author's own patch file to it in memory and plays the result. The
+disc file is never written. Untick it and you are back to the original game.
+
+* **Start a new game.** 1.5's own notes say old saves may not work.
+* **Separate saves.** While 1.5 is on, the memory cards are `saves/dw15/`
+  instead of `saves/`, so a 1.5 save and a normal save can never overwrite each
+  other.
+* **Mods that cannot run with it are turned off**: Expanded Roster (both use
+  the same free Digimon slots), Evolution Unbound, Guaranteed Item Drops and
+  the Native Evolution Engine. Each edits bytes 1.5 changed, and one guard
+  failing would have thrown out every mod. The list comes from
+  `tools/check_dw15_compat.py`, which compares every patch and code hook
+  against the 1.5 disc; the rest of the Trainer, Quality of Life, Tech Mastery
+  and Widescreen passed.
+
+Also:
+
+* Cheats no longer write to memory before the game has started. 1.5 parks its
+  new code where the game later keeps its variables, so a cheat poking that
+  spot while the disc was still loading (as "Skip all movies" does by default)
+  could have damaged it.
+* The release gate `tools/verify_setup_package.py` now fails if anything other
+  than a manifest ships under `mods/packages`, with one exception: the 1.5
+  patch file, checked by hash.
+
+Known at the time: one cheat, "Shrink your own collision box", writes a
+Digimon record 1.5 changed, so it may affect a different Digimon there.
+
+---
+
 ## 0.3.5
 
 **The cheats are in the Mods panel.**
