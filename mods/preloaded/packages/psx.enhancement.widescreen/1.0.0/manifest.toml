@@ -68,15 +68,33 @@ label = "16:10"
 feature = "widescreen"
 id = "psx.widescreen"
 
-# The game's own per-frame work for this feature. It has to be declared here,
-# in the package whose feature it belongs to, because plugin CALLBACKS are
-# plan-selected: only ids a manifest names are dispatched. Function-entry hooks
-# fire regardless, which is what makes the omission easy to miss -- the rest of
-# dw_ws_backdrop.c kept working while this one silently never ran, and the only
-# symptom was a table that still read its stock value in a live battle.
+# The game's own work for this feature. Every plugin id below has to be
+# declared here, in the package whose feature it belongs to, because plugin
+# callbacks AND function-entry hooks are plan-selected: only ids a manifest
+# names are dispatched (build_function_entry_hooks). Exit and replace hooks
+# still fire regardless, which is what makes an omission easy to miss -- a
+# missing id silently never runs while the rest of the feature keeps working.
 #
-# What it does: holds the battle HP/MP bars' PARKED slide position out past the
-# widened frame. See dw_ws_backdrop.c, dw_btl_bars_vblank.
+# dw.ws.btl-bars: holds the battle HP/MP bars' PARKED slide position out past
+# the widened frame. See dw_ws_backdrop.c, dw_btl_bars_vblank.
 [[plugin]]
 feature = "widescreen"
 id = "dw.ws.btl-bars"
+
+# Entry hooks in dw_ws_backdrop.c: keep the pre-rendered backdrop tiles and
+# map objects registered with the squashed 3D and stretch the full-screen fade
+# (setPosDataPolyFT4), and park the HUD and clock needle at the widened edges.
+[[plugin]]
+feature = "widescreen"
+id = "dw.ws.backdrop-align"
+
+[[plugin]]
+feature = "widescreen"
+id = "dw.ws.hud-park"
+
+# Entry hook in dw_ws_camera.c: handleTileUpdate sees CAMERA_X shifted by the
+# reveal, so the backdrop tile ring covers the widened left edge; its exit
+# hook restores CAMERA_X.
+[[plugin]]
+feature = "widescreen"
+id = "dw.ws.tile-ladder"
