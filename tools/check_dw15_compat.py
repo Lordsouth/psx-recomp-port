@@ -10,8 +10,12 @@ hook on a function 1.5 rewrote silently stops firing, because the rewritten
 function runs interpreted and the hook lives in the compiled body.
 
 So a feature conflicts with 1.5 when:
-  * any of its main_exe / disc_user / disc_raw guarded writes covers a byte
-    that differs between the vanilla disc and the 1.5 disc;
+  * any of its main_exe guarded writes covers a byte that differs between the
+    vanilla and the 1.5 executable (as guest RAM, below);
+  * any of its disc_user / disc_raw writes touches a sector the 1.5 delta owns
+    -- one whose raw 2352 bytes 1.5 changed, or one past the stock disc's end.
+    The runtime refuses to launch such a plan ("collides at disc LBA ... with
+    disc delta"), whether or not the write's own bytes changed;
   * a disc_user write lands in a file 1.5 moved (it would patch a stale copy
     the game no longer reads);
   * a game.toml hook it owns (mod_function_entry/exit/replace_funcs) sits in a
@@ -19,19 +23,43 @@ So a feature conflicts with 1.5 when:
 The expanded roster is exclusive with 1.5 regardless: both use the same free
 Digimon slots.
 
+main_exe guards are checked when the plan is applied, at the stock entry point
+0x800A4240 -- under 1.5 that is after its entry stub has copied its blocks out
+of the staging area -- so both sides are compared as guest RAM at that moment.
+
+1.5-only features (dw.1_5's own extras, which reach dw15 through
+requires_feature constraints, or any feature with a [[requirement]] on
+dw.1_5/dw15) are expected to differ from vanilla: their guards are checked
+against 1.5 instead (main_exe as guest RAM at the entry point, disc writes
+against the patched disc, where past-end sectors exist), and a dw.1_5 feature
+without that constraint is an error (it could be ticked alone and fail its
+guard on the stock game). Mirroring the runtime, only the in-package
+requires_feature chain lets a write onto a delta-owned sector (it is then
+guarded and applied after the delta); a cross-package [[requirement]] does
+not, so such a write is an error.
+
+Last, the conflicts declared in manifests (dw15's list, plus any feature that
+names dw.1_5/dw15) must equal the computed list: a missing entry lets a failing
+guard throw out every mod, a stale one turns a working feature off.
+
 Cheats are per-frame RAM pokes, not guarded writes, and cheats.txt applies
 even with the cheats feature off, so they are reported and never auto-disabled:
 a cheat is flagged if it pokes a byte 1.5 changed in the original image or 1.5's
 relocated code. Pokes into 1.5's boot staging block (copied away by the entry
 stub, BSS afterwards) are listed too; they are safe only because the cheat
-engine waits for the game's entry point.
+engine waits for the game's entry point. A write behind a game gate (a D0-E3
+line on a word the two executables hold differently) runs on one game only and
+is listed as such instead; a game gate on a byte a mod patches, or one that
+passes on neither game, is an error.
 
   py -3.12 tools/check_dw15_compat.py
   py -3.12 tools/check_dw15_compat.py --vanilla <stock.bin> --patched <1.5.bin>
 
 The 1.5 image is the BPS applied to the stock disc (Flips or Rom Patcher JS);
-both hashes are checked against the dw.1_5 manifest. Exit 0 always prints the
-list; exit 2 means an input was missing or did not match.
+both hashes are checked against the dw.1_5 manifest. Exit 0: the list printed
+and the manifests agree with it; exit 1: a declared conflict is missing or
+stale, or a 1.5-only guard does not match 1.5; exit 2: an input was missing or
+did not match.
 """
 import argparse
 import glob
@@ -49,6 +77,7 @@ from extract_disc_file import SECTOR, USER_OFF, USER_SIZE, parse_record, walk  #
 
 PKG_GLOB = os.path.join(ROOT, "mods", "preloaded", "packages", "*", "*", "manifest.toml")
 SELF = "dw.1_5"
+DW15 = SELF + "/dw15"
 ALWAYS_EXCLUSIVE = {"dw.vanilla.roster"}
 NOT_SHIPPED = {"dw.vanilla.vice"}
 WS = "psx.enhancement.widescreen/widescreen"
@@ -140,19 +169,27 @@ class Disc:
         return None
 
 
+RAM_BASE, RAM_SIZE = 0x80000000, 0x200000
+
+
 class Exe:
-    """A PS-EXE as loaded: text at t_addr, BSS (zero) everywhere else."""
-    def __init__(self, blob):
+    """A PS-EXE as loaded: text at t_addr, BSS (zero) everywhere else; `ram`
+    is guest RAM at the stock entry point, after `copies` (src, dst, n) ran."""
+    def __init__(self, blob, copies=()):
         self.t_addr, t_size = struct.unpack_from("<II", blob, 0x18)
         self.text = blob[0x800:0x800 + t_size]
         self.end = self.t_addr + len(self.text)
+        self.ram = bytearray(RAM_SIZE)
+        self.ram[self.t_addr - RAM_BASE:self.end - RAM_BASE] = self.text
+        for src, dst, n in copies:
+            self.ram[dst - RAM_BASE:dst - RAM_BASE + n] = \
+                self.ram[src - RAM_BASE:src - RAM_BASE + n]
 
     def at(self, a, n):
-        out = bytearray(n)
-        lo, hi = max(a, self.t_addr), min(a + n, self.end)
-        if lo < hi:
-            out[lo - a:hi - a] = self.text[lo - self.t_addr:hi - self.t_addr]
-        return bytes(out)
+        o = a & 0x1FFFFFFF                  # KUSEG/KSEG0/KSEG1 alias the RAM
+        if o + n > RAM_SIZE:
+            raise ValueError("0x%08X+%d is outside guest RAM" % (a, n))
+        return bytes(self.ram[o:o + n])
 
 
 def first_diff(a, b):
@@ -198,49 +235,112 @@ def main():
             return 2
 
     van, pat = Disc(a.vanilla), Disc(a.patched)
-    vexe, pexe = Exe(van.file("/SLUS_010.32")), Exe(pat.file("/SLUS_010.32"))
+    vexe = Exe(van.file("/SLUS_010.32"))
+    pexe = Exe(pat.file("/SLUS_010.32"), RELOCATED)
 
     def exe_changed(lo, hi):
-        v, p = vexe.at(lo, hi - lo), pexe.at(lo, hi - lo)
+        try:
+            v, p = vexe.at(lo, hi - lo), pexe.at(lo, hi - lo)
+        except ValueError:
+            return lo                       # outside guest RAM: never "ok"
         return None if v == p else lo + first_diff(v, p)
 
+    van_sectors = len(van.m) // SECTOR
+
+    def owned(p, n):
+        """First sector of the write the runtime hands to the 1.5 delta
+        (build_delta_sectors: raw bytes changed, or past the stock end)."""
+        unit = SECTOR if p["target"] == "disc_raw" else USER_SIZE
+        for lba in range(p["offset"] // unit, (p["offset"] + n - 1) // unit + 1):
+            if lba >= van_sectors or \
+                    van.raw(lba * SECTOR, SECTOR) != pat.raw(lba * SECTOR, SECTOR):
+                return lba
+        return None
+
     reasons = {}          # "pkg/feature" -> [reason, ...]
-    features = []         # every (pkg/feature) we looked at, in order
+    features = []         # every vanilla (pkg/feature) we looked at, in order
+    only15 = {}           # 1.5-only "pkg/feature" -> [patches, [bad, ...]]
+    errors = []
 
     def flag(owner, why):
         reasons.setdefault(owner, []).append(why)
 
+    def guard_ok_on_1_5(p, exp):
+        t, n = p["target"], len(exp)
+        if t == "main_exe":
+            try:
+                return pexe.at(p["address"], n) == exp
+            except ValueError:
+                return False
+        if t == "disc_user":
+            return pat.user(p["offset"], n) == exp
+        return pat.raw(p["offset"], n) == exp
+
     for pkg, m in manifests.items():
-        if pkg == SELF or pkg in NOT_SHIPPED:
+        if pkg in NOT_SHIPPED:
             continue
+        if pkg == SELF:
+            req = {}
+            for c in m.get("constraint", []):
+                if c.get("kind") == "requires_feature":
+                    req.setdefault(c["feature"], []).append(c["requires_feature"])
+
+            def reaches_dw15(f):            # chains, like requires_delta
+                seen, todo = set(), [f]
+                while todo:
+                    f = todo.pop()
+                    if f == "dw15":
+                        return True
+                    if f not in seen:
+                        seen.add(f)
+                        todo += req.get(f, [])
+                return False
+            needs = {f["id"] for f in m.get("feature", [])
+                     if f["id"] != "dw15" and reaches_dw15(f["id"])}
+            for feat in m.get("feature", []):
+                if feat["id"] != "dw15" and feat["id"] not in needs:
+                    errors.append("%s/%s has no requires_feature dw15 constraint"
+                                  % (pkg, feat["id"]))
+        else:
+            needs = {r["feature"] for r in m.get("requirement", [])
+                     if r.get("package") == SELF and r.get("requires_feature") == "dw15"}
         for feat in m.get("feature", []):
             owner = "%s/%s" % (pkg, feat["id"])
-            features.append(owner)
+            if feat["id"] in needs:
+                only15[owner] = [0, []]
+            elif owner != DW15:
+                features.append(owner)
             if pkg in ALWAYS_EXCLUSIVE:
                 flag(owner, "uses the same free Digimon slots as 1.5")
         for p in m.get("patch", []):
             owner = "%s/%s" % (pkg, p["feature"])
             exp = bytes.fromhex(p["expected"].replace(" ", ""))
             t = p["target"]
+            if owner in only15:
+                only15[owner][0] += 1
+                where = "%s 0x%X" % (
+                    t, p["address"] if t == "main_exe" else p["offset"])
+                if t != "main_exe" and pkg != SELF and owned(p, len(exp)) is not None:
+                    only15[owner][1].append(where + " (on a 1.5-delta sector; "
+                                            "only dw.1_5's own features may write there)")
+                elif not guard_ok_on_1_5(p, exp):
+                    only15[owner][1].append(where)
+                continue
+            if owner == DW15:
+                continue
             if t == "main_exe":
                 lo = p["address"]
                 hit = exe_changed(lo, lo + len(exp))
                 if hit is not None:
                     flag(owner, "main_exe 0x%08X changed by 1.5" % hit)
-            elif t == "disc_user":
-                off = p["offset"]
-                v, q = van.user(off, len(exp)), pat.user(off, len(exp))
-                name = van.file_at(off // USER_SIZE)
-                if v != q:
-                    flag(owner, "disc_user %s+0x%X changed by 1.5" % (
-                        name, off + first_diff(v, q)
-                        - van.files[name][0] * USER_SIZE))
-                elif name and pat.files.get(name) != van.files[name]:
-                    flag(owner, "disc_user %s: 1.5 moved this file" % name)
-            elif t == "disc_raw":
-                off = p["offset"]
-                if van.raw(off, len(exp)) != pat.raw(off, len(exp)):
-                    flag(owner, "disc_raw %d changed by 1.5" % off)
+                continue
+            hit = owned(p, len(exp))
+            name = van.file_at(p["offset"] // USER_SIZE) if t == "disc_user" else None
+            if hit is not None:
+                flag(owner, "%s LBA %d (%s) collides with the 1.5 delta" % (
+                    t, hit, pat.file_at(hit) or van.file_at(hit) or "no file"))
+            elif name and pat.files.get(name) != van.files[name]:
+                flag(owner, "disc_user %s: 1.5 moved this file" % name)
 
     # Hooks: function = [start, next seed start).
     with open(os.path.join(ROOT, "game.toml"), "rb") as f:
@@ -271,25 +371,56 @@ def main():
         if v != q:
             flag(owner, "%s changed (%s)" % (label, name))
 
-    # Cheats (cheats.txt), reported per cheat.
-    cheat_conflicts, cheat_staging = {}, {}
-    name = None
+    # Cheats (cheats.txt), reported per cheat. A D0-D3/E0-E3 line gates the
+    # next line (psx_cheats.c). It is a game gate when its address is in the
+    # original image and the two executables differ there: it then passes on
+    # one game only, so the write it gates is checked for that game only. A
+    # mod patch on a game gate's word could flip it, which is an error.
+    exe_patched = [(p["address"], p["address"] + len(p["expected"].replace(" ", "")) // 2)
+                   for pkg, m in manifests.items() if pkg not in NOT_SHIPPED
+                   for p in m.get("patch", []) if p["target"] == "main_exe"]
+
+    def gate_games(op, addr, val):
+        n = 2 if op < 0xE0 else 1
+        if not vexe.t_addr <= addr <= vexe.end - n or exe_changed(addr, addr + n) is None:
+            return None                      # a runtime value: not a game gate
+        if any(lo < addr + n and addr < hi for lo, hi in exe_patched):
+            errors.append("cheats.txt gate 0x%08X is on a byte a mod patches"
+                          % addr)
+        val &= 0xFFFF if n == 2 else 0xFF
+        test = (lambda x: x == val, lambda x: x != val,
+                lambda x: x < val, lambda x: x > val)[op & 3]
+        return {g for g, e in (("stock", vexe), ("1.5", pexe))
+                if test(int.from_bytes(e.at(addr, n), "little"))}
+
+    cheat_conflicts, cheat_staging, cheat_gated = {}, {}, []
+    name, gate = None, None
     for line in open(os.path.join(ROOT, "cheats.txt"), encoding="utf-8"):
         line = line.split("#")[0].strip()
         if line.startswith("["):
-            name = line[3:].strip()
+            name, gate = line[3:].strip(), None
             continue
         parts = line.split()
         if not name or len(parts) != 2 or len(parts[0]) != 8:
             continue
         op, addr = int(parts[0][:2], 16), 0x80000000 | int(parts[0][2:], 16)
+        if 0xD0 <= op <= 0xD3 or 0xE0 <= op <= 0xE3:
+            gate = (addr, gate_games(op, addr, int(parts[1], 16)))
+            continue
+        (gaddr, games), gate = gate or (None, None), None
         if op not in (0x30, 0x80):
             continue
         n = 1 if op == 0x30 else 2
-        if addr < vexe.end and exe_changed(addr, addr + n) is not None:
-            cheat_conflicts.setdefault(name, (addr, "original image changed"))
-        elif any(d <= addr < d + ln for _, d, ln in RELOCATED):
+        if games is not None and len(games) < 2:
+            if not games:
+                errors.append("cheats.txt '%s': gate 0x%08X passes on neither "
+                              "game, so 0x%08X is never written" % (name, gaddr, addr))
+            cheat_gated.append((name, addr, "%s only" % games.pop() if games else "never", gaddr))
+            continue
+        if any(d <= addr < d + ln for _, d, ln in RELOCATED):
             cheat_conflicts.setdefault(name, (addr, "1.5 relocated code"))
+        elif addr < vexe.end and exe_changed(addr, addr + n) is not None:
+            cheat_conflicts.setdefault(name, (addr, "original image changed"))
         elif vexe.end <= addr < pexe.end:
             # Every byte here is copied out by the stub, zero or not.
             cheat_staging.setdefault(name, addr)
@@ -309,6 +440,12 @@ def main():
             print("              %s" % w)
         if len(why) > 3:
             print("              ... %d more" % (len(why) - 3))
+    for owner, (n, bad) in only15.items():
+        if bad:
+            errors.append("%s: %d of %d patches fail on 1.5, first %s"
+                          % (owner, len(bad), n, bad[0]))
+        else:
+            print("  ok (1.5)  %s  (needs dw15; %d guards match 1.5)" % (owner, n))
     stray = sorted(set(reasons) - set(features))
     for owner in stray:
         print("  CONFLICT  %s  (owner has no manifest feature): %s"
@@ -318,9 +455,11 @@ def main():
     # feature off too, so they are reported, never auto-disabled.
     print("\ncheats.txt (reported only):")
     if not cheat_conflicts and not cheat_staging:
-        print("  no cheat pokes a byte 1.5 changed")
+        print("  no ungated cheat pokes a byte 1.5 changed")
     for nm, (addr, why) in cheat_conflicts.items():
         print("  changed  0x%08X  %s  (%s)" % (addr, nm, why))
+    for nm, addr, games, gaddr in cheat_gated:
+        print("  gated    0x%08X  %s  (%s, gate 0x%08X)" % (addr, nm, games, gaddr))
     if cheat_staging:
         print("  %d cheat(s) poke 1.5's boot staging block 0x%08X..0x%08X;"
               % (len(cheat_staging), vexe.end, pexe.end))
@@ -333,7 +472,23 @@ def main():
     print("\nturn off with 1.5 (%d):" % len(off))
     for o in off:
         print("  " + o)
-    return 0
+
+    # What the manifests declare: dw15's list plus features naming dw15.
+    declared = set(next(f for f in manifests[SELF]["feature"]
+                        if f["id"] == "dw15").get("conflicts", []))
+    for pkg, m in manifests.items():
+        for feat in m.get("feature", []):
+            if DW15 in feat.get("conflicts", []):
+                declared.add("%s/%s" % (pkg, feat["id"]))
+    errors += ["%s conflicts with 1.5 but no manifest declares it" % o
+               for o in off if o not in declared]
+    errors += ["%s is declared as a 1.5 conflict but runs with 1.5" % o
+               for o in sorted(declared - set(off))]
+    print("\nmanifests: %s" % ("declared conflicts match, 1.5-only guards match"
+                                if not errors else "%d problem(s)" % len(errors)))
+    for e in errors:
+        print("  error: " + e)
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

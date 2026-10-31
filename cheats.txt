@@ -196,8 +196,17 @@ E0134EBE 0001
 # radii (map.c:1260), but the same field is also the drop-shadow size
 # (map.c:549) and half the interaction box (aabb.c:28), so your shadow
 # disappears and reaching things can get fiddly. Kept, honestly labelled.
+#
+# Digimon World 1.5 moved DIGIMON_DATA to 0x801F4300 (all 17 radius reads in
+# its executable use 0x801F4318), and under 1.5 0x8012CECC is another table.
+# So each write is gated on which game is running. The gate word 0x800ED2A0 is
+# the item-drop roll's `lui` of the DIGIMON_DATA address: 0x8013 in the stock
+# executable, 0x801F in 1.5's. No mod patches that word.
 [ ] Shrink your own collision box (enemies notice you late; no shadow)
+D00ED2A0 8013          # if the stock game (DIGIMON_DATA at 0x8012CEB4)
 8012CECC 0000          # <- DIGIMON_DATA[0].radius, record 0 = the Tamer
+D00ED2A0 801F          # if Digimon World 1.5 (DIGIMON_DATA at 0x801F4300)
+801F4318 0000          # <- the same field in 1.5's copy
 
 # REMOVED in 0.3.4: "Speed up the game" wrote 0x80115A4C, which is libapi's
 # internal _vsync_last. VSync REWRITES it unconditionally in its own epilogue
