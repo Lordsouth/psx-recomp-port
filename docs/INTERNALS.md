@@ -694,13 +694,14 @@ The defects catalogued in the widescreen survey are fixed by three game
 plugins -- `dw_ws_backdrop.c` (fade plate, parked HUD, the clock and the field
 gauges each as ONE widget, and the battle bars' slide table),
 `dw_ws_camera.c` (both camera clamps, the tile-ladder shift, the load-time
-nudge) and `dw_ws_sliver.c` (the fifth backdrop column, uploaded as a stacked
-VRAM sliver whenever the game's four-column ring falls short) -- and one
-framework primitive per need (`mod_function_exit_funcs`,
-`psx_mod_ws_native_wide_offset`, `psx_mod_vram_write`). Still open: ~1.2 s
-of 4:3 after a wild battle, a GTE-hysteresis timeout in the runtime's present
-classifier; GAME_STATE reads 0 on the title screen as well as the field, so
-the runtime's gameplay-state gate cannot replace the detector here. The
+nudge, the per-frame clamp, narrow-map centring, the widened visibility
+cull), `dw_ws_sliver.c` (the fifth backdrop column, uploaded as a stacked
+VRAM sliver whenever the game's four-column ring falls short, from a host
+copy of the tile file read off the disc) and `dw_ws_world.c` (keeps a field
+frame wide through a synchronous tile reload) -- and one framework primitive
+per need (`mod_function_exit_funcs`, `psx_mod_ws_native_wide_offset`,
+`psx_mod_vram_write`, `psx_mod_set_world_scene_predicate`). Section 5.0c has
+the 0.4.x pass and its numbers. The
 wider field of view is rendered into a genuinely wider framebuffer (320 -> 426
 at 16:9, `EXTRA = 2 * round(W*(3n-4d)/(8d))`) and presented 1:1. Nothing is
 stretched, so the entire "screen-space 2D renders stretched" problem class —
@@ -794,7 +795,55 @@ shadowed wall) and are left as designed.
 * **HD texture packs** key replacements on the uploaded bytes, so a pack's
   replacement for one of these tiles stops matching while widescreen is on.
 
-### 5.1 W1 — backdrop alignment (shipped in 0.1.7)
+### 5.0c Reloads, culls, narrow rooms, panning edges (0.4.x)
+
+Phase 1 of the widescreen plan. Every number below is a live run at 16:9 on a
+build-debug copy, widescreen only unless stated, against the same harness
+that measured the "before".
+
+* **No 4:3 snap after a won battle or an evolution** (`dw_ws_world.c`). Both
+  end with a synchronous `readMapTFS` during which nothing is drawn, and the
+  runtime's 45-frame GTE tail ran out. A world-scene predicate now latches
+  "the last completed frame drew the map" (renderMap exit, per buffer,
+  committed on the ACTIVE_FRAMEBUFFER flip). Battle won: 74 lit 4:3 frames ->
+  0 (the 128-frame static reload run stays wide). Evolution: 55 -> 0. The
+  title stays 4:3 (2686 of 2686 menu frames) and FMV is still vetoed after the
+  predicate.
+* **Characters and boxes stay drawn in the reveal** (`dw_ws_camera.c`,
+  `dw.ws.cull`). isOffScreen's width argument is widened by the cull envelope
+  for its two callers only (entityIsOffScreen, isBoxOffScreen, matched by
+  return address). In-reveal entities with isOnScreen = 1: 29 of 32 samples
+  (was 1 of 6); of the 3 off, two are below the frame and one is at the
+  widened edge. 12 of the 13 disagreements with the host model sit within
+  12 px of that edge. Under 1.5, where entityIsOffScreen runs interpreted,
+  28 of 28 vertically visible in-reveal samples were on, so the hook in the
+  compiled isOffScreen still fires. Battle membership follows the flag
+  (owner decision D1, option A).
+* **Narrow rooms are centred**: the 19 three-tile maps pin CAMERA_X at 32,
+  21 px of map-edge black per side at 16:9 (was up to 53 px on one side).
+  Measured on 206, 18, 29, 45, 207, 32, 84, 136; 207 shows 33-35 px on the
+  right because 12-14 px of its own art there is painted black.
+* **Arrivals** (`dw.ws.camera-follow`). The widened clamp and the load-time
+  nudge are re-applied at tickCameraFollowPlayer, gated to the plain field
+  camera (and off on 6/8/136 while FISH/KAR are resident). The 7-warp chain
+  after a savestate load: 5 of 7 bad arrivals -> 0 of 7.
+* **No void on the trailing edge while panning.** The frame is drawn with the
+  camera it started with, `C_eff = CAMERA_X + DRAWING_OFFSET_X -
+  DRAWING_OFFSET_X_COPY`, one step off the camera the ladder and the sliver
+  used. The sliver takes the larger deficit and the ladder shift adds the
+  lag. gapwalk, 4 walks per map: map 204 36+36 right (+9 arrival left) -> 0,
+  map 12 30+30 -> 0, map 69 15+15 right and 3+3 left -> 0. Pairing each
+  presented image with the snapshot one game frame earlier (double
+  buffering) is what makes the old voids line up with C_eff on 12 and 204;
+  69 never fitted that model, but measured 0 after the change too.
+* **The sliver reads the tile file from disc, never the tile store**
+  (`dw.ws.sliver`). readMapTFS's map id keys a host copy built with
+  `psx_mod_read_disc_file` (sector mods included); a savestate load drops it
+  and it is rebuilt from CURRENT_SCREEN. With column T+4's tiles overwritten
+  in guest RAM, the way a battle's effect heap overwrites them: sliver vs map
+  art 78.6 luma before, 0.3 after (0.2 after a savestate load with no warp).
+
+
 
 The "pre-rendered" room art is a grid of 128×128 tile quads drawn every frame,
 scrolling 1:1 with the camera, in the same pre-draw-offset coordinate space the

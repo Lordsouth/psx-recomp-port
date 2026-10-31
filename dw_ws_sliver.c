@@ -26,11 +26,11 @@
  *
  * So, on every frame the ring falls short:
  *
- *   1. read the VISIBLE rows of column T+4's tiles straight out of the map's
- *      tile store in RAM (MAP_TILE_DATA[].imagePtr: 8bpp, 128 bytes per row),
- *      as many leading halfwords per row as the deficit needs -- the tiles
- *      are already decoded there, it is what the game's own LoadImage uploads
- *      from;
+ *   1. read the VISIBLE rows of column T+4's tiles out of a host copy of the
+ *      map's tile file (8bpp, 128 bytes per row), as many leading halfwords
+ *      per row as the deficit needs -- the same bytes the game's own
+ *      LoadImage uploads from its tile store (see dw_tfs_load for why the
+ *      copy, and not the store itself);
  *   2. upload them, stacked, with psx_mod_vram_write -- the framework
  *      primitive added for this, since a plugin cannot call LoadImage, or any
  *      guest code;
@@ -52,12 +52,15 @@
  * rendering of the same world columns at exactly zero shift (mean luma diff
  * 0.0-6.7 at shift 0 against 9-20 one pixel either side).
  */
+#include <stdio.h>
+
 #include "cpu_state.h"
 #include "mod_plugins.h"
 
 extern int32_t psx_mod_ws_native_wide_offset(void);
 
 #define DW_RENDER_MAP 0x800D57ECu
+#define DW_READ_MAP_TFS 0x800D6308u         /* readMapTFS(int32 mapId) */
 
 #define DW_CAMERA_X 0x80150C38u             /* int16 */
 #define DW_CAMERA_Y 0x80150C3Au             /* int16 */
@@ -67,6 +70,12 @@ extern int32_t psx_mod_ws_native_wide_offset(void);
 #define DW_MAP_TILE_Y 0x80134DC4u           /* int8  */
 #define DW_DRAWING_OFFSET_X 0x80134EC0u     /* int32 */
 #define DW_DRAWING_OFFSET_Y 0x80134EC4u     /* int32 */
+#define DW_DRAWING_OFFSET_X_COPY 0x80134EDCu /* int32, what GsSetOrign got */
+#define DW_CURRENT_SCREEN 0x80134DA8u       /* uint8 */
+#define DW_MAP_ENTRIES 0x801292D4u          /* MapEntry[255], 16 bytes each */
+#define DW_MAP_ENTRY_BYTES 16
+#define DW_MAP_ENTRY_COUNT 255
+#define DW_MAP_NAME_MAX 10                  /* MapEntry.filename, char[10] */
 #define DW_ACTIVE_ORDERING_TABLE 0x80134ED0u /* GsOT* */
 #define DW_GSOT_ORG 4                       /* GsOT.org: GsOT_TAG* */
 #define DW_GS_OUT_PACKET_P 0x80136FE4u      /* libgs work base (GsGetWorkBase) */
@@ -86,6 +95,18 @@ extern int32_t psx_mod_ws_native_wide_offset(void);
 
 #define DW_TILE_PX 128
 #define DW_TILE_ROW_BYTES 128               /* 8bpp: 64 halfwords per row */
+#define DW_TILE_BYTES (DW_TILE_PX * DW_TILE_ROW_BYTES)
+/* .TFS layout (setupMap, map.c:4225-4262): int32, int32 numCluts, numCluts
+ * 256-colour CLUTs, then for each painted tile in MAP_TILES order a 4-byte
+ * header and the 128x128 8bpp image. */
+#define DW_TFS_CLUT_BYTES 512
+#define DW_TFS_CLUTS_MAX 16
+#define DW_TFS_TILE_STRIDE (4 + DW_TILE_BYTES)
+#define DW_TFS_MAX (8 + DW_TFS_CLUTS_MAX * DW_TFS_CLUT_BYTES + \
+                    DW_MAP_TILE_COUNT * DW_TFS_TILE_STRIDE)
+/* As in dw_ws_camera.c: a gap between the drawn and the stepped camera wider
+ * than any one camera step is not trusted. */
+#define DW_STEP_MAX 32
 #define DW_RING_COLS 4
 #define DW_RING_ROWS 3
 #define DW_SCREEN_W 320
@@ -130,6 +151,98 @@ struct dw_strip { int32_t row, vis0, vish; };
 
 static uint16_t dw_pixels[DW_SLIVER_MAX_HW * DW_TILE_PX];
 
+/* The sliver's pixel source: the map's tile file, read from disc.
+ *
+ * The tile store in RAM is not the map's art for the whole time the map is on
+ * screen. During a battle it is the battle-effects heap, and after a flee or a
+ * loss the game never reloads it -- tamer.c:850-861 sets
+ * SKIP_DAYTIME_TRANSITION for exactly that reason, since its CLUT walk would
+ * read the same garbage. Evolution and death overwrite it too. A strip
+ * uploaded from it in those windows is garbage in the right reveal.
+ *
+ * So the strip is read from a host copy of the file instead, built ONLY from
+ * psx_mod_read_disc_file and keyed by the map id the game itself asked for at
+ * readMapTFS. Never copied from guest RAM: after a flee there is nothing
+ * trustworthy there to copy, and the disc read is deterministic and already
+ * carries every active sector mod (the repainted Item Shop and Jijimon edges
+ * in this package's own manifest). Keying on readMapTFS's argument rather
+ * than CURRENT_SCREEN is what keeps Toy Town right: its box script re-reads
+ * with an explicit id (somethingToyTown, map_object.c:1163).
+ *
+ * A savestate load restores guest memory but not this copy, so it is dropped
+ * and rebuilt on next use from CURRENT_SCREEN. Same when the copy is missing
+ * because widescreen was off at the last read. */
+static uint8_t dw_tfs[DW_TFS_MAX];
+static uint32_t dw_tfs_size;
+static int32_t dw_tfs_map = -1;             /* map id of the copy, -1 = none */
+static int dw_tfs_tried;                    /* one disc read per invalidation */
+
+static void dw_tfs_invalidate(void) {
+    dw_tfs_map = -1;
+    dw_tfs_size = 0;
+    dw_tfs_tried = 0;
+}
+
+/* buildMapPath (map.c:4101): \MAP\MAP<id/15+1>\<filename><ext> */
+static void dw_tfs_load(int32_t map) {
+    char name[DW_MAP_NAME_MAX + 1];
+    char path[48];
+    uint32_t size = 0;
+    int i;
+
+    dw_tfs_invalidate();
+    dw_tfs_tried = 1;
+    if (map < 0 || map >= DW_MAP_ENTRY_COUNT)
+        return;
+    for (i = 0; i < DW_MAP_NAME_MAX; i++) {
+        name[i] = (char)psx_mod_read_byte(DW_MAP_ENTRIES +
+                                          (uint32_t)map * DW_MAP_ENTRY_BYTES +
+                                          (uint32_t)i);
+        if (name[i] == '\0')
+            break;
+    }
+    name[i] = '\0';
+    if (i == 0)
+        return;
+    snprintf(path, sizeof path, "\\MAP\\MAP%d\\%s.TFS", (map / 15) + 1, name);
+    if (!psx_mod_read_disc_file(path, dw_tfs, sizeof dw_tfs, &size) || size < 8)
+        return;
+    dw_tfs_size = size;
+    dw_tfs_map = map;
+}
+
+static void dw_read_map_tfs_enter(struct CPUState* cpu, uint32_t address) {
+    (void)address;
+    if (psx_mod_widescreen_x_margin() <= 0) {
+        dw_tfs_invalidate();                /* host only: nothing is read */
+        return;
+    }
+    dw_tfs_load((int32_t)cpu->gpr[4]);      /* $a0 mapId */
+}
+
+/* Byte offset of MAP_TILE_DATA[idx]'s image in the copy, or 0. setupMap hands
+ * out images in tile order, skipping empty tiles, and the tile ids it copied
+ * into MAP_TILE_DATA survive a battle (the table is not in the heap). */
+static uint32_t dw_tfs_tile_offset(uint32_t idx) {
+    uint32_t off, k;
+    int32_t ncl;
+
+    if (dw_tfs_map < 0)
+        return 0;
+    ncl = (int32_t)((uint32_t)dw_tfs[4] | ((uint32_t)dw_tfs[5] << 8) |
+                    ((uint32_t)dw_tfs[6] << 16) | ((uint32_t)dw_tfs[7] << 24));
+    if (ncl < 1 || ncl > DW_TFS_CLUTS_MAX)
+        return 0;
+    off = 8u + (uint32_t)ncl * DW_TFS_CLUT_BYTES;
+    for (k = 0; k < idx; k++) {
+        if ((int16_t)psx_mod_read_half(DW_MAP_TILE_DATA + k * DW_TILE_STRIDE +
+                                       DW_TILE_ID) != -1)
+            off += DW_TFS_TILE_STRIDE;
+    }
+    off += 4;
+    return off + DW_TILE_BYTES <= dw_tfs_size ? off : 0;
+}
+
 static int32_t dw_i8(uint32_t a) { return (int32_t)(int8_t)psx_mod_read_byte(a); }
 static int32_t dw_i16(uint32_t a) { return (int32_t)(int16_t)psx_mod_read_half(a); }
 static int32_t dw_i32(uint32_t a) { return (int32_t)psx_mod_read_word(a); }
@@ -138,6 +251,23 @@ static int dw_in_ram(uint32_t a, uint32_t len) {
     if (a < DW_RAM_BASE || a - DW_RAM_BASE >= DW_RAM_SIZE)
         return 0;
     return len <= DW_RAM_SIZE - (a - DW_RAM_BASE);
+}
+
+/* How far the frame's DRAWN camera leads CAMERA_X, in px (>= 0).
+ *
+ * The frame is scrolled by the camera it started with: GsSetOrign took
+ * DRAWING_OFFSET_X before renderObjects (main.c:3947-3952), and renderMap's
+ * follow step then moved CAMERA_X and the offset opposite each other. So on
+ * screen the camera is C_eff = CAMERA_X + DRAWING_OFFSET_X - _COPY, one step
+ * AHEAD of CAMERA_X on the right while walking left -- and a deficit computed
+ * from CAMERA_X alone left exactly that step of void at the trailing edge:
+ * 8 px on map 204, 4 on map 12, in runs of 3-30 frames, on 4-11% of
+ * walking-left frames. Walking right, the lead is negative and the ladder
+ * shift in dw_ws_camera.c covers the other edge. */
+static int32_t dw_drawn_lead(void) {
+    const int32_t e = dw_i32(DW_DRAWING_OFFSET_X) -
+                      dw_i32(DW_DRAWING_OFFSET_X_COPY);   /* C_eff - C */
+    return e > 0 && e <= DW_STEP_MAX ? e : 0;
 }
 
 static uint32_t dw_xy(int32_t x, int32_t y) {
@@ -169,7 +299,8 @@ static void dw_sliver_render_exit(struct CPUState* cpu, uint32_t address) {
         return;                             /* nothing past the ring to show */
     c = dw_i16(DW_CAMERA_X);
     cy = dw_i16(DW_CAMERA_Y);
-    d = (c + DW_SCREEN_W + m) - col * DW_TILE_PX; /* right-edge deficit */
+    /* right-edge deficit of the larger of the stepped and the drawn camera */
+    d = (c + dw_drawn_lead() + DW_SCREEN_W + m) - col * DW_TILE_PX;
     if (d <= 0)
         return;
     ws = d < DW_SLIVER_MAX_PX ? d : DW_SLIVER_MAX_PX;
@@ -196,6 +327,10 @@ static void dw_sliver_render_exit(struct CPUState* cpu, uint32_t address) {
     }
     if (n == 0)
         return;
+    if (dw_tfs_map < 0 && !dw_tfs_tried)
+        dw_tfs_load(psx_mod_read_byte(DW_CURRENT_SCREEN));
+    if (dw_tfs_map < 0)
+        return;
 
     /* Guest pointers, validated before a single byte is written. */
     pkt = psx_mod_read_word(DW_GS_OUT_PACKET_P);
@@ -221,6 +356,7 @@ static void dw_sliver_render_exit(struct CPUState* cpu, uint32_t address) {
         const uint32_t idx = (uint32_t)(col + st->row * w);
         uint32_t tile, img, p;
         int32_t id, vish, x0, y0, v0, rgb, yy, xx;
+        const uint8_t* src;
 
         if (idx >= DW_MAP_TILE_COUNT)
             continue;
@@ -230,18 +366,17 @@ static void dw_sliver_render_exit(struct CPUState* cpu, uint32_t address) {
         if (vish <= 0)
             continue;
         tile = DW_MAP_TILE_DATA + idx * DW_TILE_STRIDE;
-        img = psx_mod_read_word(tile + DW_TILE_IMAGE_PTR);
         id = dw_i16(tile + DW_TILE_ID);
         v0 = voff;
         if (id != -1) {
-            if (!dw_in_ram(img, DW_TILE_PX * DW_TILE_ROW_BYTES))
+            img = dw_tfs_tile_offset(idx);
+            if (img == 0)
                 continue;
             for (yy = 0; yy < vish; yy++) {
-                const uint32_t rowaddr =
-                    img + (uint32_t)(st->vis0 + yy) * DW_TILE_ROW_BYTES;
+                src = dw_tfs + img + (uint32_t)(st->vis0 + yy) * DW_TILE_ROW_BYTES;
                 for (xx = 0; xx < hw; xx++)
                     dw_pixels[yy * hw + xx] =
-                        psx_mod_read_half(rowaddr + (uint32_t)xx * 2u);
+                        (uint16_t)(src[2 * xx] | (src[2 * xx + 1] << 8));
             }
             if (!psx_mod_vram_write(DW_SLIVER_X, (uint32_t)(DW_SLIVER_Y + voff),
                                     (uint32_t)hw, (uint32_t)vish, dw_pixels))
@@ -284,4 +419,7 @@ static void dw_sliver_render_exit(struct CPUState* cpu, uint32_t address) {
 PSX_MOD_CONSTRUCTOR(dw_ws_sliver_register) {
     psx_mod_register_function_exit_plugin(
         "dw.ws.sliver", DW_RENDER_MAP, dw_sliver_render_exit);
+    psx_mod_register_function_entry_plugin(
+        "dw.ws.sliver", DW_READ_MAP_TFS, dw_read_map_tfs_enter);
+    psx_mod_register_savestate_plugin("dw.ws.sliver", dw_tfs_invalidate);
 }

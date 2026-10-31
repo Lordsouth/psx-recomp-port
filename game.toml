@@ -37,7 +37,7 @@ known_sha1 = [
 # Deep widescreen: emit a plugin entry hook in setPosDataPolyFT4 (the shared
 # FT4 positioner). dw_ws_backdrop.c filters by return address to the two
 # world-anchored callers and squashes backdrop X like the GTE squashes 3D.
-mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC", "0x80096F90"]
+mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC", "0x80096F90", "0x800D5608", "0x800D6F64", "0x800D6308"]
 # Native function replacement (dw_evolution.c). A listed function opens with
 #   if (psx_mod_function_replace(cpu, ADDR)) return;
 # so a plugin can compute the result, write $v0, publish $ra into cpu->pc and
@@ -70,6 +70,8 @@ mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A281
 # ring still falls short of the wide view (at most 41 px on the right), uploads
 # that strip of column T+4 to a VRAM sliver and links up to three more quads
 # into the same bucket -- the fifth column the ring never had room for.
+# dw_ws_world.c also marks the frame as one that drew the map there, so a field
+# frame held on screen through a synchronous tile reload stays wide.
 mod_function_exit_funcs = ["0x800D78BC", "0x800D6A4C", "0x800D57EC"]
 # 0x800FF7F8 = setDigimonRaised and 0x800FF824 = hasDigimonRaised. The roster
 # used to widen one immediate here (sltiu 0x3F -> 0xB4) so the new species got
@@ -110,7 +112,22 @@ mod_function_replace_funcs = ["0x800E2544", "0x800D7F68", "0x800FF7F8", "0x800FF
 # boundary on the ACTIVE_FRAMEBUFFER flip instead.
 # 0x800EEBDC = initializeHeap: runs once, after the BSS memfill, before
 # any table consumer -- dw_roster.c fills its enhancement arena there.
-seeds = "seeds/ghidra_funcs.txt"
+# 0x800D5608 = isOffScreen: the 4:3 visibility test entityIsOffScreen and
+# isBoxOffScreen ask, with the width as an argument no immediate cull kind can
+# see. dw_ws_camera.c widens $a1 by the cull envelope for exactly those two
+# callers (RA 0x800D55A0, 0x800E20F8), so NPCs, the partner, doors and chests
+# stop vanishing in the reveal. entityIsOffScreen itself is NOT hooked: the 1.5
+# mod moves its DIGIMON_DATA pointer, so it runs interpreted there and a hook in
+# its compiled body would never fire; isOffScreen is unchanged under 1.5.
+# 0x800D6F64 = tickCameraFollowPlayer: the first call in renderMap, every field
+# frame. dw_ws_camera.c re-applies the widened clamp and the load-time nudge
+# there, gated to the plain field camera, because some load paths place the
+# camera without passing either clamp hook.
+# 0x800D6308 = readMapTFS: the map's tile-file read, with the map id as its
+# argument. dw_ws_sliver.c reads the same file from disc into a host copy, so
+# the fifth-column sliver never uploads the battle-effects heap that occupies
+# the tile store during and after a battle.
+seeds ="seeds/ghidra_funcs.txt"
 out_dir = "generated"
 strict = true
 

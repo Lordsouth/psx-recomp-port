@@ -57,6 +57,10 @@ extern int32_t psx_mod_widescreen_x_margin(void);
 #define DW_CAMERA_IS_AT_EDGE 0x800D7F68u
 #define DW_HANDLE_TILE_UPDATE 0x800D78BCu  /* the backdrop streaming ladder */
 #define DW_CAMERA_SETTLE 0x800D6A4Cu      /* MAIN_func_800D6A4C: 2nd X clamp */
+#define DW_TICK_CAMERA_FOLLOW 0x800D6F64u /* top of renderMap, every field frame */
+#define DW_IS_OFF_SCREEN 0x800D5608u      /* isOffScreen(pos, width, height) */
+#define DW_RA_ENTITY_CULL 0x800D55A0u     /* its call inside entityIsOffScreen */
+#define DW_RA_BOX_CULL 0x800E20F8u        /* its call inside isBoxOffScreen */
 
 #define DW_CAMERA_X 0x80150C38u /* int16 */
 #define DW_CAMERA_Y 0x80150C3Au /* int16 */
@@ -65,6 +69,12 @@ extern int32_t psx_mod_widescreen_x_margin(void);
 #define DW_MAP_HEIGHT 0x80150C3Du /* int8  */
 #define DW_DRAWING_OFFSET_X 0x80134EC0u /* int32 */
 #define DW_DRAWING_OFFSET_Y 0x80134EC4u /* int32 */
+#define DW_DRAWING_OFFSET_X_COPY 0x80134EDCu /* int32, what GsSetOrign got */
+#define DW_MAP_TILE_X 0x80134DC2u /* int8  */
+#define DW_GAME_STATE 0x80134F0Au /* int8, 0 = field */
+#define DW_CAMERA_FOLLOW_PLAYER 0x80134DC8u /* int32 */
+#define DW_MAP_LAYER_ENABLED 0x80134EC8u /* uint8 */
+#define DW_CURRENT_SCREEN 0x80134DA8u /* uint8 */
 #define DW_LIMIT_X_MAX 0x80134DB6u /* int16 */
 #define DW_LIMIT_X_MIN 0x80134DB8u /* int16 */
 #define DW_LIMIT_Y_MAX 0x80134DBAu /* int16 */
@@ -72,6 +82,11 @@ extern int32_t psx_mod_widescreen_x_margin(void);
 
 #define DW_SCREEN_W 320
 #define DW_SCREEN_H 240
+#define DW_RING_COLS 4
+/* The largest camera step measured in one frame is 15-16 px (map 69). A wider
+ * gap between the drawn and the stepped camera is some other path moving the
+ * offset (a scripted camera, the battle loop) and is not trusted. */
+#define DW_STEP_MAX 32
 /* A 320-wide display makes any reveal past this a display-mode surprise;
  * disable rather than clamp to a number derived from the wrong width. */
 #define DW_MARGIN_MAX 64
@@ -103,14 +118,13 @@ static int32_t dw_margin(void) {
     return dw_margin_latch;
 }
 
-/* Effective margin for a map of MAP_WIDTH w. A map with no scroll room to give
- * up falls back to vanilla: below this, lo would cross hi and the clamp would
- * oscillate between the two arms every frame. */
+/* Effective margin for a map of MAP_WIDTH w. Maps with too little scroll room
+ * for both arms keep it too: the clamp centres them (dw_clamp_range). */
 static int32_t dw_margin_for_map(int32_t w) {
     const int32_t m = dw_margin();
-    if (m <= 0)
+    if (m <= 0 || w * 128 < DW_SCREEN_W)
         return 0;
-    return (w * 128 - DW_SCREEN_W) >= 2 * m ? m : 0;
+    return m;
 }
 
 static int32_t dw_read_i16(uint32_t addr) {
@@ -149,8 +163,26 @@ static int32_t dw_read_i32(uint32_t addr) {
  */
 static int32_t dw_tile_shift_applied;
 
+/* The frame is DRAWN with the camera it started with, not the one the ladder
+ * sees. The main loop hands DRAWING_OFFSET_X to GsSetOrign and copies it to
+ * DRAWING_OFFSET_X_COPY before renderObjects (main.c:3947-3952); renderMap
+ * then steps CAMERA_X and the offset opposite each other and only then calls
+ * this ladder (map.c:4489-4495). Tile quads sit at posX - camX - DOX, which the
+ * step leaves unchanged, so on screen the whole frame is scrolled by
+ *
+ *     C_eff = CAMERA_X + DRAWING_OFFSET_X - DRAWING_OFFSET_X_COPY
+ *
+ * -- one camera step behind CAMERA_X while walking. Walking right, the left
+ * edge to cover is C_eff - m, so the ladder is shifted by that step as well.
+ * Walking left is the right edge's problem, which dw_ws_sliver.c serves. */
+static int32_t dw_drawn_lag(void) {
+    const int32_t e = dw_read_i32(DW_DRAWING_OFFSET_X_COPY) -
+                      dw_read_i32(DW_DRAWING_OFFSET_X);   /* C - C_eff */
+    return e > 0 && e <= DW_STEP_MAX ? e : 0;
+}
+
 static void dw_tile_ladder_enter(struct CPUState* cpu, uint32_t address) {
-    int32_t m, c, p;
+    int32_t m, c, p, s;
     (void)cpu;
     (void)address;
     dw_tile_shift_applied = 0;
@@ -159,14 +191,15 @@ static void dw_tile_ladder_enter(struct CPUState* cpu, uint32_t address) {
         return;
     c = dw_read_i16(DW_CAMERA_X);
     p = dw_read_i16(DW_CAMERA_X_PREVIOUS);
+    s = m + dw_drawn_lag();
     /* Never push either below 0: the ladder's lowest band starts at +10 and a
      * negative camera would fall off the bottom of the chain entirely, leaving
      * MAP_TILE_X at whatever it was. */
-    if (c < m || p < m)
+    if (c < s || p < s)
         return;
-    psx_mod_write_half(DW_CAMERA_X, (uint16_t)(c - m));
-    psx_mod_write_half(DW_CAMERA_X_PREVIOUS, (uint16_t)(p - m));
-    dw_tile_shift_applied = m;
+    psx_mod_write_half(DW_CAMERA_X, (uint16_t)(c - s));
+    psx_mod_write_half(DW_CAMERA_X_PREVIOUS, (uint16_t)(p - s));
+    dw_tile_shift_applied = s;
 }
 
 static void dw_tile_ladder_exit(struct CPUState* cpu, uint32_t address) {
@@ -182,27 +215,48 @@ static void dw_tile_ladder_exit(struct CPUState* cpu, uint32_t address) {
     dw_tile_shift_applied = 0;
 }
 
+/* Narrow maps. The 19 three-tile maps have 64 px of scroll and at 16:9 the
+ * two arms want 2m = 106 of it, so lo would cross hi and the clamp would
+ * oscillate. They used to fall back to the vanilla clamp, which parks the
+ * camera at C = 0 or 64 and shows up to 53 px of black past the map edge on
+ * ONE side. The whole map is narrower than the view, so pinning the camera at
+ * the centre hides nothing and splits the unavoidable 42 px evenly, 21 per
+ * side. Vertical scrolling is untouched. */
+static void dw_clamp_range(int32_t w, int32_t m, int32_t* lo, int32_t* hi) {
+    const int32_t scroll = w * 128 - DW_SCREEN_W;
+    *lo = m;
+    *hi = scroll - m;
+    if (*hi < *lo)
+        *lo = *hi = scroll / 2;
+}
+
 /* The widened X clamp. Returns 1 if it fired.
  *
  * Idempotent, which is what lets the SAME logic serve both a replacement (where
  * it runs instead of the vanilla clamp) and an exit hook (where it runs after
  * one, correcting its result). Either way the post-condition is the same:
- * CAMERA_X in [m, MAP_WIDTH*128 - 320 - m], with DRAWING_OFFSET_X moved by the
+ * CAMERA_X in [lo, hi] (dw_clamp_range), with DRAWING_OFFSET_X moved by the
  * matching amount so CAMERA_X + DRAWING_OFFSET_X stays invariant.
  */
 static int dw_clamp_x(int32_t w, int32_t m) {
     const int32_t c = dw_read_i16(DW_CAMERA_X);
-    const int32_t hi = w * 128 - DW_SCREEN_W - m;
-    if (c < m) {
-        psx_mod_write_half(DW_CAMERA_X, (uint16_t)m);
+    int32_t lo, hi;
+    dw_clamp_range(w, m, &lo, &hi);
+    /* The offset is pinned to the limit of the edge clamped against, moved out
+     * by the camera's distance from that edge (setupMap: LIMIT_MAX - C is the
+     * offset at any camera position, map.c:4267-4268). At lo = m and
+     * hi = scroll - m that is exactly LIMIT_MAX - m and LIMIT_MIN + m. */
+    if (c < lo) {
+        psx_mod_write_half(DW_CAMERA_X, (uint16_t)lo);
         psx_mod_write_word(DW_DRAWING_OFFSET_X,
-                           (uint32_t)(dw_read_i16(DW_LIMIT_X_MAX) - m));
+                           (uint32_t)(dw_read_i16(DW_LIMIT_X_MAX) - lo));
         return 1;
     }
     if (c > hi) {
         psx_mod_write_half(DW_CAMERA_X, (uint16_t)hi);
         psx_mod_write_word(DW_DRAWING_OFFSET_X,
-                           (uint32_t)(dw_read_i16(DW_LIMIT_X_MIN) + m));
+                           (uint32_t)(dw_read_i16(DW_LIMIT_X_MIN) +
+                                      (w * 128 - DW_SCREEN_W - hi)));
         return 1;
     }
     return 0;
@@ -285,6 +339,83 @@ static void dw_camera_settle_exit(struct CPUState* cpu, uint32_t address) {
     dw_align_x(w, m);
 }
 
+/* The per-frame invariant. Measured after a savestate load and a fixed 7-warp
+ * chain: 5 of 7 arrivals sat outside it for as long as the player stood still
+ * -- C = 0 (vanilla clamp, 42-53 px of map-edge black), C = 42 (< m), and two
+ * ring shortfalls of 17 and 28 px where the nudge would have moved the camera
+ * -- so some load path skips both clamp hooks above. Rather than find every
+ * path that places the camera, enforce the post-condition at the one place
+ * every field frame passes: tickCameraFollowPlayer, the first thing renderMap
+ * does (map.c:3961), ahead of the follow step.
+ *
+ * Gated to the plain field camera: battles, the evolution offset lerp,
+ * scripted cameras and finishers each run with one of these off. Fishing and
+ * curling are excluded while their overlay is resident (checkFishingMap loads
+ * FISH on maps 6 and 8, checkCurlingMap KAR on 136): FISH_scrollCameraTo
+ * clamps to the vanilla limits itself, and the two would fight every frame.
+ *
+ * The nudge takes one more condition, that the ring origin is the one the
+ * loader sets, MAP_TILE_X = C / 128 (setupMap). While walking, the shifted
+ * ladder never leaves T = C / 128 with C mod 128 < m, so this fires only in
+ * the broken arrival state, and it never changes T, so nothing re-streams. */
+static void dw_camera_follow_enter(struct CPUState* cpu, uint32_t address) {
+    int32_t m, w, scr;
+    (void)cpu;
+    (void)address;
+    if (dw_margin() <= 0)
+        return;
+    if ((int8_t)psx_mod_read_byte(DW_GAME_STATE) != 0 ||
+        psx_mod_read_word(DW_CAMERA_FOLLOW_PLAYER) != 1 ||
+        psx_mod_read_byte(DW_MAP_LAYER_ENABLED) != 1)
+        return;
+    scr = psx_mod_read_byte(DW_CURRENT_SCREEN);
+    if (scr == 6 || scr == 8 || scr == 136)
+        return;
+    w = (int32_t)(int8_t)psx_mod_read_byte(DW_MAP_WIDTH);
+    m = dw_margin_for_map(w);
+    if (m <= 0)
+        return;
+    dw_clamp_x(w, m);
+    if (w > DW_RING_COLS &&
+        (int32_t)(int8_t)psx_mod_read_byte(DW_MAP_TILE_X) ==
+            dw_read_i16(DW_CAMERA_X) / 128)
+        dw_align_x(w, m);
+}
+
+/* NPCs, the partner and map boxes vanish at the old 4:3 edge.
+ *
+ * entityIsOffScreen projects an entity's 8 bbox corners and asks isOffScreen
+ * whether each lies within width/2 of the 4:3 centre (map.c:3871-3920);
+ * NPCEntityTick and partnerTick keep the answer in Entity.isOnScreen, and the
+ * model renderer skips the entity on 0. With the reveal that is 53 px per side
+ * in which characters are simply missing. Measured on both sides: a Kunemon
+ * fully in the right reveal and a Market Manager at its counter in the left
+ * one, both isOnScreen = 0 and absent, with a host projection agreeing with
+ * the game's flag in 297 of 298 samples. isBoxOffScreen (doors, chests, warp
+ * crystals) asks the same question with a fixed 320 x 240.
+ *
+ * The width is an ARGUMENT (0x140 from both callers), so no immediate cull kind
+ * can see it. One entry hook on isOffScreen, filtered by return address to
+ * exactly those two calls, widens it by the cull envelope on both sides. The
+ * battle AI's direct 200 x 160 call and the combat-area box come from other
+ * sites and stay vanilla, because they are gameplay.
+ *
+ * Gated like the camera (dw_margin): the envelope does not change on frames
+ * presented 4:3, so the cached isOnScreen flags do not toggle with the
+ * classifier. Battle membership reads the same flag (btl.c:251-276), so an
+ * enemy visible in the reveal at contact can join the fight -- the game's
+ * "what is on screen joins" rule, applied to the screen the player sees. */
+static void dw_cull_widen(struct CPUState* cpu, uint32_t address) {
+    const uint32_t ra = cpu->gpr[31];
+    (void)address;
+    if (ra != DW_RA_ENTITY_CULL && ra != DW_RA_BOX_CULL)
+        return;
+    if (dw_margin() <= 0)
+        return;
+    cpu->gpr[5] = (uint32_t)((int32_t)(int16_t)cpu->gpr[5] +
+                             2 * psx_mod_widescreen_x_margin()); /* $a1 width */
+}
+
 static int dw_camera_is_at_edge(struct CPUState* cpu, uint32_t address) {
     int32_t m, w, h, c, lim;
     uint32_t out_x, out_y;
@@ -336,4 +467,8 @@ PSX_MOD_CONSTRUCTOR(dw_ws_camera_register) {
         "dw.ws.tile-ladder", DW_HANDLE_TILE_UPDATE, dw_tile_ladder_exit);
     psx_mod_register_function_exit_plugin(
         "dw.ws.camera-settle", DW_CAMERA_SETTLE, dw_camera_settle_exit);
+    psx_mod_register_function_entry_plugin(
+        "dw.ws.camera-follow", DW_TICK_CAMERA_FOLLOW, dw_camera_follow_enter);
+    psx_mod_register_function_entry_plugin(
+        "dw.ws.cull", DW_IS_OFF_SCREEN, dw_cull_widen);
 }

@@ -92,7 +92,10 @@ HOOK_OWNER = {
     0x800D78BC: WS,      # dw_ws_camera.c    handleTileUpdate (entry + exit)
     0x800D6A4C: WS,      # dw_ws_camera.c    second camera X clamp
     0x800D7F68: WS,      # dw_ws_camera.c    cameraIsAtEdge
-    0x800D57EC: WS,      # dw_ws_sliver.c    renderMap
+    0x800D57EC: WS,      # dw_ws_sliver.c    renderMap (+ dw_ws_world.c)
+    0x800D5608: WS,      # dw_ws_camera.c    isOffScreen
+    0x800D6F64: WS,      # dw_ws_camera.c    tickCameraFollowPlayer
+    0x800D6308: WS,      # dw_ws_sliver.c    readMapTFS
     0x800EEBDC: ROSTER,  # dw_roster.c       initializeHeap
     0x800A1F68: ROSTER,  # dw_roster.c       loadMMD
     0x800A2810: ROSTER,  # dw_roster.c       loadMMDAsync
@@ -102,12 +105,15 @@ HOOK_OWNER = {
 }
 
 # Code and data the widescreen plugins read or write besides their hooks
-# (dw_ws_backdrop.c): call sites it matches by return address, two functions
-# whose frames it brackets, and the BTL overlay's bar slide table.
+# (dw_ws_backdrop.c, dw_ws_camera.c): call sites matched by return address,
+# two functions whose frames they bracket, and the BTL overlay's bar slide
+# table.
 EXTRA_EXE = [
     (0x800D71F8, 0x800D7200, WS, "setPosDataMapTile call site (RA match)"),
     (0x800B5074, 0x800B507C, WS, "buildMapOverlayPrim call site (RA match)"),
     (0x800ACFE0, 0x800ACFE8, WS, "renderFade call site (RA match)"),
+    (0x800D5598, 0x800D55A0, WS, "entityIsOffScreen's isOffScreen call (RA match)"),
+    (0x800E20F0, 0x800E20F8, WS, "isBoxOffScreen's isOffScreen call (RA match)"),
     (0x800DD2A4, 0x800DD5E0, WS, "renderGameClock (bracketed)"),
     (0x800A936C, 0x800A97E0, WS, "renderStatusBars (bracketed)"),
 ]

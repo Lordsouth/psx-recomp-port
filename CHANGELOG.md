@@ -85,6 +85,16 @@ Also:
   own colours and is loaded by the game itself. It comes with widescreen;
   there is nothing extra to turn on, and with widescreen off the rooms are the
   original ones.
+* Widescreen no longer drops to 4:3 for about a second after a won battle or
+  an evolution; the field stays wide while the game reloads it. Characters,
+  your partner, chests and doors stay drawn in the extra width instead of
+  vanishing at the old 4:3 edge, and an enemy you can see there can join the
+  fight. The smallest rooms now sit centred with an even 21 px bar on each
+  side instead of up to 53 px on one side. The thin black strip that flickered
+  at the edge behind you while walking is gone, maps that could open with a
+  black edge (seen after loading a savestate) open clean, and the backdrop's
+  widest column is read from the disc, so it can no longer show garbage after
+  a battle.
 * "Shrink your own collision box" now works with 1.5. 1.5 moved the Digimon
   table, so the cheat checks which game is running and writes that game's own
   copy; before, under 1.5 it wrote into an unrelated table.
