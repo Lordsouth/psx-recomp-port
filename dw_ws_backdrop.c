@@ -375,6 +375,174 @@ static void dw_ws_hud_park_hook(struct CPUState* cpu, uint32_t address) {
         cpu->gpr[4] = (uint32_t)(x + margin);       /* parked off the right */
 }
 
+/* Deep widescreen, phase 7: full-screen plates and masks cover the frame.
+ *
+ * renderFade is one producer of a 320 x 240 plate; there are many more, and
+ * almost none can be hooked where they are built:
+ *
+ *     pause            renderPauseBox -> GsSortBoxFill(-160,-120,320,240)
+ *     battle flashes   BTL_renderScreenOverlay: POLY_F4, setXYWH(-160,-120,320,240)
+ *     STD/VS           the same POLY_F4, a GsSortBoxFill plate, and a solid
+ *                      FT4 at -ofx..320-ofx in the world layer
+ *     MURD, EAB        a solid FT4 (3 x 3 texels of one colour) at -160..160
+ *     MURD iris        solid FT4 bands from the circle out to each 4:3 edge
+ *
+ * All but the pause plate live in overlays, below 0x80090800, where no entry
+ * hook is ever emitted (see the battle bars above). The framework already
+ * stretches untextured TILEs that cover the display, which is why the pause
+ * plate measured clean before this; the solid FT4s it does not touch. Measured
+ * on a lost battle: the iris closed on the centre while both reveals stayed
+ * lit, and the fade-in at Jijimon's darkened the centre only (plate strength
+ * 180 -> 32 in the centre, 0 in the reveals).
+ *
+ * What they all pass through is GsDrawOt (0x80098808), the libgs call that
+ * hands the frame's ordering table to the GPU. An entry hook there walks the
+ * table once, tracking the draw offset the way the GPU will (libgs's origin
+ * from GsSetOrign, then every E5 packet in order), and touches a primitive
+ * only when it is
+ *
+ *   * POLY_F4 / POLY_G4, or a textured FT4 whose UVs span at most 4 texels (a
+ *     solid patch -- real art such as the STD bracket or the title spans
+ *     hundreds and would stretch), or a TILE;
+ *   * an axis-aligned rectangle at least 240 tall;
+ *   * with an edge EXACTLY on the 4:3 frame edge, screen X 0 or 320.
+ *
+ * That edge moves out by the reveal, to -m or 320 + m; a full plate has both.
+ * Exact equality is what makes this idempotent: a widened edge, the 426-wide
+ * fade above, and any packet the game did not rebuild this frame no longer
+ * match, so nothing can grow frame over frame. Packets are rewritten in guest
+ * RAM; every producer rebuilds them each frame in the libgs work base, so
+ * nothing outlives the frame. Links outside main RAM (a mod's GPU-DMA arena,
+ * 0x008xxxxx) are followed but never written.
+ *
+ * Not covered, on purpose: the STD lose wipe (32 ten-px columns, no edge
+ * band) and the Ninjamon-style scrolling star field (small sprites spread over
+ * 400 px). Neither is a plate.
+ *
+ * Gated like the fade: the presented native-wide offset, so 4:3 frames and
+ * squash mode are untouched, and at 4:3 nothing is read at all. */
+#define DW_GS_DRAW_OT 0x80098808u
+#define DW_GS_ORIGIN_X 0x80136DFCu   /* libgs POSITION.offx (GsSetOrign) */
+#define DW_GSOT_TAG 16               /* GsOT.tag: what DrawOTag is handed */
+#define DW_OT_END 0x00FFFFFFu
+#define DW_OT_WALK_MAX 0x10000       /* 4096 buckets plus packets, with room */
+#define DW_RAM_BASE 0x80000000u
+#define DW_RAM_SIZE 0x00200000u
+#define DW_SCREEN_H 240
+#define DW_SOLID_UV_MAX 4
+
+/* Words in the GP0 command whose first word is c, or 0 for one this walk does
+ * not parse (lines, transfers): the rest of that packet is then left alone. */
+static uint32_t dw_gp0_words(uint32_t c) {
+    const uint32_t op = c >> 24;
+    if (op >= 0x20 && op < 0x40) {
+        const uint32_t n = (op & 8) ? 4 : 3;
+        return 1 + n * (1 + ((op >> 2) & 1)) + ((op & 0x10) ? n - 1 : 0);
+    }
+    if (op >= 0x60 && op < 0x80)
+        return 2 + ((op >> 2) & 1) + (((op >> 3) & 3) == 0);
+    if (op <= 1 || (op >= 0xE1 && op <= 0xE6))
+        return 1;
+    return op == 2 ? 3 : 0;
+}
+
+/* Four vertex words at v, v + 4*stride, ...; for a textured quad the UV word
+ * follows each vertex word. */
+static void dw_plate_quad(uint32_t v, uint32_t stride, int textured,
+                          int32_t ox, int32_t margin) {
+    uint32_t w[4];
+    int32_t x[4], y, lo = 0x7FFF, hi = -0x8000, ylo = 0x7FFF, yhi = -0x8000;
+    int32_t ulo = 255, uhi = 0, vlo = 255, vhi = 0, nlo, nhi;
+    int k;
+    for (k = 0; k < 4; k++) {
+        w[k] = psx_mod_read_word(v + (uint32_t)k * stride * 4);
+        x[k] = (int32_t)(int16_t)(w[k] & 0xFFFFu);
+        y = (int32_t)(int16_t)(w[k] >> 16);
+        lo = x[k] < lo ? x[k] : lo;
+        hi = x[k] > hi ? x[k] : hi;
+        ylo = y < ylo ? y : ylo;
+        yhi = y > yhi ? y : yhi;
+        if (textured) {
+            const uint32_t uv = psx_mod_read_word(v + (uint32_t)k * stride * 4 + 4);
+            const int32_t u = (int32_t)(uv & 0xFFu), t = (int32_t)((uv >> 8) & 0xFFu);
+            ulo = u < ulo ? u : ulo;
+            uhi = u > uhi ? u : uhi;
+            vlo = t < vlo ? t : vlo;
+            vhi = t > vhi ? t : vhi;
+        }
+    }
+    nlo = lo + ox == 0 ? lo - margin : lo;
+    nhi = hi + ox == DW_SCREEN_W ? hi + margin : hi;
+    if ((nlo == lo && nhi == hi) || yhi - ylo < DW_SCREEN_H)
+        return;
+    if (textured && (uhi - ulo > DW_SOLID_UV_MAX || vhi - vlo > DW_SOLID_UV_MAX))
+        return;
+    for (k = 0; k < 4; k++) {
+        if (x[k] != lo && x[k] != hi)
+            return;                           /* not an axis-aligned rectangle */
+    }
+    for (k = 0; k < 4; k++) {
+        const int32_t nx = x[k] == lo ? nlo : nhi;
+        psx_mod_write_word(v + (uint32_t)k * stride * 4,
+                           (w[k] & 0xFFFF0000u) | ((uint32_t)nx & 0xFFFFu));
+    }
+}
+
+/* TILE: xy word at t, wh word at t + 4. */
+static void dw_plate_tile(uint32_t t, int32_t ox, int32_t margin) {
+    const uint32_t xy = psx_mod_read_word(t), wh = psx_mod_read_word(t + 4);
+    const int32_t x = (int32_t)(int16_t)(xy & 0xFFFFu), w = (int32_t)(wh & 0xFFFFu);
+    const int32_t nx = x + ox == 0 ? x - margin : x;
+    const int32_t nw = x + w + ox == DW_SCREEN_W ? x + w + margin - nx : x + w - nx;
+    if ((nx == x && nw == w) || (int32_t)(wh >> 16) < DW_SCREEN_H)
+        return;
+    psx_mod_write_word(t, (xy & 0xFFFF0000u) | ((uint32_t)nx & 0xFFFFu));
+    psx_mod_write_word(t + 4, (wh & 0xFFFF0000u) | (uint32_t)nw);
+}
+
+static void dw_ws_plates_hook(struct CPUState* cpu, uint32_t address) {
+    const int32_t margin = dw_ws_native_wide_margin();
+    uint32_t p, a, tag, len, i, n, c, op;
+    int32_t ox;
+    int steps;
+    (void)address;
+    if (margin <= 0)
+        return;
+    a = cpu->gpr[4];                          /* $a0 GsOT* */
+    if (a < DW_RAM_BASE || a - DW_RAM_BASE >= DW_RAM_SIZE - 32)
+        return;
+    p = psx_mod_read_word(a + DW_GSOT_TAG) & DW_OT_END;
+    ox = dw_read_i16(DW_GS_ORIGIN_X);
+    for (steps = 0; p != DW_OT_END && steps < DW_OT_WALK_MAX; steps++) {
+        a = DW_RAM_BASE | p;
+        tag = psx_mod_read_word(a);
+        len = tag >> 24;
+        for (i = 0; i < len; i += n) {
+            const uint32_t at = a + 4 + i * 4;
+            c = psx_mod_read_word(at);
+            n = dw_gp0_words(c);
+            if (n == 0 || i + n > len)
+                break;
+            op = c >> 24;
+            if (op == 0xE5) {                 /* draw offset: 11-bit signed X */
+                ox = (int32_t)((c & 0x7FFu) ^ 0x400u) - 0x400;
+                continue;
+            }
+            if (p >= DW_RAM_SIZE)
+                continue;                     /* never write outside main RAM */
+            if ((op & 0xFC) == 0x28)
+                dw_plate_quad(at + 4, 1, 0, ox, margin);      /* POLY_F4 */
+            else if ((op & 0xFC) == 0x38)
+                dw_plate_quad(at + 4, 2, 0, ox, margin);      /* POLY_G4 */
+            else if ((op & 0xFC) == 0x2C)
+                dw_plate_quad(at + 4, 2, 1, ox, margin);      /* POLY_FT4 */
+            else if ((op & 0xFC) == 0x60)
+                dw_plate_tile(at + 4, ox, margin);            /* TILE */
+        }
+        p = tag & DW_OT_END;
+    }
+}
+
 static void dw_ws_backdrop_hook(struct CPUState* cpu, uint32_t address) {
     int32_t num, den, x, w, x0, x1;
     uint32_t ra;
@@ -412,4 +580,6 @@ PSX_MOD_CONSTRUCTOR(dw_ws_backdrop_register) {
     psx_mod_register_function_entry_plugin(
         "dw.ws.hud-park", DW_GS_SORT_SPRITE, dw_ws_needle_park_hook);
     psx_mod_register_vblank_plugin("dw.ws.btl-bars", dw_btl_bars_vblank);
+    psx_mod_register_function_entry_plugin(
+        "dw.ws.plates", DW_GS_DRAW_OT, dw_ws_plates_hook);
 }

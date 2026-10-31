@@ -96,6 +96,9 @@ HOOK_OWNER = {
     0x800D5608: WS,      # dw_ws_camera.c    isOffScreen
     0x800D6F64: WS,      # dw_ws_camera.c    tickCameraFollowPlayer
     0x800D6308: WS,      # dw_ws_sliver.c    readMapTFS
+    0x80098808: WS,      # dw_ws_backdrop.c  GsDrawOt (full-screen plates)
+    0x800B4CF4: WS,      # dw_ws_weather.c   buildSnowflakePrim
+    0x800B4780: WS,      # dw_ws_weather.c   renderMist
     0x800EEBDC: ROSTER,  # dw_roster.c       initializeHeap
     0x800A1F68: ROSTER,  # dw_roster.c       loadMMD
     0x800A2810: ROSTER,  # dw_roster.c       loadMMDAsync

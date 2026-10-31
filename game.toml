@@ -37,7 +37,7 @@ known_sha1 = [
 # Deep widescreen: emit a plugin entry hook in setPosDataPolyFT4 (the shared
 # FT4 positioner). dw_ws_backdrop.c filters by return address to the two
 # world-anchored callers and squashes backdrop X like the GTE squashes 3D.
-mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC", "0x80096F90", "0x800D5608", "0x800D6F64", "0x800D6308"]
+mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC", "0x80096F90", "0x800D5608", "0x800D6F64", "0x800D6308", "0x80098808"]
 # Native function replacement (dw_evolution.c). A listed function opens with
 #   if (psx_mod_function_replace(cpu, ADDR)) return;
 # so a plugin can compute the result, write $v0, publish $ra into cpu->pc and
@@ -72,7 +72,14 @@ mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A281
 # into the same bucket -- the fifth column the ring never had room for.
 # dw_ws_world.c also marks the frame as one that drew the map there, so a field
 # frame held on screen through a synchronous tile reload stays wide.
-mod_function_exit_funcs = ["0x800D78BC", "0x800D6A4C", "0x800D57EC"]
+# dw_ws_weather.c makes the snowflake copies there too, once every flake is
+# linked.
+# 0x800B4CF4 = buildSnowflakePrim: dw_ws_weather.c records each flake so
+# renderMap's exit can copy the ones near an edge one 320-px period over, into
+# the opposite reveal. 0x800B4780 = renderMist: its exit copies each mist quad
+# one 640-px period over wherever the two-quad union stops short of the wide
+# frame.
+mod_function_exit_funcs = ["0x800D78BC", "0x800D6A4C", "0x800D57EC", "0x800B4CF4", "0x800B4780"]
 # 0x800FF7F8 = setDigimonRaised and 0x800FF824 = hasDigimonRaised. The roster
 # used to widen one immediate here (sltiu 0x3F -> 0xB4) so the new species got
 # a raised-flag. The id it lands on is species + 0x200, and the space above the
@@ -127,6 +134,11 @@ mod_function_replace_funcs = ["0x800E2544", "0x800D7F68", "0x800FF7F8", "0x800FF
 # argument. dw_ws_sliver.c reads the same file from disc into a host copy, so
 # the fifth-column sliver never uploads the battle-effects heap that occupies
 # the tile store during and after a battle.
+# 0x80098808 = GsDrawOt: hands the frame's ordering table to the GPU. Every
+# full-screen plate (pause, battle flashes, STD/VS/MURD/EAB) passes it, almost
+# all built in overlays no hook reaches. dw_ws_backdrop.c walks the table once
+# and moves every edge of a full-height untextured or solid-patch rectangle
+# that lies exactly on the 4:3 frame edge out to the presented width.
 seeds ="seeds/ghidra_funcs.txt"
 out_dir = "generated"
 strict = true

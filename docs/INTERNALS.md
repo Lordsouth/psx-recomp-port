@@ -692,16 +692,18 @@ once used, so a session with 1.5 off opens the stock cards.
 **Native-wide is what ships since 0.3.2** (`[widescreen] native_wide = true`).
 The defects catalogued in the widescreen survey are fixed by three game
 plugins -- `dw_ws_backdrop.c` (fade plate, parked HUD, the clock and the field
-gauges each as ONE widget, and the battle bars' slide table),
+gauges each as ONE widget, the battle bars' slide table, and every other
+full-screen plate or mask band via one ordering-table walk),
 `dw_ws_camera.c` (both camera clamps, the tile-ladder shift, the load-time
 nudge, the per-frame clamp, narrow-map centring, the widened visibility
 cull), `dw_ws_sliver.c` (the fifth backdrop column, uploaded as a stacked
 VRAM sliver whenever the game's four-column ring falls short, from a host
 copy of the tile file read off the disc) and `dw_ws_world.c` (keeps a field
-frame wide through a synchronous tile reload) -- and one framework primitive
+frame wide through a synchronous tile reload), plus `dw_ws_weather.c` (snow
+and mist copied into the reveals) -- and one framework primitive
 per need (`mod_function_exit_funcs`, `psx_mod_ws_native_wide_offset`,
 `psx_mod_vram_write`, `psx_mod_set_world_scene_predicate`). Section 5.0c has
-the 0.4.x pass and its numbers. The
+the 0.4.x pass and its numbers, 5.0d the plates and weather. The
 wider field of view is rendered into a genuinely wider framebuffer (320 -> 426
 at 16:9, `EXTRA = 2 * round(W*(3n-4d)/(8d))`) and presented 1:1. Nothing is
 stretched, so the entire "screen-space 2D renders stretched" problem class —
@@ -842,6 +844,38 @@ that measured the "before".
   and it is rebuilt from CURRENT_SCREEN. With column T+4's tiles overwritten
   in guest RAM, the way a battle's effect heap overwrites them: sliver vs map
   art 78.6 luma before, 0.3 after (0.2 after a savestate load with no warp).
+
+### 5.0d Plates, masks, snow and mist (0.4.x)
+
+Phase 2 of the widescreen plan, same harness and build setup as 5.0c.
+
+* **Full-screen plates and mask bands** (`dw_ws_backdrop.c`, `dw.ws.plates`).
+  Almost every producer lives in an overlay no hook reaches, so a GsDrawOt
+  (0x80098808) entry hook walks the ordering table once, tracking the draw
+  offset (libgs's GsSetOrign origin, then each E5), and moves an edge lying
+  EXACTLY on screen X 0 or 320 out by the reveal, for untextured F4/G4/TILE
+  and solid-patch FT4 (UV span <= 4) rectangles at least 240 tall. Exact
+  equality keeps it idempotent. Measured on a lost battle: the fade-in at
+  Jijimon's darkened the centre only (plate strength 180 -> 32 in the centre,
+  none in the reveals); after, left reveal = centre within 0-3 at every
+  sampled frame, right reveal = centre once its dark art stops clipping
+  (F <= 54). The MURD iris left both reveals lit; after, its bands reach the
+  wide edge. Under 1.5 the same fade measured 123/123, 69/69, 16/16 (reveal /
+  centre) and the iris covers the reveals too.
+* **The pause plate needed nothing**: the framework already stretches an
+  untextured TILE that covers the display. Reveal/centre dimming ratio 0.99-1.0
+  on maps 204, 0 and 69, before and after.
+* **Snow** (`dw_ws_weather.c`). buildSnowflakePrim keeps flakes in [0, 320];
+  a flake within m of an edge gets a copy 320 px over (renderMap exit), no
+  RNG call. Map 88, flakes per column (8 spawns averaged): reveals 0 / 0.10 x
+  centre before; 0.99 (left) and 0.76 (right) after. The right reveal equals
+  the 4:3 frame's own leftmost 53 columns exactly (13.36/col), which are
+  sparser than the centre in vanilla as well; the copies are an exact tiling.
+* **Mist** (`dw_ws_weather.c`). Each 320-wide mist quad gets a copy 640 px
+  over wherever that copy reaches the wide window (renderMist exit). Maps
+  115-119, 20 phases each, the wide window fully covered in 32 of 100 samples
+  before (worst layer 0.876), 100 of 100 after; map 116 reveal/centre luma
+  0.74 -> 1.00, 119 0.84 -> 0.98.
 
 
 
@@ -1252,6 +1286,12 @@ user's PATH, and the fail-closed packaging guard.
   after walking into the machine. A test that warps and reads is reading
   nothing — which is what made the first run of this report a "retarget
   failure" that was really an absence.
+* **Widescreen, not covered by the plate walk** (§5.0d): for the ~10-20
+  frames of an iris in which the circle's edge sits inside a reveal, the game
+  draws no band on that side, so a lit strip shows there; the STD lose wipe
+  (32 narrow columns) and the scrolling star field stay 4:3-wide. Battle
+  flashes (BTL POLY_F4), STD/VS and EAB plates match the rule but were not
+  reached live. Fishing's own camera clamp (B5) was not measured.
 * **Four inherited cheats remain suspect** (§6.3).
 * ~~Prosperity Points ignore new recruits.~~ **Stale — they have counted since
   0.3.0.** The recruit loop's bound WAS widened
