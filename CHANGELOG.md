@@ -29,8 +29,36 @@ disc file is never written. Untick it and you are back to the original game.
   the Native Evolution Engine. Each edits bytes 1.5 changed, and one guard
   failing would have thrown out every mod. The list comes from
   `tools/check_dw15_compat.py`, which compares every patch and code hook
-  against the 1.5 disc; the rest of the Trainer, Quality of Life, Tech Mastery
-  and Widescreen passed.
+  against the 1.5 disc; the rest of the Trainer, Quality of Life, Tech Mastery,
+  the cheats and Widescreen passed.
+* **Two of them have 1.5 editions**, in the same Mods panel. Ticking one
+  ticks 1.5 as well:
+  * **Guaranteed Item Drops (1.5).** Every Digimon you defeat in 1.5 drops
+    its item, the new species included. Tested in real 1.5 battles: 21
+    drops from 21 defeated enemies, against 3 from 18 without it.
+  * **Evolution Unbound (1.5).** Lowers the six stat requirements of 1.5's
+    evolutions to 75% (Relaxed) or 50% (Open), the new lines included. 1.5
+    reloads that table from the disc after every training session, so the
+    change is made on the disc as well and survives the reload.
+
+**Three new Quality of Life options**, all off by default and all working with
+Digimon World 1.5:
+
+* **Save Anywhere.** Pick Sleep in the field menu while your partner is not
+  sleepy and you get the game's own "Do you want to save?" prompt. No time
+  passes, nothing about your partner changes, and the menu comes back after
+  the save. When your partner is sleepy, Sleep works as before. Sleep no
+  longer looks greyed out or buzzes, so the ZZZ bubble is what tells you your
+  partner is sleepy.
+* **Text Speed.** Fast draws each dialogue page at once instead of one line
+  per frame; Instant also opens the box without its zoom-in. A new message
+  box appears in 18 frames (Fast) or 3 (Instant) instead of 21-27, with the
+  same text. Instant drops the box-open sound, and mashing X can skip a page.
+* **Run Speed.** The tamer runs 1.5x or 2x faster in the field. Collisions,
+  map exits, doors and talking work as normal; walking with R1, menus and
+  cutscenes are unchanged. Your partner keeps its own pace: on a long
+  straight run it falls well behind and catches up a few seconds after you
+  stop. A map exit puts it back beside you.
 
 **Overlays now compile to native code for everyone.** Parts of the game that
 load from disc mid-play (battles, training, menus) are compiled to native code
@@ -45,6 +73,14 @@ fixes, and more). Speed in normal play is unchanged, measured side by side.
 
 Also:
 
+* Widescreen fixes that had silently stopped working: fades dim the whole
+  screen again (the side strips stayed bright), the hidden clock no longer
+  shows sliced at the left edge, and the backdrop fills the left edge on wide
+  maps. The updated framework only runs function-entry hooks a mod names, and
+  Widescreen did not name these three.
+* "Shrink your own collision box" now works with 1.5. 1.5 moved the Digimon
+  table, so the cheat checks which game is running and writes that game's own
+  copy; before, under 1.5 it wrote into an unrelated table.
 * Cheats no longer write to memory before the game has started. 1.5 parks its
   new code where the game later keeps its variables, so a cheat poking that
   spot while the disc was still loading (as "Skip all movies" does by default)
@@ -63,8 +99,6 @@ Also:
 
 Known at the time:
 
-* One cheat, "Shrink your own collision box", writes a Digimon record 1.5
-  changed, so it may affect a different Digimon there.
 * With 1.5 ticked, the launcher's memory card preview still shows the normal
   cards. The game itself uses `saves/dw15/`.
 

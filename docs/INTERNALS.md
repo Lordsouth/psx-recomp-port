@@ -102,8 +102,13 @@ A manifest can also select a statically-linked plugin by id. The plugin gets:
   addresses into it.
 
 **A plugin's activation and VBlank callbacks only run if a manifest selects it**
-with a `[[plugin]]` block. Function hooks — entry, exit and replacement — fire
-regardless. That asymmetry has now cost two evenings: the first time an
+with a `[[plugin]]` block. So do function-entry hooks registered under a plugin
+id (`build_function_entry_hooks` only walks the plan's plugins); exit and
+replacement hooks fire regardless. Entry hooks used to fire regardless too;
+since the framework update (upstream `199cfe01`) they are plan-selected, and
+widescreen's `dw.ws.backdrop-align`, `dw.ws.hud-park` and `dw.ws.tile-ladder`
+silently stopped running until its manifest named them (0.4.0). That
+asymmetry has now cost three evenings: the first time an
 activation callback silently did nothing, the second time a VBlank callback
 did, and the only symptom was a table in guest RAM still reading its stock
 value in a live battle. If a callback appears not to exist, check the manifest
@@ -159,7 +164,8 @@ definitions. The EXE loads at `0x80090800`; `file_offset = vaddr - 0x80090800 + 
 Selected `PARTNER_PARA` offsets, each recomputed by walking the struct:
 
 ```
-+0x00 condition (u32: 0x04 sleepy, 0x08 poop, 0x20 injured, 0x40 sick)
++0x00 condition (u32: 0x01 sleepy, 0x02 tired, 0x04 hungry, 0x08 poopy,
+                 0x10 unhappy, 0x20 injured, 0x40 sick; dw/params.h)
 +0x22 tiredness      +0x3C energyLevel     +0x48 remainingLifetime
 +0x4C trainBoostFlag +0x4E trainBoostValue +0x50 trainBoostTimer
 +0x5E fishCaught     +0x72 upgradeBrainCounter
@@ -460,7 +466,8 @@ Training. Two `disc_user` patches.
 
 **Guaranteed Item Drops.** `dropChance` (+0x22 in each `DIGIMON_DATA` record)
 raised to 100 for every species. 157 needed patching; slot 114 is deliberately
-skipped because the roster package owns that record (§7.2).
+skipped because the roster package owns that record (§7.2). The 1.5 edition is
+in §4.4.
 
 Regenerate: `py -3.12 tools/gen_trainer.py`.
 
@@ -468,17 +475,106 @@ Regenerate: `py -3.12 tools/gen_trainer.py`.
 
 **QoL** — partner lifespan (four `addiu $v0,$zero,360` initialisers; the
 immediate is sign-extended, so 9999 is the ceiling) and world-clock speed
-(`tickGameClock`'s speed read).
+(`tickGameClock`'s speed read), plus the three features below. Each has its own
+generator (`gen_save_anywhere.py`, `gen_text_speed.py`, `gen_walk_speed.py`);
+`gen_qol_mods.py` imports them and owns their player-facing descriptions. All
+three are byte-identical in 1.5's executable and run with `dw.1_5/dw15`.
+
+**Save Anywhere** (4 `main_exe` writes). The stock game saves only through
+sleep, and the sleep path (`partnerTickSleep` case 5: `sleepRegen`,
+`handleSleeping`) skips to the wake hour, ages the partner and resets its timers
+before the save menu opens; case 7 also rolls `handleSpecialEvolutions(2)`. The
+game already has a save without sleep: `openSaveMachine` (`0x8011381C`, script
+op 0x30) and `tickSaveMachine` (`0x801138B0`). Its menu 0x45 "Do you want to
+save?" runs 0x3F/0x40/0x41, the same `writeSavegame` + `MemCardWriteFile` path,
+card checks and retry screens as the sleep save.
+
+| Address | Function | Change |
+|---|---|---|
+| `0x800BA2A4` (80 B) | `handleGameMenuSelection` case 6 (Sleep) | not sleepy (`MENU_OPTIONS[6].disabled & 3`, `0x80123ED6`): `openSaveMachine`, `TARGET_MENU` 0x45 unless it chose 0x44 (no card), `TRIANGLE_MENU_STATE` 6. Sleepy: the stock sleep code, moved up three words onto case 5's identical tail |
+| `0x800B7FB4` (52 B) | `tickTriangleMenu` state 6 | close UI box 0 as states 2/3/5 do, then tick `tickSaveMachine` each frame; when it returns 1 the stock store sets state 0 and the menu reopens |
+| `0x800B95A4` (4 B) | `tickPlayerMenu` exit | stores state 4, not 6; stock state 4 is the same code, so state 6 is free |
+| `0x800B7CB8` (4 B) | `addGameMenu` | not sleepy stores 2, not 1, in `MENU_OPTIONS[6].disabled`. `renderGameMenu` greys only on `== 1` and `tickGameMenu` buzzes only on `& 1`, so Sleep draws and sounds enabled |
+
+Every `TRIANGLE_MENU_STATE` writer in both executables and all 16 overlays of
+both discs was enumerated: nothing else stores 6, and no branch lands inside a
+patched range. The menu stays open, so the clock stays stopped. The gate is the
+sleepy bit (`PARTNER_PARA.condition & 1`), not tiredness. The `disabled` byte
+has three readers (those two and the gate) and three writers: `addGameMenu`,
+`tickGameMenu` (0 when sleepy) and `setSleepDisabled`, which only runs while
+game time runs, so never with the menu open. `addGameMenu`'s other caller,
+`tickInventoryUI` on Items cancel, runs with the clock stopped and stores the
+same values. With the feature on, Sleep no longer looks greyed out when the
+partner is not sleepy; the ZZZ bubble is the cue.
+
+**Text Speed** (4 `main_exe` words). There is no typewriter effect.
+`tickTextboxHandling` (`0x80100258`) calls `drawTextboxStrings` (`0x800FFA4C`)
+once per game tick, which draws one line of a full-width box, and X is ignored
+until the page is done. A box built with flag 0x80 then zooms in for five ticks
+(`createAnimatedUIBox`) before its first page flips in.
+
+| Address | Function | Change | Option |
+|---|---|---|---|
+| `0x800FFB10` | `drawTextboxStrings` | lines per tick, full-width boxes: 1 → 16 (the loop still stops at the page end) | Fast, Instant |
+| `0x80100FFC` | `setupDialogueBox` | `ori $v0,$s0,0x80` → `0`: no zoom flag | Instant |
+| `0x80101E20` | `scriptSetTextboxSize` | same | Instant |
+| `0x80109C98` | `setupNewGameDialogueBox` | flags 0x81 → 0x01 | Instant |
+
+Without 0x80 the box takes the `createStaticUIBox` path stock already uses for
+dialogue with no owner. The flag is dropped only where dialogue boxes (0x21/0x81)
+are built, because they close through `removeStaticUIBox`; menu boxes
+(0xE1/0xF1) close through `removeAnimatedUIBox`, which a static box cannot
+finish. Measured in VBlanks, vanilla and 1.5 alike: a new message box appears in
+21–27 stock, 18 Fast, 3 Instant; an interview page after X in 9–12 stock, 6–9
+with either. The text in VRAM is byte-identical to stock. What does move:
+non-blocking text (`TEXTBOX_CLOSE_MODE` 1) returns to its script up to ~18
+VBlanks sooner, auto-closing text stays up longer (its countdown starts at the
+script op), Instant drops the box-open sound, and an X pressed a few frames
+after a box opens counts. A whole page per tick pushes more than 50 glyph
+uploads through `drawGlyph`'s 50-slot ring at once: fine in this port,
+unverified on hardware. A shop (the Market Manager in Gear Savanna: his
+question, Buy/Sell, the item list, the amount box, a purchase), the field Item
+menu and widescreen dialogue were run with each option on both games: every
+page, menu text, branch and the purchase match stock. The shop's 6-row list
+draws in 1 call instead of 6. The `scriptSetTextboxSize` site has not been
+reached in a test; no caller was found.
+
+**Run Speed** (`walk-speed`, 3 `main_exe` writes, 2 live). The game already
+runs by default: a held direction plays anim 3 (run, 50 units per logic frame),
+R1 plays anim 2 (walk, 20). There is no speed variable; movement is root motion
+applied by `tickAnimation` (`0x800C1C64`). The feature gives the tamer extra
+whole frames of movement while running.
+
+| Address | What |
+|---|---|
+| `0x80114334` (84 B) | `tamerTickOverworld`'s jump table: the 21 case labels become the callees (tail-call stubs for states 1, 9 and 13, whose delay slot sets an argument) |
+| `0x800A9CAC` (240 B, one per speed) | `tamerTickOverworld`: `jr` → `jalr` dispatch, which frees the case blocks. State 0 calls `tamerTickWalkingState`, then at most once, if `TAMER_STATE` 0, `IS_SCRIPT_PAUSED` 1 and the tamer's anim is 3: `tickAnimation`, `tickCameraFollowPlayer`, `tamerTickWalkingState`. 1.5x takes the step only on odd libetc VSync counts (`0x80116B30`) |
+
+Each extra step is a full stock frame, so collision is probed before it and
+exits, talk, chests and pickups are checked after it. Only the function itself
+and `tamerTick`'s `jal` reference the function and its table (both executables,
+every overlay on both discs). Measured: 2x is 99.7 units per logic frame (stock
+49.5), 1.5x alternates 100/50, R1 walking stays 19.8, and every 2x position is
+every other stock position, wall slides included. With widescreen on, the
+tile streaming after every camera call is the same sequence as at 1x. The
+partner keeps its own pace: 310–600 units behind after a short run (stock
+~230); after a ~7500-unit straight run it is ~3300 behind at 1.5x and ~4400 at
+2x. Closing to ~320 took ~3.5 s at 1.5x and ~4.6 s at 2x; in another 2x run
+it was still over 350 behind after 5 s. It never gets stuck, and an exit
+places it next to you. Scripted walks (`tickEntityWalkTo`, which stops on reaching a tile) are
+untouched, since a doubled step could overshoot. The parity trick assumes
+3-VBlank logic frames; lagging frames lock 1.5x at 1x or 2x for a while.
 
 **Gameplay** — Tech Mastery (the `random(100)` immediate in the move-learning
 roll) and Evolution Unbound (scales the six stat requirements across all 63
 `EVO_REQ_DATA` entries; `-1` means "not required" and is preserved, and weight
-is deliberately untouched because it is an exact target, not a floor).
+is deliberately untouched because it is an exact target, not a floor). The 1.5
+edition is in §4.4.
 
 ### 4.4 `dw.1_5` — Digimon World 1.5 (Test Build 1.3.1)
 
-**1 feature, 1 `[[disc_delta]]`, 1 plugin** (`dw.dw15`). The fan mod by
-Capablemite, shipped as the author's own BPS
+**3 features (1.5 and two 1.5-only editions), 1 `[[disc_delta]]`, 1 plugin**
+(`dw.dw15`). The fan mod by Capablemite, shipped as the author's own BPS
 (`assets/digimon_world_1_5_test1.bps`, unchanged).
 
 **How it applies.** With the feature on, the framework checks the player's
@@ -513,19 +609,73 @@ against the 1.5 disc. Four features cannot run with it:
 | Feature | Why |
 |---|---|
 | `dw.vanilla.roster/roster` | same free Digimon slots; 223 of its patches also hit changed bytes |
-| `dw.vanilla.gameplay/evolution-unbound` | 1.5 rewrote `EVO_REQ_DATA` |
-| `dw.vanilla.trainer/guaranteed-drops` | 1.5 changed 138 of the `DIGIMON_DATA` drop bytes it guards |
+| `dw.vanilla.gameplay/evolution-unbound` | 1.5 rewrote `EVO_REQ_DATA`; Evolution Unbound (1.5) replaces it |
+| `dw.vanilla.trainer/guaranteed-drops` | 1.5 changed 138 of the `DIGIMON_DATA` drop bytes it guards; Guaranteed Item Drops (1.5) replaces it |
 | `dw.vanilla.evolution/native-evolution` | 1.5 changed `getFreshEvolutionTarget`, the replaced function |
 
 Everything else passed, widescreen included: none of its seven hooked
 functions, three matched call sites, two bracketed functions or the BTL bar
-slide table changed. Of the cheats, only "Shrink your own collision box"
-writes a byte 1.5 changed (a `DIGIMON_DATA` record).
+slide table changed. Save Anywhere, Text Speed and Run Speed touch no byte
+1.5 changed. Of the cheats, only "Shrink your own collision box" wrote a byte
+1.5 changed: under 1.5, `0x8012CECC` is another table. It now writes each
+game's own `DIGIMON_DATA[0].radius` behind a gate on which executable is
+running (§6.1).
 
-The manifest's package-level `conflicts` names the roster and evolution
-packages, which the loader enforces today by refusing to launch with both on.
-The feature-level `conflicts` list (all four) is not read yet; the framework
-has no per-feature exclusivity.
+The `dw15` feature's `conflicts` list names all four (package format 12, see
+"Feature conflicts" in `psxrecomp/docs/MOD_PACKAGES.md`): ticking 1.5 unticks
+them, ticking one of them unticks 1.5. `check_dw15_compat.py` fails when that
+list and its own result disagree.
+
+**Patching 1.5's data.** `main_exe` patches are applied when the game first
+reaches the stock entry `0x800A4240`, after the stub has run. So a patch on
+data 1.5 relocated targets the live copy, never the staging area, and is
+guarded with 1.5's bytes. Where the tables live in 1.5, read off its code:
+
+| Table | Stock | 1.5 |
+|---|---|---|
+| `DIGIMON_DATA` | `0x8012CEB4`, 180 × 0x34 | `0x801F4300`, 384 × 0x34 |
+| `EVO_REQ_DATA` | `0x8012ABEC`, 63 × 0x1C | `0x80089020`, 0x1C per row, indexed by target |
+| `EVO_PATHS_DATA` | `0x8012B66C`, 0x0B per row | `0x8008CF20`, 0x18 per row |
+| `EVO_GAINS_DATA` | `0x8012B2D0` | `0x8008BA20` |
+| `RAISE_DATA` | `0x801225BC` | `0x801FA01C` |
+| `FILE_OFFSET_TABLE` | `0x8011FE1C` | `0x801F1000` |
+
+**The `0x80089000` block is re-read from disc.** It is a 30720-byte block
+starting "DTBL". 1.5's executable carries one copy at file offset 0xB2000
+(LBA 170423 on the 1.5 disc), which the stub copies at boot. The disc carries
+another at LBA 168481, past the stock end and in no ISO9660 directory. The
+training overlays load at `0x80088800` and overwrite it; 1.5's guard at
+`0x801F9C00` then reloads it with `readFile("MODTBL.BIN")` and bumps a
+counter at `0x801F9ED0`. So a change to a table there is two `disc_user`
+writes, one per copy, and no `main_exe` write: `main_exe` writes are
+re-applied unguarded after a savestate load or rewind, which would poke
+whatever overlay is resident.
+
+**Writes on 1.5's sectors.** Both copies sit on sectors the delta owns. The
+framework allows a disc write there only from the delta's own feature or one
+in the same package that reaches it through `requires_feature` (chains
+count). Such a write is guarded against 1.5's bytes and applied after the
+delta on every read: raw and 2048-byte drive reads, host reads, sectors past
+the stock end. Any other write there, and every `[[overlay]]`, fails before
+launch with "collides at disc LBA ... with disc delta ...". A cross-package
+`[[requirement]]` does not count. Details: "Disc deltas" in
+`psxrecomp/docs/MOD_PACKAGES.md`.
+
+**1.5-only features.** Two features in `dw.1_5` are the 1.5 editions of
+features 1.5 turns off. Each has a `requires_feature dw15` constraint:
+ticking one ticks 1.5, unticking 1.5 unticks it, and a `state.toml` with one
+but not 1.5 refuses to launch. `tools/gen_dw15_extras.py` generates both from
+the 1.5 disc, below a marker in the manifest.
+
+| Feature | Writes |
+|---|---|
+| `dw15-guaranteed-drops` | 203 `main_exe` bytes: `dropChance` (`0x801F4322 + type × 0x34`) to 100 for every named record below 100. 1.5's drop roll (`0x800ED298`) is the stock code with the new base. The 159 nameless slots are all zero and no 1.5 map places one. Records with chance 0 are raised too, as in the vanilla feature, so they drop their item byte, mostly item 0 |
+| `dw15-evolution-unbound` | 616 `disc_user` writes: each scaled wall (`max(1, v × pct / 100)`) of the 67 walled targets the three choosers can pick, once per copy of the block. Row 254 (all 32767, unreachable) is skipped; `-1`, flags and weight are left alone. Same `walls` option as the vanilla feature |
+
+Checked in game: with the drops feature, 21 of 21 defeated enemies dropped
+their item (control: 3 of 18). With Evolution Unbound (1.5) on relaxed,
+Flamedramon's walls of 100 become 75: stats of 75 evolve, 74 do not, both from
+the boot copy and after a reload from disc.
 
 **Saves.** `save_compatibility = "isolated"` is declarative only; the runtime
 does not act on it. `dw_dw15.c`'s activation callback calls
@@ -663,6 +813,13 @@ conditionals gating the next line, and the `50` repeat block —
 `5000CCSS 0000` repeats the **next** line CC times stepping SS bytes, with the
 operand as the value step. Writes are restricted to main RAM.
 
+A conditional on a code word the two executables hold differently tells the
+games apart. "Shrink your own collision box" uses `0x800ED2A0`, the drop
+roll's `lui` of the `DIGIMON_DATA` address (`0x8013` stock, `0x801F` in 1.5,
+patched by no mod): `D00ED2A0 8013` gates the stock write to `0x8012CECC`,
+`D00ED2A0 801F` the 1.5 write to `0x801F4318`. The engine only runs after the
+game's entry point, so the gate word is always the loaded code.
+
 ### 6.2 What is new here
 
 The published corpus for this game (36 CMGSCCC codes and everything derived
@@ -794,6 +951,9 @@ different executables.
 | `gen_roster_mod.py` | `dw.vanilla.roster` + the plugin's data include |
 | `gen_trainer.py` | `dw.vanilla.trainer` |
 | `gen_qol_mods.py`, `gen_gameplay_mods.py` | the QoL and gameplay packages |
+| `gen_save_anywhere.py`, `gen_text_speed.py`, `gen_walk_speed.py` | Save Anywhere, Text Speed and Run Speed, imported by `gen_qol_mods.py`. Run alone they only verify; `--out` writes a standalone test manifest |
+| `gen_dw15_extras.py` | the two 1.5-only features, below a marker in the `dw.1_5` manifest (needs the 1.5 image; `--check`) |
+| `gen_cheats_mod.py` | `dw.vanilla.cheats` and `dw_cheats_data.inc` from `cheats.txt` (`--check`) |
 | `gen_vice_mod.py` | a local-only package that must never be redistributed |
 
 ### 7.1b Verification tools
@@ -846,10 +1006,14 @@ failure is not local: the runtime prints one line to stderr and sets
 the bad one. Widescreen and the roster would quietly stop working together.
 
 This gate reads the real disc image, reproduces the runtime's physical mapping
-exactly, and proves every guard up front.
+exactly, and proves every guard up front. Features that reach a `[[disc_delta]]`
+through `requires_feature` (Evolution Unbound (1.5)) are checked against the
+patched image instead, hash-checked against the manifest's `target_sha256`:
+by default `../dw15-release/patched/digimon_world_1_5_test1.bin`, or the
+second argument. Without it those patches fail; they are never skipped.
 
 ```
-py -3.12 tools/verify_disc_patches.py
+py -3.12 tools/verify_disc_patches.py [stock.bin [patched.bin]]
 ```
 
 ### 7.4 Packaging safety
@@ -871,6 +1035,16 @@ A feature conflicts when a guarded write covers a byte 1.5 changed, a
 `disc_user` write lands in a file 1.5 moved, or a hook or plugin-read range it
 owns sits in changed code. Hook owners are a table in the tool; a new
 `game.toml` hook without an owner is an error.
+
+`main_exe` bytes are compared as guest RAM at the stock entry point, after
+1.5's stub has copied its blocks (§4.4). 1.5-only features (a
+`requires_feature dw15` constraint, or a `[[requirement]]` on
+`dw.1_5/dw15`) are expected to differ from vanilla: their guards are checked
+against 1.5 instead. It exits 1 when a 1.5-only guard does not match, a
+`dw.1_5` extra lacks the constraint, or the declared conflicts differ from
+the computed list. Cheats are reported, not disabled; a write behind a game
+gate (§6.1) is listed as stock-only or 1.5-only, and a gate a mod patches or
+that passes on neither game is an error.
 
 ```
 py -3.12 tools/check_dw15_compat.py
@@ -897,6 +1071,14 @@ user's PATH, and the fail-closed packaging guard.
 ## 9. Known issues and open work
 
 * **W2 UI counter-squash does not work** (§5.2). Dormant.
+* ~~Widescreen's entry hooks never ran.~~ **CLOSED (0.4.0)**: the framework
+  update made entry hooks plan-selected (§2.2), and the widescreen manifest
+  now names `dw.ws.backdrop-align`, `dw.ws.hud-park` and `dw.ws.tile-ladder`.
+  With the tile ladder live the tile switches at camera X 195 instead of 141,
+  and Run Speed still matches 1x.
+* **`main_exe` writes are re-applied unguarded after a savestate load or
+  rewind.** A table in overlay-shared RAM must therefore be patched on disc
+  (§4.4, `MOD_PACKAGES.md`).
 * ~~Machinedramon's model has never been confirmed on screen.~~ **CLOSED
   2026-09-04.** `tools/verify_roster_evolution.py` dumps guest RAM and searches
   it for three byte probes taken from `MUGE.MMD` on the vanilla disc, with a
