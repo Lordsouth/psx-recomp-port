@@ -78,6 +78,13 @@ Also:
   shows sliced at the left edge, and the backdrop fills the left edge on wide
   maps. The updated framework only runs function-entry hooks a mod names, and
   Widescreen did not name these three.
+* Widescreen now fills two rooms whose pre-rendered art stopped where the
+  original 4:3 camera did, so the widened view showed a flat black strip: the
+  Item Shop's right wall and the left side of Jijimon's house (the larger
+  room). The new art uses each room's
+  own colours and is loaded by the game itself. It comes with widescreen;
+  there is nothing extra to turn on, and with widescreen off the rooms are the
+  original ones.
 * "Shrink your own collision box" now works with 1.5. 1.5 moved the Digimon
   table, so the cheat checks which game is running and writes that game's own
   copy; before, under 1.5 it wrote into an unrelated table.

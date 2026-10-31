@@ -759,6 +759,41 @@ Two knobs were tried and rejected, both recorded in `game.toml`:
   **world** polygons: two black vertical slabs tear through the scene and the
   HP/MP bars separate from their icons.
 
+### 5.0b Repainted room edges (0.4.0)
+
+Two rooms were pre-rendered only as far as the original camera looked, so
+the reveal showed flat black cut through painted objects: ROOM06 (Item Shop,
+right; colour index 0 on all 256 rows of its last 37 columns) and ROOM08
+(Jijimon's house, the 5x3 one; a diagonal cut down the left). ROOM12 (Birdra
+Transport, right of the cage) was tried and dropped: every generated wall fell
+off into the room's own shadow, and in game 13 columns still measured void at
+16:10. A scan of all 242 maps found 16 with a dark edge run of 6 px or more;
+the other 13 are rooms drawn floating in black
+(the mansion, caves, the igloo, the curling rink, the Secret Item Shop's
+shadowed wall) and are left as designed.
+
+* **Art.** `art/backdrops/<MAP>.png` is the whole map as an 8-bit PNG in the
+  map's own CLUT indices. It was made with a local Qwen-Image-Edit 2511
+  (ComfyUI, latent noise mask over the dark region connected to the edge,
+  Lightning LoRA at 4 steps, full denoise, smooth Telea pre-fill), downscaled,
+  feathered into the original and Floyd-Steinberg quantised to the CLUT with
+  the transparent entry 0x0000 excluded. Every pixel outside the repainted
+  region is the original byte. Asking the model to "keep everything else
+  identical" with no mask kept the black too, and 8 steps with the 4-step
+  LoRA streaked.
+* **Delivery.** `tools/gen_extended_backdrops.py` diffs the PNG against the
+  TFS on the disc and writes guarded `disc_user` patches, split per sector,
+  into a marked block at the end of the widescreen manifest, under feature
+  `widescreen`. The game's own loader and VRAM ring then carry the art, on
+  every renderer, and only while widescreen is on. None of the sectors are
+  owned by the 1.5 delta (`check_dw15_compat.py`).
+* **4:3 reach.** With widescreen off, the Item Shop camera reaches CAMERA_X 318
+  (view to column 638), so the black strip is not strictly widescreen-only
+  there; widescreen just shows it far more often. That is why the art rides
+  on the widescreen feature rather than being applied always.
+* **HD texture packs** key replacements on the uploaded bytes, so a pack's
+  replacement for one of these tiles stops matching while widescreen is on.
+
 ### 5.1 W1 — backdrop alignment (shipped in 0.1.7)
 
 The "pre-rendered" room art is a grid of 128×128 tile quads drawn every frame,
