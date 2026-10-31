@@ -27,6 +27,18 @@ rather than from what is easy to patch:
     changes. 3 (paused) is deliberately NOT offered: the game resets it to 0
     while time is running, so it would fight itself.
 
+Three more features live in their own generators, which check their guards
+against the same executable; this one folds them in and owns their
+player-facing descriptions. All three run on Digimon World 1.5 too
+(tools/check_dw15_compat.py):
+
+  Save Anywhere  gen_save_anywhere.py -- Sleep while not sleepy opens the
+                 game's own save prompt (openSaveMachine / menu 0x45).
+  Text Speed     gen_text_speed.py -- a whole page per frame (Fast), and the
+                 dialogue box opens without its zoom (Instant).
+  Run Speed      gen_walk_speed.py -- extra whole frames of tamer movement
+                 while running (1.5x / 2x).
+
 Guards are read from our own extracted executable, never copied from
 dw_decomp -- Vice patches the binary and constants do move.
 
@@ -37,9 +49,16 @@ import os
 import struct
 import sys
 
+import gen_save_anywhere
+import gen_text_speed
+import gen_walk_speed
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-EXE = os.path.normpath(os.path.join(HERE, "..", "..", "game-vanilla", "extracted",
-                                    "SLUS_010.32"))
+# The stock executable: extracted by setup, else the copy beside the 1.5 work.
+EXE = next((p for p in (
+    os.path.normpath(os.path.join(HERE, "..", "..", "game-vanilla", "extracted", "SLUS_010.32")),
+    os.path.normpath(os.path.join(HERE, "..", "..", "dw15-release", "SLUS_010.32.vanilla")))
+    if os.path.exists(p)), None)
 LOAD_ADDR = 0x80090800
 HDR = 0x800
 
@@ -68,6 +87,33 @@ CLOCK_SPEEDS = [
 ]
 
 
+# Player-facing text for the folded-in features, worded from what was measured.
+SAVE_DESC = (
+    "Save from the field menu at any time. Pick Sleep while your partner is "
+    "not sleepy (no ZZZ bubble) and the game's own 'Do you want to save?' "
+    "prompt opens; Sleep no longer looks greyed out. Nothing sleeps: no time skip, no "
+    "tiredness, lifespan or care changes, and the clock stays stopped while "
+    "the menu is open. When your partner is sleepy, Sleep works as before.")
+TEXT_DESC = (
+    "Dialogue pages appear without the wait. The stock game draws a page one "
+    "line per frame and only then zooms the box out of the speaker; Fast draws "
+    "the whole page at once, Instant also opens the box without the zoom. "
+    "Scripted pauses are unchanged, but text that does not wait for a button "
+    "moves on a moment sooner, and with Instant a mashed X can skip a page.")
+RUN_DESC = (
+    "Your tamer runs faster in the field. Collisions, map exits, doors and "
+    "talking to Digimon work as normal, and walking (hold R1), menus and "
+    "cutscenes stay at normal speed. Your partner keeps its own pace, so on a "
+    "long run it falls well behind and takes a few seconds to catch up after "
+    "you stop. A map exit puts it back beside you.")
+
+
+def describe(lines, text):
+    """Replace the [[feature]] description (the first one) in a sub-generator's lines."""
+    i = next(i for i, l in enumerate(lines) if l.startswith("description = "))
+    return lines[:i] + ['description = "%s"' % text] + lines[i + 1:]
+
+
 def file_off(vaddr):
     return vaddr - LOAD_ADDR + HDR
 
@@ -78,6 +124,9 @@ def hexs(b):
 
 def main():
     check_only = "--check" in sys.argv
+    if EXE is None:
+        print("no stock SLUS_010.32 (game-vanilla/extracted or dw15-release)")
+        return 1
     with open(EXE, "rb") as f:
         data = f.read()
 
@@ -106,6 +155,13 @@ def main():
         print("    0x%08X  %s" % (addr, hexs(cur)))
     print("World Clock Speed: site 0x%08X  %s" % (CLOCK_SITE, hexs(clock_cur)))
 
+    # Each raises on a guard that does not match this executable.
+    extra = (describe(gen_save_anywhere.toml_lines(gen_save_anywhere.feature(data)), SAVE_DESC)
+             + describe(gen_text_speed.feature_toml(data), TEXT_DESC)
+             + describe(gen_walk_speed.walk_speed_lines(EXE), RUN_DESC))
+    print("Save Anywhere, Text Speed, Run Speed: %d patches verified"
+          % extra.count("[[patch]]"))
+
     if problems:
         print("\nPROBLEMS:")
         for p in problems:
@@ -124,9 +180,10 @@ def main():
         'version = "%s"' % PKG_VER,
         'name = "Quality of Life"',
         'author = "DigimonWorldRecomp"',
-        'description = "Difficulty knobs for the raising sim: how long your '
-        'partner lives, and how fast the world clock runs. Both are off by '
-        'default and neither disables a mechanic -- they retune it."',
+        'description = "Comfort and pacing: how long your partner lives, how '
+        'fast the world clock runs, saving from the field menu, faster '
+        'dialogue and faster running. All are off by default and none turns '
+        'a mechanic off."',
         'resolver = "declarative"',
         'save_compatibility = "shared"',
         "",
@@ -211,6 +268,8 @@ def main():
             'when = { speed = "%s" }' % value,
             "",
         ]
+
+    out += extra
 
     dest_dir = os.path.normpath(os.path.join(
         HERE, "..", "mods", "preloaded", "packages", PKG_ID, PKG_VER))

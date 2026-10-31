@@ -6,7 +6,7 @@ id = "dw.vanilla.qol"
 version = "1.0.0"
 name = "Quality of Life"
 author = "DigimonWorldRecomp"
-description = "Difficulty knobs for the raising sim: how long your partner lives, and how fast the world clock runs. Both are off by default and neither disables a mechanic -- they retune it."
+description = "Comfort and pacing: how long your partner lives, how fast the world clock runs, saving from the field menu, faster dialogue and faster running. All are off by default and none turns a mechanic off."
 resolver = "declarative"
 save_compatibility = "shared"
 
@@ -109,4 +109,153 @@ address = 0x800DD008
 expected = "ff 00 44 30"
 replace = "01 00 04 24"
 when = { speed = "double" }
+
+[[feature]]
+id = "save-anywhere"
+name = "Save Anywhere"
+description = "Save from the field menu at any time. Pick Sleep while your partner is not sleepy (no ZZZ bubble) and the game's own 'Do you want to save?' prompt opens; Sleep no longer looks greyed out. Nothing sleeps: no time skip, no tiredness, lifespan or care changes, and the clock stays stopped while the menu is open. When your partner is sleepy, Sleep works as before."
+group = "Saving"
+default_enabled = false
+
+# handleGameMenuSelection case 6: not sleepy -> openSaveMachine, TARGET_MENU 0x45, TRIANGLE_MENU_STATE 6; sleepy -> stock sleep code
+[[patch]]
+feature = "save-anywhere"
+target = "main_exe"
+address = 0x800BA2A4
+expected = "40 10 04 00 20 10 44 00 80 18 02 00 12 80 02 3c 8e 3e 42 24 21 10 43 00 00 00 42 80 00 00 00 00 01 00 42 30 4c 00 40 14 00 00 00 00 ff df 02 0c 00 00 00 00 34 7d 03 0c 03 00 04 24 c4 93 80 af e8 75 03 0c 00 00 00 00 44 00 00 10 10 00 bf 8f"
+replace = "12 80 02 3c d6 3e 42 80 00 00 00 00 03 00 42 30 09 00 40 10 06 00 02 24 07 4e 04 0c 04 92 82 af 3c 95 82 8f 44 00 01 24 4b 00 41 10 45 00 02 24 49 00 00 10 3c 95 82 af ff df 02 0c 00 00 00 00 34 7d 03 0c 03 00 04 24 10 00 00 10 00 00 00 00"
+
+# tickTriangleMenu state 6: close the menu box, tick tickSaveMachine, reopen when done
+[[patch]]
+feature = "save-anywhere"
+target = "main_exe"
+address = 0x800B7FB4
+expected = "01 00 04 24 15 80 01 3c a1 57 24 a0 21 10 80 00 15 80 01 3c dd 57 22 a0 0e e0 02 0c 00 00 00 00 14 80 01 3c c4 d3 22 84 00 00 00 00 02 00 40 14 00 00 00 00"
+replace = "0e e0 02 0c 21 20 00 00 14 80 01 3c a0 d3 22 84 00 00 00 00 08 00 40 14 00 00 00 00 2c 4e 04 0c 00 00 00 00 04 00 40 10 00 00 00 00 00 00 00 00 00 00 00 00"
+
+# tickPlayerMenu exit: TRIANGLE_MENU_STATE 6 -> 4 (stock state 4 is the same code)
+[[patch]]
+feature = "save-anywhere"
+target = "main_exe"
+address = 0x800B95A4
+expected = "06 00 02 24"
+replace = "04 00 02 24"
+
+# addGameMenu: not sleepy -> MENU_OPTIONS[6].disabled = 2 (draws and sounds enabled)
+[[patch]]
+feature = "save-anywhere"
+target = "main_exe"
+address = 0x800B7CB8
+expected = "01 00 02 24"
+replace = "02 00 02 24"
+
+[[feature]]
+id = "text-speed"
+name = "Text Speed"
+description = "Dialogue pages appear without the wait. The stock game draws a page one line per frame and only then zooms the box out of the speaker; Fast draws the whole page at once, Instant also opens the box without the zoom. Scripted pauses are unchanged, but text that does not wait for a button moves on a moment sooner, and with Instant a mashed X can skip a page."
+group = "Quality of Life"
+default_enabled = false
+
+[[option]]
+feature = "text-speed"
+id = "speed"
+label = "Text speed"
+description = "Fast draws each page in one frame instead of one line per frame; the box still zooms out of the speaker. Instant also opens dialogue boxes without the zoom (or its sound). Turn the feature off for the stock speed."
+group = "Quality of Life"
+type = "choice"
+default = "instant"
+
+[[option.choice]]
+value = "fast"
+label = "Fast"
+
+[[option.choice]]
+value = "instant"
+label = "Instant"
+
+# drawTextboxStrings: addiu $v0,$zero,1 -- lines drawn per tick for a full-width box (vramMode 0, every dialogue box)
+[[patch]]
+feature = "text-speed"
+target = "main_exe"
+address = 0x800FFB10
+expected = "01 00 02 24"
+replace = "10 00 02 24"
+
+# setupDialogueBox: ori $v0,$s0,0x80 -> ori $v0,$s0,0 -- script dialogue box opens static instead of zooming from the speaker
+[[patch]]
+feature = "text-speed"
+target = "main_exe"
+address = 0x80100FFC
+expected = "80 00 02 36"
+replace = "00 00 02 36"
+when = { speed = "instant" }
+
+# scriptSetTextboxSize: ori $v0,$s0,0x80 -> ori $v0,$s0,0 -- same, for script-sized boxes
+[[patch]]
+feature = "text-speed"
+target = "main_exe"
+address = 0x80101E20
+expected = "80 00 02 36"
+replace = "00 00 02 36"
+when = { speed = "instant" }
+
+# setupNewGameDialogueBox: addiu $a1,$zero,0x81 -> 0x01 -- same, for Jijimon's NEW GAME interview
+[[patch]]
+feature = "text-speed"
+target = "main_exe"
+address = 0x80109C98
+expected = "81 00 05 24"
+replace = "01 00 05 24"
+when = { speed = "instant" }
+
+[[feature]]
+id = "walk-speed"
+name = "Run Speed"
+description = "Your tamer runs faster in the field. Collisions, map exits, doors and talking to Digimon work as normal, and walking (hold R1), menus and cutscenes stay at normal speed. Your partner keeps its own pace, so on a long run it falls well behind and takes a few seconds to catch up after you stop. A map exit puts it back beside you."
+group = "Field"
+default_enabled = false
+
+[[option]]
+feature = "walk-speed"
+id = "speed"
+label = "Run speed"
+description = "1.5x adds a step every other frame, 2x every frame."
+group = "Field"
+type = "choice"
+default = "1.5x"
+
+[[option.choice]]
+value = "1.5x"
+label = "1.5x"
+
+[[option.choice]]
+value = "2x"
+label = "2x"
+
+# tamerTickOverworld's jump table: case labels -> the callees themselves
+# (and tail-call stubs for states 1, 9, 13), for the jalr dispatch below.
+[[patch]]
+feature = "walk-speed"
+target = "main_exe"
+address = 0x80114334
+expected = "e4 9c 0a 80 f4 9c 0a 80 dc 9d 0a 80 dc 9d 0a 80 dc 9d 0a 80 04 9d 0a 80 34 9d 0a 80 14 9d 0a 80 44 9d 0a 80 54 9d 0a 80 dc 9d 0a 80 64 9d 0a 80 74 9d 0a 80 54 9d 0a 80 24 9d 0a 80 84 9d 0a 80 94 9d 0a 80 a4 9d 0a 80 b4 9d 0a 80 c4 9d 0a 80 d4 9d 0a 80"
+replace = "18 9d 0a 80 00 9d 0a 80 10 9d 0a 80 10 9d 0a 80 10 9d 0a 80 94 a1 0a 80 64 aa 0a 80 f4 a2 0a 80 a0 aa 0a 80 08 9d 0a 80 10 9d 0a 80 18 4e 0e 80 c8 45 05 80 08 9d 0a 80 54 a6 0a 80 68 ac 0a 80 b0 ac 0a 80 28 ad 0a 80 d8 ad 0a 80 44 ae 0a 80 c8 ae 0a 80"
+
+# tamerTickOverworld: jalr dispatch + extra run step (1.5x).
+[[patch]]
+feature = "walk-speed"
+target = "main_exe"
+address = 0x800A9CAC
+expected = "65 91 82 83 e8 ff bd 27 10 00 bf af 15 00 41 2c 47 00 20 10 21 28 40 00 11 80 03 3c 34 43 63 24 80 10 02 00 21 10 43 00 00 00 42 8c 00 00 00 00 08 00 40 00 00 00 00 00 7e a7 02 0c 00 00 00 00 3b 00 00 10 00 00 00 00 62 a8 02 0c 06 00 04 24 37 00 00 10 00 00 00 00 65 a8 02 0c 00 00 00 00 33 00 00 10 00 00 00 00 bd a8 02 0c 00 00 00 00 2f 00 00 10 00 00 00 00 95 a9 02 0c 00 00 00 00 2b 00 00 10 00 00 00 00 99 aa 02 0c 00 00 00 00 27 00 00 10 00 00 00 00 a8 aa 02 0c 00 00 00 00 23 00 00 10 00 00 00 00 c0 aa 02 0c 21 20 a0 00 1f 00 00 10 00 00 00 00 86 93 03 0c 00 00 00 00 1b 00 00 10 00 00 00 00 72 51 01 0c 00 00 00 00 17 00 00 10 00 00 00 00 1a ab 02 0c 00 00 00 00 13 00 00 10 00 00 00 00 2c ab 02 0c 00 00 00 00"
+replace = "65 91 82 83 e8 ff bd 27 10 00 bf af 15 00 41 2c 09 00 20 10 21 28 40 00 11 80 03 3c 34 43 63 24 80 10 02 00 21 10 43 00 00 00 42 8c 00 00 00 00 09 f8 40 00 00 00 00 00 15 80 04 3c 19 07 03 0c 6c 57 84 24 10 00 bf 8f 00 00 00 00 08 00 e0 03 18 00 bd 27 62 a8 02 08 06 00 04 24 c0 aa 02 08 21 20 a0 00 08 00 e0 03 00 00 00 00 e0 ff bd 27 18 00 bf af 14 00 b0 af 01 00 10 24 7e a7 02 0c 00 00 00 00 16 00 00 12 ff ff 10 26 65 91 82 83 c8 94 83 8f 12 00 40 14 ff ff 63 24 10 00 60 14 15 80 01 3c 9a 57 22 90 03 00 03 24 0c 00 43 14 11 80 01 3c 30 6b 22 8c 00 00 00 00 01 00 42 30 07 00 40 10 15 80 04 3c 19 07 03 0c 6c 57 84 24 d9 5b 03 0c 00 00 00 00 e8 ff 00 10 00 00 00 00 18 00 bf 8f 14 00 b0 8f 08 00 e0 03 20 00 bd 27"
+when = { speed = "1.5x" }
+
+# tamerTickOverworld: jalr dispatch + extra run step (2x).
+[[patch]]
+feature = "walk-speed"
+target = "main_exe"
+address = 0x800A9CAC
+expected = "65 91 82 83 e8 ff bd 27 10 00 bf af 15 00 41 2c 47 00 20 10 21 28 40 00 11 80 03 3c 34 43 63 24 80 10 02 00 21 10 43 00 00 00 42 8c 00 00 00 00 08 00 40 00 00 00 00 00 7e a7 02 0c 00 00 00 00 3b 00 00 10 00 00 00 00 62 a8 02 0c 06 00 04 24 37 00 00 10 00 00 00 00 65 a8 02 0c 00 00 00 00 33 00 00 10 00 00 00 00 bd a8 02 0c 00 00 00 00 2f 00 00 10 00 00 00 00 95 a9 02 0c 00 00 00 00 2b 00 00 10 00 00 00 00 99 aa 02 0c 00 00 00 00 27 00 00 10 00 00 00 00 a8 aa 02 0c 00 00 00 00 23 00 00 10 00 00 00 00 c0 aa 02 0c 21 20 a0 00 1f 00 00 10 00 00 00 00 86 93 03 0c 00 00 00 00 1b 00 00 10 00 00 00 00 72 51 01 0c 00 00 00 00 17 00 00 10 00 00 00 00 1a ab 02 0c 00 00 00 00 13 00 00 10 00 00 00 00 2c ab 02 0c 00 00 00 00"
+replace = "65 91 82 83 e8 ff bd 27 10 00 bf af 15 00 41 2c 09 00 20 10 21 28 40 00 11 80 03 3c 34 43 63 24 80 10 02 00 21 10 43 00 00 00 42 8c 00 00 00 00 09 f8 40 00 00 00 00 00 15 80 04 3c 19 07 03 0c 6c 57 84 24 10 00 bf 8f 00 00 00 00 08 00 e0 03 18 00 bd 27 62 a8 02 08 06 00 04 24 c0 aa 02 08 21 20 a0 00 08 00 e0 03 00 00 00 00 e0 ff bd 27 18 00 bf af 14 00 b0 af 01 00 10 24 7e a7 02 0c 00 00 00 00 16 00 00 12 ff ff 10 26 65 91 82 83 c8 94 83 8f 12 00 40 14 ff ff 63 24 10 00 60 14 15 80 01 3c 9a 57 22 90 03 00 03 24 0c 00 43 14 11 80 01 3c 30 6b 22 8c 00 00 00 00 01 00 02 34 07 00 40 10 15 80 04 3c 19 07 03 0c 6c 57 84 24 d9 5b 03 0c 00 00 00 00 e8 ff 00 10 00 00 00 00 18 00 bf 8f 14 00 b0 8f 08 00 e0 03 20 00 bd 27"
+when = { speed = "2x" }
 
