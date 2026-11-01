@@ -3,13 +3,13 @@
 Every release, what shipped in it, and what was known to be wrong at the time.
 
 Versions are the setup packages published at
-<https://gitlab.com/ethan4love/psx-recomp-port/-/releases>. Every download
+<https://github.com/Lordsouth/psx-recomp-port/releases>. Every download
 contains **no game data** — you supply your own Digimon World (USA) disc image
 (SLUS-01032), and the game is built on your machine from it.
 
 ---
 
-## 0.4.0 (draft)
+## 0.4.0
 
 **Digimon World 1.5 is in the Mods panel.**
 
@@ -124,6 +124,10 @@ Also:
 * "Shrink your own collision box" now works with 1.5. 1.5 moved the Digimon
   table, so the cheat checks which game is running and writes that game's own
   copy; before, under 1.5 it wrote into an unrelated table.
+* Savestates work with 1.5. With any mod that changes the game's code, the
+  savestate file name carried a 64-character fingerprint, and in a deeper
+  install folder the path passed Windows' 260-character limit, so every save
+  failed. The name now carries 16 characters; existing slots are renamed.
 * Cheats no longer write to memory before the game has started. 1.5 parks its
   new code where the game later keeps its variables, so a cheat poking that
   spot while the disc was still loading (as "Skip all movies" does by default)

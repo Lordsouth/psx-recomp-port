@@ -6,7 +6,7 @@ high-resolution rendering, save states, rewind, and a mod menu.
 
 ### Getting it
 
-Check the [Releases](https://gitlab.com/ethan4love/psx-recomp-port/-/releases)
+Check the [Releases](https://github.com/Lordsouth/psx-recomp-port/releases)
 page for a setup package (`digimon-world-*-windows-x64.zip`). If none is attached,
 build one yourself — see [DEVELOPING.md](DEVELOPING.md).
 
@@ -285,7 +285,7 @@ through the intro, check it has not been switched off in `cheats.txt`.
 ## Reporting a problem
 
 Open an issue on the
-[project page](https://gitlab.com/ethan4love/psx-recomp-port/-/issues). What
+[project page](https://github.com/Lordsouth/psx-recomp-port/issues). What
 makes a report actionable:
 
 * **Which version**, from the launcher's title bar or the `VERSION` file.
