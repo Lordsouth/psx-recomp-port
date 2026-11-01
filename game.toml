@@ -234,7 +234,7 @@ ui_offset_packet_span = 24
 # header lands in `cull`, so putting it earlier silently reparents
 # ui_offset_* and native_wide and they stop taking effect.
 #
-# There is deliberately no [widescreen.cull] here. auto_screen_x widens the GTE
+# auto_screen_x stays off. It widens the GTE
 # render-funnel screen-extent reject, which it finds by pairing a
 # `sltiu ..,0x140` width compare with a `sltiu ..,0xE0` height compare. This
 # game has NEITHER immediate anywhere: zero `sltiu ..,0x140` in the main EXE or
@@ -244,6 +244,34 @@ ui_offset_packet_span = 24
 # auto_backdrop stays off too: its detector keys on the generic 0x66666667
 # divide-by-10 constant, which occurs 52 times in the EXE alone here, and a
 # false positive corrupts unrelated overlay codegen.
+#
+# The explicit sites below are the three screen-space culls that still stop
+# at the 4:3 edge, each widened by the live margin (0 at 4:3, so identity):
+#   * isTileOffScreen (map.c:3669), the test tickPartnerWaypoints uses to
+#     pick where an off-screen partner reappears: `slti at,v0,-200` and
+#     `slti at,v0,201`. Vanilla could drop the partner 200-213 px from the
+#     centre, inside the revealed column.
+#   * renderMapOverlays' sprite cull (overworld.c:500): `screenX - 40` and
+#     `screenX + 360`, formed by ADDI from the camera register, so they need
+#     the register-relative kind. Water, torches and doors popped in the outer
+#     13 px of each reveal.
+# Not listed: renderParticleFlash's cell cull. Its upper bounds are the same
+# ADDI shape but its lower bounds compare against -DRAWING_OFFSET_X with no
+# immediate, so widening only one side would cull asymmetrically, and the cut
+# was never seen in play.
+[widescreen.cull]
+slti_sites = ["0x800D3138"]
+slti_lower_sites = ["0x800D312C"]
+
+[[widescreen.cull.relative_x_bound]]
+address = "0x800B4460"
+expected = "0x2282FFD8"   # addi v0,s4,-40: screenX - 40
+edge = "lower"
+
+[[widescreen.cull.relative_x_bound]]
+address = "0x800B4468"
+expected = "0x20620168"   # addi v0,v1,360: screenX + 360
+edge = "upper"
 
 [controller]
 default_mode = "digital"

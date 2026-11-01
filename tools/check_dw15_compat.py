@@ -117,6 +117,8 @@ EXTRA_EXE = [
     (0x800ACFE0, 0x800ACFE8, WS, "renderFade call site (RA match)"),
     (0x800D5598, 0x800D55A0, WS, "entityIsOffScreen's isOffScreen call (RA match)"),
     (0x800E20F0, 0x800E20F8, WS, "isBoxOffScreen's isOffScreen call (RA match)"),
+    (0x800D312C, 0x800D313C, WS, "isTileOffScreen X bounds ([widescreen.cull] slti sites)"),
+    (0x800B4460, 0x800B446C, WS, "renderMapOverlays sprite cull (relative_x_bound sites)"),
     (0x800DD2A4, 0x800DD5E0, WS, "renderGameClock (bracketed)"),
     (0x800A936C, 0x800A97E0, WS, "renderStatusBars (bracketed)"),
 ]

@@ -703,7 +703,8 @@ frame wide through a synchronous tile reload), plus `dw_ws_weather.c` (snow
 and mist copied into the reveals) -- and one framework primitive
 per need (`mod_function_exit_funcs`, `psx_mod_ws_native_wide_offset`,
 `psx_mod_vram_write`, `psx_mod_set_world_scene_predicate`). Section 5.0c has
-the 0.4.x pass and its numbers, 5.0d the plates and weather. The
+the 0.4.x pass and its numbers, 5.0d the plates and weather, 5.0e the
+codegen culls. The
 wider field of view is rendered into a genuinely wider framebuffer (320 -> 426
 at 16:9, `EXTRA = 2 * round(W*(3n-4d)/(8d))`) and presented 1:1. Nothing is
 stretched, so the entire "screen-space 2D renders stretched" problem class —
@@ -876,6 +877,30 @@ Phase 2 of the widescreen plan, same harness and build setup as 5.0c.
   115-119, 20 phases each, the wide window fully covered in 32 of 100 samples
   before (worst layer 0.876), 100 of 100 after; map 116 reveal/centre luma
   0.74 -> 1.00, 119 0.84 -> 0.98.
+
+### 5.0e Codegen culls (0.4.x)
+
+Phase 3: two screen-space culls that still stopped at the 4:3 edge are
+widened in the generated code by the live margin `psx_ws_x_margin()` (53 at
+16:9; 0 at 4:3, so identity). Config in `game.toml [widescreen.cull]`.
+
+* **Map sprites** (water, torches, doors; renderMapOverlays). Its bounds
+  `screenX - 40` / `screenX + 360` are `ADDI` from the camera register, which
+  no existing kind accepted, so the framework fork gained
+  `[[widescreen.cull.relative_x_bound]]` (full-word guarded, lower/upper edge,
+  same rule in native code, overlays and the interpreter). Map 204, 120
+  stops of a left/right/left walk: sprites visible in the outer reveal band
+  but outside the vanilla window drawn 0 of 32 before, 52 of 54 after (the
+  inner band matches at the same ~95%, the limit of the prim-to-instance
+  match).
+* **Partner reappearance** (isTileOffScreen, used by tickPartnerWaypoints):
+  `slti_sites` / `slti_lower_sites`, so the partner is placed beyond
+  |u| > 200 + m instead of 200, outside the 213-px half view. The generated
+  code calls `psx_ws_cull_slti(.., 201)` and `psx_ws_cull_slti_lower(.., -200)`
+  at 0x800D3138 / 0x800D312C. Not reproduced live: relocating the partner
+  before a battle left its isOnScreen at 1, so the teleport never ran.
+* **Not done**: renderParticleFlash's cell cull (upper bounds ADDI, lower
+  bounds against -DRAWING_OFFSET_X with no immediate), never seen cut.
 
 
 
@@ -1182,7 +1207,8 @@ dllexport-on-redeclaration fix without which no overlay compiles under clang, a
 frame-pacing guard for monitors where vsync does not actually throttle, the
 GameShark cheat engine, the widescreen plugin, the squash-gate export W1 needs,
 the dormant W2 machinery, a hash-pinned build toolchain that no longer edits the
-user's PATH, and the fail-closed packaging guard.
+user's PATH, the fail-closed packaging guard, and the
+`[[widescreen.cull.relative_x_bound]]` cull kind (§5.0e).
 
 ---
 
@@ -1291,7 +1317,9 @@ user's PATH, and the fail-closed packaging guard.
   draws no band on that side, so a lit strip shows there; the STD lose wipe
   (32 narrow columns) and the scrolling star field stay 4:3-wide. Battle
   flashes (BTL POLY_F4), STD/VS and EAB plates match the rule but were not
-  reached live. Fishing's own camera clamp (B5) was not measured.
+  reached live. Fishing's own camera clamp (B5) was not measured. The
+  partner-reappearance cull (§5.0e) is verified in the generated code only,
+  and particle flashes still cull at the 4:3 edge.
 * **Four inherited cheats remain suspect** (§6.3).
 * ~~Prosperity Points ignore new recruits.~~ **Stale — they have counted since
   0.3.0.** The recruit loop's bound WAS widened

@@ -98,7 +98,8 @@ Also:
 * Widescreen: fades, flashes and the closing circle after a lost battle now
   cover the whole wide screen; before, the side strips stayed bright. Snow
   falls across the full width, and mist on the misty maps no longer stops
-  short of the edges.
+  short of the edges. Animated scenery (water, torches, doors) no longer pops
+  in at the outer edge of the wide view.
 * "Shrink your own collision box" now works with 1.5. 1.5 moved the Digimon
   table, so the cheat checks which game is running and writes that game's own
   copy; before, under 1.5 it wrote into an unrelated table.
