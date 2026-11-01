@@ -100,6 +100,15 @@ Also:
   falls across the full width, and mist on the misty maps no longer stops
   short of the edges. Animated scenery (water, torches, doors) no longer pops
   in at the outer edge of the wide view.
+* Widescreen on OpenGL now draws the room backdrop from the room's own tile
+  file instead of the game's four-column tile ring, so every column of the
+  wide view is the real art: no void at the edges after a battle, a flee, an
+  evolution or a load, and the middle of the screen is pixel-for-pixel what
+  it was. The Software renderer, HD texture packs and netplay keep the
+  previous method, which also stays clean at 16:9 and 16:10. **Savestates
+  made with widescreen on and with it off are no longer interchangeable**
+  (memory-card saves are unaffected), and savestates from earlier builds will
+  not load.
 * "Shrink your own collision box" now works with 1.5. 1.5 moved the Digimon
   table, so the cheat checks which game is running and writes that game's own
   copy; before, under 1.5 it wrote into an unrelated table.

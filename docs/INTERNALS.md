@@ -696,15 +696,16 @@ gauges each as ONE widget, the battle bars' slide table, and every other
 full-screen plate or mask band via one ordering-table walk),
 `dw_ws_camera.c` (both camera clamps, the tile-ladder shift, the load-time
 nudge, the per-frame clamp, narrow-map centring, the widened visibility
-cull), `dw_ws_sliver.c` (the fifth backdrop column, uploaded as a stacked
-VRAM sliver whenever the game's four-column ring falls short, from a host
-copy of the tile file read off the disc) and `dw_ws_world.c` (keeps a field
+cull), `dw_ws_sliver.c` (on OpenGL the whole backdrop drawn from texture
+banks built from the tile file read off the disc; elsewhere the fifth
+backdrop column, uploaded as a stacked VRAM sliver whenever the game's
+four-column ring falls short, from the same host copy) and `dw_ws_world.c` (keeps a field
 frame wide through a synchronous tile reload), plus `dw_ws_weather.c` (snow
 and mist copied into the reveals) -- and one framework primitive
 per need (`mod_function_exit_funcs`, `psx_mod_ws_native_wide_offset`,
-`psx_mod_vram_write`, `psx_mod_set_world_scene_predicate`). Section 5.0c has
-the 0.4.x pass and its numbers, 5.0d the plates and weather, 5.0e the
-codegen culls. The
+`psx_mod_vram_write`, `psx_mod_set_world_scene_predicate`, live-palette
+texture banks). Section 5.0c has the 0.4.x pass and its numbers, 5.0d the
+plates and weather, 5.0e the codegen culls, 5.0f the bank backdrop. The
 wider field of view is rendered into a genuinely wider framebuffer (320 -> 426
 at 16:9, `EXTRA = 2 * round(W*(3n-4d)/(8d))`) and presented 1:1. Nothing is
 stretched, so the entire "screen-space 2D renders stretched" problem class —
@@ -721,7 +722,9 @@ it on.
 21:9. The tile ring covers 512 px and needs the origin's leftslack in
 `[m, 192-m]`, an interval that is EMPTY for `m > 96`; the 106 px sliver lifts
 the practical bound to about 78. 21:9 clears neither, and it is not a tuning
-constant away — it is the ring's size. The game ships its own copy of the
+constant away — it is the ring's size. On OpenGL the bank backdrop (5.0f) no
+longer depends on the ring, but the margin cap stays at 64 until 21:9 is
+swept on its own (Software and HD packs still use the ring). The game ships its own copy of the
 framework's widescreen manifest, under `mods/preloaded/packages/`, with that choice
 removed. If the builtin's version is ever bumped past 1.0.0 the override stops
 applying silently, because the loader takes the highest semver.
@@ -901,6 +904,92 @@ widened in the generated code by the live margin `psx_ws_x_margin()` (53 at
   before a battle left its isOnScreen at 1, so the teleport never ran.
 * **Not done**: renderParticleFlash's cell cull (upper bounds ADDI, lower
   bounds against -DRAWING_OFFSET_X with no immediate), never seen cut.
+
+### 5.0f The backdrop from texture banks (0.4.x)
+
+Phase 4. On OpenGL the field backdrop no longer depends on the game's
+four-column VRAM tile ring (`dw_ws_sliver.c`, `dw.ws.sliver`).
+
+* **One bank per tile file**, id = map id + 1, built only from
+  `psx_mod_read_disc_file` (sector mods included, so the repainted rooms
+  follow): the sliver's host copy when it holds that map, a fresh disc read
+  when the GPU meets a bank the process never built (a cold savestate
+  restore; `psx_mod_set_texture_bank_resolver`). Never from guest RAM: banks
+  are immutable for the process. Painted tile k sits in its own texpage slot
+  (x = (k mod 16) * 64 halfwords, y = 256 * (k / 16)), so it samples from
+  u, v = 0 like a ring slot. The palette is read live from VRAM row 480
+  through the fork's new `psx_mod_define_texture_bank_live_clut`, so the
+  time-of-day cross-fade and the evolution fades land as on the ring.
+* **Emission at renderMap exit**: every tile meeting the wide view plus 128 px
+  on every side, two GT3s copying renderMap's FT4 (colour 0x808080, the
+  tile's texpage word with the slot's page, the tile's CLUT, V extent 127 for
+  ring-row-1 tiles and 128 for the rest), a black F4 for an empty tile. The
+  chain goes into ot[0xfff] right behind renderMap's own tile quads (found by
+  their ring-slot texpage and CLUT), from a 2 x 2800-byte GPU-DMA packet
+  arena allocated at activation, one half per ACTIVE_FRAMEBUFFER. A packet
+  the GPU refuses (HD pack switched on later) draws nothing and the ring
+  under it still does.
+* **The sliver and the load-time nudge stand down while banks draw**; both
+  stay, unchanged, for Software, HD texture packs and netplay's
+  CPU-authoritative path (`psx_mod_texture_banks_supported() == 0`). The
+  arena makes savestates taken with widescreen on carry an expansion-memory
+  section (state format v8): states made with it on and off are not
+  interchangeable. Memory-card saves are unaffected.
+* **Debug switch**: `{"cmd":"mod_cmd","name":"dw.ws.banks","args":"off"}`
+  stops the bank draw only (the nudge keeps following real support), for
+  A/B; counters `dw.ws.banks.frames/defined/resolved/failed` in
+  `mod_counters`.
+
+Measured at 16:9, OpenGL headless (`--headless-opengl`) unless stated:
+
+* **Inside the 4:3 frame nothing changes.** 29-map walking sweep (934 stops,
+  30 steps per direction; map 205 unreachable by warp, Robot House 146 added),
+  banks on/off A/B from one savestate every 12th stop, frames paired by guest
+  frame counter and displayed buffer: 114 stops paired, 110 with the centre
+  320 columns bit-identical in every pair. Of the 4 others, 2 are dialogue
+  scenes whose game state diverged between the two replays (different
+  character poses; the extra GPU work moves timing), and 2 are on map 25
+  where the ring itself shows the wrong tile in one column (banks off 28.9
+  luma from the art there, banks on 1.7). Where the old sliver had drawn the
+  reveal, its top strip differed from the bank by the ring-row-1 127/128
+  stretch the sliver never copied; the bank matches the ring.
+* **No uncovered edges.** Sweep: 4613 solid-void reveal columns, every one
+  explained: 4452 beyond the map edge (narrow rooms centred at 21/21 px, the
+  clamp ends), 142 painted black, 19 on 146 (no RAM dump; the decode below
+  shows its reveals equal the art), 0 lit art. 130 stops had the ring short
+  on the right: 0 voids. gapwalk 204/12/69, 4 walks each, every presented
+  frame: 0 void frames. 7-warp arrival chain: 0/7 bad, with the camera left
+  where the game put it (C = 53, 292, 429, 153, 53, 139, 53: no nudge).
+* **Reveal equals the art** (independent decode of the vanilla tile file
+  with the live palette, aligned on the centre; mean / median abs luma):
+  battle on map 69 started at a right-deficit camera (deficit 31-34): left
+  2.05 / 0.59, right 0.7-4.7 / 0.0 over 4 battle frames (the same as the
+  standing frame before it, 2.02 / 0.59 and 4.5 / 0.0: the means are
+  characters in the reveal). After a real flee (FLEE_TIMER 41; the game moved
+  the tamer to 204): 0.8-7.0 / 0.0. Evolution on 204: 0.03 / 0.0 and
+  0.08 / 0.0 on every field frame of the sequence. Robot House 146 (the id
+  `readMapTFS(0x92)` re-reads), 14 stops: medians 0-1.
+* **Savestates**: save/load mid-field and mid-battle on 69, and a cold restore
+  of both in a new process: 0 void columns, reveal medians 0-0.59, and the
+  cold restore rebuilt the bank through the resolver (`resolved` = 1).
+* **Fallback = Phase 1.** With an (empty) HD texture pack on, OpenGL:
+  `dw.ws.banks.frames` stays 0, gapwalk 0 void frames, the 7-warp chain
+  0/7 with exactly the Phase 1 cameras (53, 309, 437, 181, 53, 139, 53), a
+  421-stop sweep of 8 maps 0 unexplained voids (50 ring-short stops, all
+  covered by the sliver; 206 and 18 at 21/21 px). Software renderer: 48
+  stops on 204/69/12, 8 ring-short, 0 voids.
+* **Cost**: windowed (not headless), process CPU per vblank at one standing
+  spot on 204, 8 alternating 8-second windows each: banks on 7.75 ms median,
+  off 8.01; paired difference -0.26 ms mean (SD 0.44), so any cost is below
+  the measurement noise, upper bound about +0.05 ms at 2 SE. Game frames per
+  window identical (160-161 both).
+* **With Digimon World 1.5** (widescreen + dw.1_5, NEW GAME): plan loads
+  with no refusal lines, banks drew (5 defined, 5455 frames), reveals on maps
+  0, 69 and 204 at 9 stops: median 0 luma from the art. Savestates could not
+  be taken under 1.5 in this build with or without widescreen, so the A/B
+  there is not done.
+* **After a real flee** the shots are the first three field frames on 204;
+  walking on from there took the tamer through a door.
 
 
 
@@ -1208,7 +1297,8 @@ frame-pacing guard for monitors where vsync does not actually throttle, the
 GameShark cheat engine, the widescreen plugin, the squash-gate export W1 needs,
 the dormant W2 machinery, a hash-pinned build toolchain that no longer edits the
 user's PATH, the fail-closed packaging guard, and the
-`[[widescreen.cull.relative_x_bound]]` cull kind (§5.0e).
+`[[widescreen.cull.relative_x_bound]]` cull kind (§5.0e) and live-palette
+texture banks (`psx_mod_define_texture_bank_live_clut`, §5.0f).
 
 ---
 
@@ -1320,6 +1410,14 @@ user's PATH, the fail-closed packaging guard, and the
   reached live. Fishing's own camera clamp (B5) was not measured. The
   partner-reappearance cull (§5.0e) is verified in the generated code only,
   and particle flashes still cull at the 4:3 edge.
+* **Widescreen bank backdrop** (§5.0f): OpenGL only; Software, HD texture
+  packs and netplay's CPU-authoritative path keep the ring and the sliver.
+  Rewind is not built into this product (no rbengine snap ring in the
+  framework checkout), so the bank path's rewind behaviour is unmeasured;
+  save/load and a cold restore are. The ring itself can show a wrong tile in
+  a column at some map-25 stops (banks off: 28.9 luma from the art over that
+  column, banks on: 1.7); not chased, since the banks paint over it on GL.
+  The field walk route never reached map 205 by warp.
 * **Four inherited cheats remain suspect** (§6.3).
 * ~~Prosperity Points ignore new recruits.~~ **Stale — they have counted since
   0.3.0.** The recruit loop's bound WAS widened

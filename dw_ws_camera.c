@@ -53,6 +53,7 @@
 extern int psx_mod_ws_squash_params(int32_t* num, int32_t* den);
 extern int32_t psx_mod_ws_native_wide_offset(void);
 extern int32_t psx_mod_widescreen_x_margin(void);
+extern int dw_ws_banks_active(void); /* dw_ws_sliver.c */
 
 #define DW_CAMERA_IS_AT_EDGE 0x800D7F68u
 #define DW_HANDLE_TILE_UPDATE 0x800D78BCu  /* the backdrop streaming ladder */
@@ -316,8 +317,12 @@ static void dw_align_x(int32_t w, int32_t m) {
      *
      *     C mod 128 >= m
      *
-     * and the right edge needs no test, because r <= 127 < 192 - m always. */
-    if (r >= m)
+     * and the right edge needs no test, because r <= 127 < 192 - m always.
+     *
+     * None of this matters when the backdrop comes from texture banks
+     * (dw_ws_sliver.c): they draw every tile the view meets, so the camera
+     * stays where the game put it. */
+    if (r >= m || dw_ws_banks_active())
         return;
     d = m - r;
     if (c + d < lo || c + d > hi)
