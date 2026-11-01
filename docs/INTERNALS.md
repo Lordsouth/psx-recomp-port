@@ -725,7 +725,7 @@ the 106 px sliver lifts the practical bound to about 78. 21:9 clears neither,
 so it is served by the bank backdrop (5.0f) alone: `dw_ws_camera.c` lifts its
 margin cap from 64 to 120 (`DW_MARGIN_BANKS_MAX`) only while banks draw the
 map on screen (`dw_ws_banks_active(m)`, asked every frame). Where banks are
-refused (an HD texture pack, Vulkan, netplay's CPU-authoritative path) the
+refused (Vulkan, netplay's CPU-authoritative path) the
 framework still presents 21:9 -- there is no runtime fallback to a narrower
 aspect -- and the ring tier runs at 64: the inner 64 px of each reveal are
 covered as at 16:9 and the outer 56 are not (5.0h). Nothing wider than 21:9 is
@@ -936,7 +936,7 @@ four-column VRAM tile ring (`dw_ws_sliver.c`, `dw.ws.sliver`).
   the GPU refuses (HD pack switched on later) draws nothing and the ring
   under it still does.
 * **The sliver and the load-time nudge stand down while banks draw**; both
-  stay, unchanged, for HD texture packs, Vulkan and netplay's
+  stay, unchanged, for Vulkan and netplay's
   CPU-authoritative path (`psx_mod_texture_banks_supported() == 0`), and for
   the Software renderer at 16:9 and 16:10, where a bank backdrop costs more
   than the ring it replaces (`psx_mod_renderer_accelerated() == 0`, 5.0h). The
@@ -1618,10 +1618,16 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
 * ~~Fishing's camera clamp (B5) shows map-edge black.~~ **CLOSED (0.4.0)**:
   the limit pair is widened while FISH is loaded (§5.0i). A curling match was
   not reached live.
-* **Widescreen bank backdrop** (§5.0f, §5.0h): OpenGL, and Software at 21:9; HD
-  texture packs, Vulkan and netplay's CPU-authoritative path keep the ring and
-  the sliver, so at 21:9 they leave the outer 56 px of each reveal uncovered
-  (the manifest text says so; there is no runtime fallback to 16:9).
+* **Widescreen bank backdrop** (§5.0f, §5.0h): OpenGL, and Software at 21:9;
+  Vulkan and netplay's CPU-authoritative path keep the ring and the sliver,
+  so at 21:9 they leave the outer 56 px of each reveal uncovered (there is no
+  runtime fallback to 16:9). With an HD texture pack on (OpenGL), banks draw
+  and use the pack: each bank slot is declared as the 64x128-word tile upload
+  it holds (`psx_mod_texture_bank_add_upload`), and the framework matches bank
+  draws against that residency. Verified at 21:9 on map 204 with a 30-tile
+  Beetle-format test pack (every tile flipped): the reveals changed with the
+  pack on/off (mean luma diff 30/38) as the centre did (17), banks drew at
+  m = 120. DuckStation-format packs share the code path but were not run.
   Rewind is not built into this product (no rbengine snap ring in the
   framework checkout), so the bank path's rewind behaviour is unmeasured;
   save/load and a cold restore are. The ring itself can show a wrong tile in

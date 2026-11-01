@@ -398,8 +398,16 @@ static int dw_bank_define(int32_t map, const uint8_t* tfs, uint32_t size) {
             for (x = 0; x < DW_BANK_SLOT_HW; x++)
                 dst[x] = (uint16_t)(src[2 * x] | (src[2 * x + 1] << 8));
     }
-    return psx_mod_define_texture_bank_live_clut((uint16_t)(map + 1), w, h,
-                                                 dw_bank_px);
+    if (!psx_mod_define_texture_bank_live_clut((uint16_t)(map + 1), w, h, dw_bank_px))
+        return 0;
+    /* Each slot holds the words of one tile exactly as the game's LoadImage
+     * uploads them, so an HD texture pack's tile replacements match bank draws. */
+    for (k = 0; k < n; k++)
+        (void)psx_mod_texture_bank_add_upload((uint16_t)(map + 1),
+                                              (k % DW_BANK_SLOT_COLS) * DW_BANK_SLOT_HW,
+                                              (k / DW_BANK_SLOT_COLS) * DW_BANK_ROW1_Y,
+                                              DW_BANK_SLOT_HW, DW_TILE_PX);
+    return 1;
 }
 
 /* Build the bank for the map the sliver's copy holds, once per process. */

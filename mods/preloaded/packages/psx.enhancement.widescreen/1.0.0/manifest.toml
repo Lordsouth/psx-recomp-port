@@ -24,11 +24,12 @@ save_compatibility = "shared"
 #   backdrop (dw_ws_sliver.c, dw_bank_draw), which draws every tile the view
 #   meets from the map's own tile file.
 #
-#   Texture banks are refused while an HD texture pack is on (and on Vulkan).
-#   The framework has no way to fall back to a narrower aspect at runtime, so
-#   the frame stays 21:9 and the ring tier runs at its 64-px cap
-#   (dw_ws_camera.c DW_MARGIN_MAX): the inner 64 px of each reveal are
-#   covered, the outer 56 are not. The option text says so.
+#   With an HD texture pack on, bank draws use its replacements too: the
+#   plugin declares each bank slot as the tile upload it holds
+#   (psx_mod_texture_bank_add_upload), so a replacement keyed on that upload
+#   matches in the bank as it does in VRAM. Texture banks are refused on
+#   Vulkan, where the frame stays 21:9 and the ring tier runs at its 64-px cap
+#   (dw_ws_camera.c DW_MARGIN_MAX).
 #
 # Nothing wider than 21:9 is offered: only 30 maps fill a 32:9 view.
 #
@@ -49,7 +50,7 @@ default_enabled = false
 feature = "widescreen"
 id = "aspect"
 label = "Aspect ratio"
-description = "16:9 is the tested default. 16:10 reveals a little less. 21:9 (ultrawide) shows the most, with two limits: 36 small rooms are narrower than the 21:9 view and show an even black bar on each side, and it needs the backdrop drawn from the game's own tile files, which HD texture packs switch off. With an HD texture pack on, 21:9 keeps its full width but the backdrop reaches only about as far as at 16:9, so black bands up to 56 px wide come and go at both sides as the camera moves. Pick 16:9 to use HD texture packs. Nothing wider than 21:9 is offered."
+description = "16:9 is the tested default. 16:10 reveals a little less. 21:9 (ultrawide) shows the most; 36 small rooms are narrower than the 21:9 view and show an even black bar on each side. HD texture packs work at every width, including the extra width at 21:9. Nothing wider than 21:9 is offered."
 group = "Video"
 type = "choice"
 default = "16:9"

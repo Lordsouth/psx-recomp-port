@@ -108,8 +108,9 @@ Also:
   evolution or a load, and the middle of the screen is pixel-for-pixel what
   it was. The Software renderer keeps the previous method at 16:9 and 16:10,
   which stays clean there and costs nothing extra, and uses the tile file only
-  at 21:9 (see below). HD texture packs and netplay keep the previous method
-  too. **Savestates
+  at 21:9 (see below). Netplay keeps the previous method too; HD texture
+  packs now use the tile-file backdrop like everything else, and their
+  replacements apply to it. **Savestates
   made with widescreen on and with it off are no longer interchangeable**
   (memory-card saves are unaffected), and savestates from earlier builds will
   not load.
@@ -117,11 +118,9 @@ Also:
   Software at a price: the backdrop is drawn twice, about 12 ms of CPU per
   frame at the default 4x supersampling). The 36
   smallest rooms are narrower than a 21:9 view and show an even black bar on
-  each side (88 px on the three-tile rooms, 24 px on the four-tile ones).
-  21:9 needs the backdrop drawn from the room's tile file, which HD texture
-  packs switch off: with an HD pack on, the picture stays 21:9 but the
-  backdrop reaches only about as far as at 16:9, so black bands up to 56 px
-  come and go at the sides. Nothing wider is offered.
+  each side (88 px on the three-tile rooms, 24 px on the four-tile ones). HD texture packs work at 21:9: their
+  tile replacements apply in the extra width as well as the middle. Nothing
+  wider is offered.
 * "Shrink your own collision box" now works with 1.5. 1.5 moved the Digimon
   table, so the cheat checks which game is running and writes that game's own
   copy; before, under 1.5 it wrote into an unrelated table.
