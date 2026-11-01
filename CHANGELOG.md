@@ -104,11 +104,22 @@ Also:
   file instead of the game's four-column tile ring, so every column of the
   wide view is the real art: no void at the edges after a battle, a flee, an
   evolution or a load, and the middle of the screen is pixel-for-pixel what
-  it was. The Software renderer, HD texture packs and netplay keep the
-  previous method, which also stays clean at 16:9 and 16:10. **Savestates
+  it was. The Software renderer now does the same, at a price: it draws the
+  backdrop twice, which at the default 4x supersampling costs about 10 ms of
+  CPU per frame (measured: 17 to 13 frames per second at 16:9 on the test
+  machine, which was already short of full speed there). HD texture packs and
+  netplay keep the previous method, which also stays clean at 16:9 and
+  16:10. **Savestates
   made with widescreen on and with it off are no longer interchangeable**
   (memory-card saves are unaffected), and savestates from earlier builds will
   not load.
+* Widescreen offers **21:9 (ultrawide)**, on OpenGL and Software. The 36
+  smallest rooms are narrower than a 21:9 view and show an even black bar on
+  each side (88 px on the three-tile rooms, 24 px on the four-tile ones).
+  21:9 needs the backdrop drawn from the room's tile file, which HD texture
+  packs switch off: with an HD pack on, the picture stays 21:9 but the
+  backdrop reaches only about as far as at 16:9, so black bands up to 56 px
+  come and go at the sides. Nothing wider is offered.
 * "Shrink your own collision box" now works with 1.5. 1.5 moved the Digimon
   table, so the cheat checks which game is running and writes that game's own
   copy; before, under 1.5 it wrote into an unrelated table.
@@ -119,8 +130,8 @@ Also:
 * The setup package is now named `digimon-world-*-windows-x64.zip`.
 * The game's mods moved to `mods/preloaded/packages` and are staged by the
   framework. Done the old way, the updated framework replaced this game's
-  Widescreen with its generic one (which offers 21:9, which this game cannot
-  cover) and, on first launch, would have deleted the game's mod sources that
+  Widescreen with its generic one (which lacks this game's own plugins and
+  repainted rooms) and, on first launch, would have deleted the game's mod sources that
   the setup wizard rebuilds from.
 * 1.5's patch contains glyphs from two SIL OFL fonts (Ark Pixel, Cubic 11);
   their licence texts now ship beside it, as the OFL requires.

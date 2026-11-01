@@ -696,8 +696,8 @@ gauges each as ONE widget, the battle bars' slide table, and every other
 full-screen plate or mask band via one ordering-table walk),
 `dw_ws_camera.c` (both camera clamps, the tile-ladder shift, the load-time
 nudge, the per-frame clamp, narrow-map centring, the widened visibility
-cull), `dw_ws_sliver.c` (on OpenGL the whole backdrop drawn from texture
-banks built from the tile file read off the disc; elsewhere the fifth
+cull), `dw_ws_sliver.c` (on OpenGL and Software the whole backdrop drawn
+from texture banks built from the tile file read off the disc; elsewhere the fifth
 backdrop column, uploaded as a stacked VRAM sliver whenever the game's
 four-column ring falls short, from the same host copy) and `dw_ws_world.c` (keeps a field
 frame wide through a synchronous tile reload), plus `dw_ws_weather.c` (snow
@@ -705,7 +705,7 @@ and mist copied into the reveals) -- and one framework primitive
 per need (`mod_function_exit_funcs`, `psx_mod_ws_native_wide_offset`,
 `psx_mod_vram_write`, `psx_mod_set_world_scene_predicate`, live-palette
 texture banks). Section 5.0c has the 0.4.x pass and its numbers, 5.0d the
-plates and weather, 5.0e the codegen culls, 5.0f the bank backdrop, 5.0g why there is no per-map camera table. The
+plates and weather, 5.0e the codegen culls, 5.0f the bank backdrop, 5.0g why there is no per-map camera table, 5.0h 21:9. The
 wider field of view is rendered into a genuinely wider framebuffer (320 -> 426
 at 16:9, `EXTRA = 2 * round(W*(3n-4d)/(8d))`) and presented 1:1. Nothing is
 stretched, so the entire "screen-space 2D renders stretched" problem class —
@@ -717,16 +717,21 @@ offers only an aspect. Sections 5.1 and 5.2 describe squash and are kept
 because the code is still there and still gated, not because anyone can turn
 it on.
 
-**Only 16:9 and 16:10 are offered.** The reveal per side is
-`(w*(3n-4d) + 4d) / (8d)`, so at w = 320 that is 32 px, 53 px, and 120 px for
-21:9. The tile ring covers 512 px and needs the origin's leftslack in
-`[m, 192-m]`, an interval that is EMPTY for `m > 96`; the 106 px sliver lifts
-the practical bound to about 78. 21:9 clears neither, and it is not a tuning
-constant away — it is the ring's size. On OpenGL the bank backdrop (5.0f) no
-longer depends on the ring, but the margin cap stays at 64 until 21:9 is
-swept on its own (Software and HD packs still use the ring). The game ships its own copy of the
-framework's widescreen manifest, under `mods/preloaded/packages/`, with that choice
-removed. If the builtin's version is ever bumped past 1.0.0 the override stops
+**16:9, 16:10 and 21:9 are offered; 21:9 only through texture banks.** The
+reveal per side is `(w*(3n-4d) + 4d) / (8d)`, so at w = 320 that is 32 px,
+53 px, and 120 px for 21:9. The tile ring covers 512 px and needs the
+origin's leftslack in `[m, 192-m]`, an interval that is EMPTY for `m > 96`;
+the 106 px sliver lifts the practical bound to about 78. 21:9 clears neither,
+so it is served by the bank backdrop (5.0f) alone: `dw_ws_camera.c` lifts its
+margin cap from 64 to 120 (`DW_MARGIN_BANKS_MAX`) only while banks draw the
+map on screen (`dw_ws_banks_active()`, asked every frame). Where banks are
+refused (an HD texture pack, Vulkan, netplay's CPU-authoritative path) the
+framework still presents 21:9 -- there is no runtime fallback to a narrower
+aspect -- and the ring tier runs at 64: the inner 64 px of each reveal are
+covered as at 16:9 and the outer 56 are not (5.0h). Nothing wider than 21:9 is
+offered. The game ships its own copy of the
+framework's widescreen manifest, under `mods/preloaded/packages/`, which
+declares the game's plugins and repaint patches and carries that text. If the builtin's version is ever bumped past 1.0.0 the override stops
 applying silently, because the loader takes the highest semver.
 
 ### 5.0 The native-wide measurement (what actually got checked)
@@ -907,7 +912,8 @@ widened in the generated code by the live margin `psx_ws_x_margin()` (53 at
 
 ### 5.0f The backdrop from texture banks (0.4.x)
 
-Phase 4. On OpenGL the field backdrop no longer depends on the game's
+Phase 4 (OpenGL), Phase 5 (Software, through the fork's software bank
+sampler, 5.0h). The field backdrop no longer depends on the game's
 four-column VRAM tile ring (`dw_ws_sliver.c`, `dw.ws.sliver`).
 
 * **One bank per tile file**, id = map id + 1, built only from
@@ -930,7 +936,7 @@ four-column VRAM tile ring (`dw_ws_sliver.c`, `dw.ws.sliver`).
   the GPU refuses (HD pack switched on later) draws nothing and the ring
   under it still does.
 * **The sliver and the load-time nudge stand down while banks draw**; both
-  stay, unchanged, for Software, HD texture packs and netplay's
+  stay, unchanged, for HD texture packs, Vulkan and netplay's
   CPU-authoritative path (`psx_mod_texture_banks_supported() == 0`). The
   arena makes savestates taken with widescreen on carry an expansion-memory
   section (state format v8): states made with it on and off are not
@@ -976,8 +982,8 @@ Measured at 16:9, OpenGL headless (`--headless-opengl`) unless stated:
   `dw.ws.banks.frames` stays 0, gapwalk 0 void frames, the 7-warp chain
   0/7 with exactly the Phase 1 cameras (53, 309, 437, 181, 53, 139, 53), a
   421-stop sweep of 8 maps 0 unexplained voids (50 ring-short stops, all
-  covered by the sliver; 206 and 18 at 21/21 px). Software renderer: 48
-  stops on 204/69/12, 8 ring-short, 0 voids.
+  covered by the sliver; 206 and 18 at 21/21 px). Software renderer, before
+  Phase 5 gave it banks: 48 stops on 204/69/12, 8 ring-short, 0 voids.
 * **Cost**: windowed (not headless), process CPU per vblank at one standing
   spot on 204, 8 alternating 8-second windows each: banks on 7.75 ms median,
   off 8.01; paired difference -0.26 ms mean (SD 0.44), so any cost is below
@@ -1039,6 +1045,98 @@ every byte of behaviour is stock.
 Verified numerically: 574 tile quads measure 96 px wide with the squash live
 and 128 px with it disabled mid-session, while every UI primitive population is
 identical.
+
+### 5.0h 21:9 (0.4.x)
+
+Phase 5. Two pieces, plus the manifest choice.
+
+* **Fork: Software draws texture banks** (F2). The renderer vtable gains
+  `texture_banks_supported` / `select_texture_bank`; `gpu.c`'s GT3 and BG2D
+  bank paths and `psx_mod_texture_banks_supported()` ask `gr_*` instead of
+  testing for OpenGL. The software rasterizer takes a texel source
+  (`sw_set_texture_source`): texel words, and palette words unless the bank
+  is live-palette, come from the bank, addressed like VRAM and 0 outside it
+  (the GL shader's rule), point-sampled whatever the filter setting. It refuses
+  under the netplay CPU-authoritative raster (`sw_faithful_authority`) and
+  while an HD pack replaces or dumps. Unit test
+  `runtime/tests/test_sw_texture_banks.c` (bank draw byte-identical to the
+  same words drawn from VRAM, live palette recolours, extent, filter,
+  refusals). Vulkan has no hook and still refuses.
+* **DW: the camera cap follows the banks.** `dw_margin()` latches any reveal
+  up to 120 (`DW_MARGIN_BANKS_MAX`) and serves it while `dw_ws_banks_active()`;
+  above 64 without banks it returns 64, so the clamp, nudge, ladder shift and
+  sliver run exactly as at 16:9 on the inner 64 px. The tile-ladder shift is
+  skipped above 64 (the banks cover the view; the ring keeps the game's own
+  origin). The sliver tries the banks at any width first and clamps its own
+  reveal to 64. Everything else (plates, parked HUD, battle bars, weather,
+  culls) already scaled with the presented width.
+
+Measured at 21:9 (m = 120), headless, OpenGL (`--headless-opengl`) and
+Software (`--headless --renderer software`, internal scale 4):
+
+* **Broad sweep**, 30 steps per direction, banks on/off A/B from one
+  savestate every 12th (GL) / 24th (Software) stop. GL: 33 maps, 1,064 stops
+  (238 unreachable by warp this time). Software: 32 maps, 983 stops (209
+  unreachable). Every measured stop had the ring short (it cannot cover 560
+  px), so every reveal pixel came from the banks. Solid-void reveal columns:
+  GL 28,347, of which 27,655 beyond the map edge, 331 painted black, 361 lit
+  art; Software 28,057 / 27,214 / 293 / 550. **Every lit-art void is the Item
+  Shop (216)'s left strip**, world columns 0-42, which the game itself draws
+  black: with widescreen off the 4:3 frame at C = 17 shows world 20-40 at
+  luma 8 (max 25) where the tile art is lit (5.0b's "shadowed pillar"). No
+  other map has one: **unexplained edge voids = 0** on both renderers.
+* **Inside the 4:3 frame** (A/B): GL 130 stops paired, 128 with the centre
+  320 columns bit-identical in every pair; the other two are the dialogue
+  scenes that diverged in 5.0f too (36, 208). Software at native resolution:
+  84 paired, 60 identical, the other 24 differ only on animated sprites, the
+  clock needle, speech bubbles and water (checked as a diff montage). At
+  internal scale the bank's two triangles and the game's rect-drawn FT4 differ
+  in 0.33 % (median) of the centre's sub-samples: native VRAM is identical.
+* **Narrow maps centre**: every three-tile map (18, 29, 45, 49, 206, 207) at
+  C = 32 with 88 px beyond the map edge on each side; every four-tile map
+  reached (157, 205, 209, 211, 213, 214, 215, 222) at C = 96 with 24 px each
+  side, on both renderers.
+* **gapwalk 204/12/69**, 4 walks each, every presented frame: 0 void frames
+  (GL 4,182 images, Software 4,222). **7-warp arrival chain**: 0 unexplained
+  voids on both, cameras C = 120, 292, 429, 153, 120, 96, 96 (no nudge); the
+  205 and 211 arrivals' dark edges classify as 24-px map-edge bars plus 205's
+  own black art.
+* **Battle at a ring-deficit camera** (map 69, ring short by 5-13 px, plus the
+  whole 120-px left): reveal vs an independent decode of the tile file, mean /
+  median abs luma, GL L 2.1 / 0.59, R 2.2-2.4 / 0.0; Software L 4.4 / 3.5,
+  R 4.3 / 2.9, the same as its own centre (3.5: Software's colour path against
+  the decode). HP/MP bars and the "Your Call" HUD in place, enemy bars parked
+  out of frame.
+* **Characters in the reveal** (isOnScreen against the widened projection,
+  NPCs steered into each reveal): GL 71 of 77 in-reveal samples drawn,
+  Software 31 of 33. The ones not drawn that were checked (4 GL, 2 Software)
+  are below the frame (v > 120); the game's flag agreed with the widened
+  projection in 330 of 335 samples overall.
+* **Plates**: pause dims every band alike (median drop L/C/R GL 45/48/45,
+  56/53/45, 62/56/51 on maps 0/204/69; Software 50/52/48, 61/58/50,
+  67/60/55); the warp fade-out likewise (GL 91/96/91, 112/107/91,
+  124/112/102). With the menu open the parked clock leaves no piece in the
+  left reveal.
+* **Weather**: snow on 88, flakes per column L/C/R 18.3/17.5/17.6 (GL),
+  17.9/17.5/16.1 (Software); mist on 115-119 fully covers the 560-px window
+  in 100/100 samples on both.
+* **Without banks** (empty HD texture pack on, GL): the ring tier at 64. A
+  4-map sweep (204, 69, 12, 0; 149 stops): contiguous black at an edge 0-56 px
+  per side, never more, changing with the camera; 115 stops had some. That is
+  what the manifest text tells the player.
+* **16:9 and 16:10 unchanged**: gapwalk 204 (4 walks, every frame) 0 void
+  frames at 16:9 GL (1,392 images), 16:10 GL (1,399) and 16:9 Software (1,417,
+  now on banks); a battle on 69 at each: reveal medians 0-0.59 on GL, 2.8-3.5
+  on Software (equal to its centre).
+* **Cost**, windowed, process CPU per vblank, standing on 204, alternating
+  8-second windows, banks on vs off (off = the game's own ring only): OpenGL
+  at 21:9 10.33 vs 9.60 ms median, paired difference +0.85 ms (8 pairs).
+  **Software is expensive**: at supersampling 4 (the game's default) a bank
+  backdrop is a second full-screen textured raster on top of the ring it
+  covers, +12.2 ms per vblank at 21:9 (30.1 vs 17.5) and +10 ms at 16:9
+  (33 vs 23); on this machine the game fell from about 15 to 9 vblanks per
+  second at 21:9 and from 17 to 13 at 16:9. Software at 16:9 and 16:10 now
+  draws banks too, so this is new for Software players at every aspect.
 
 ### 5.2 W2 — UI counter-squash (built, **dormant**, not working)
 
@@ -1441,8 +1539,15 @@ texture banks (`psx_mod_define_texture_bank_live_clut`, §5.0f).
   reached live. Fishing's own camera clamp (B5) was not measured. The
   partner-reappearance cull (§5.0e) is verified in the generated code only,
   and particle flashes still cull at the 4:3 edge.
-* **Widescreen bank backdrop** (§5.0f): OpenGL only; Software, HD texture
-  packs and netplay's CPU-authoritative path keep the ring and the sliver.
+* **Widescreen bank backdrop on Software costs a second backdrop raster**
+  (§5.0h: +10-12 ms CPU per vblank at supersampling 4). The ring quads under
+  the banks are still drawn so that a bank refused at GPU time leaves the ring
+  (5.0f); dropping them when banks draw, or keeping Software on the ring at
+  16:9/16:10, would remove the cost. Not decided.
+* **Widescreen bank backdrop** (§5.0f, §5.0h): OpenGL and Software; HD
+  texture packs, Vulkan and netplay's CPU-authoritative path keep the ring and
+  the sliver, so at 21:9 they leave the outer 56 px of each reveal uncovered
+  (the manifest text says so; there is no runtime fallback to 16:9).
   Rewind is not built into this product (no rbengine snap ring in the
   framework checkout), so the bank path's rewind behaviour is unmeasured;
   save/load and a cold restore are. The ring itself can show a wrong tile in

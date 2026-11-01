@@ -88,9 +88,14 @@ extern int dw_ws_banks_active(void); /* dw_ws_sliver.c */
  * gap between the drawn and the stepped camera is some other path moving the
  * offset (a scripted camera, the battle loop) and is not trusted. */
 #define DW_STEP_MAX 32
-/* A 320-wide display makes any reveal past this a display-mode surprise;
- * disable rather than clamp to a number derived from the wrong width. */
+/* The largest reveal the backdrop's tile ring (with dw_ws_sliver.c) serves:
+ * 16:9 and 16:10. Past it only texture banks cover the view, up to 21:9's
+ * 120 px, the widest aspect offered and measured. A wider frame without banks
+ * (an HD texture pack at 21:9) runs the ring tier at DW_MARGIN_MAX: the inner
+ * 64 px of each reveal behave as at 16:9 and the rest is not covered. Past
+ * DW_MARGIN_BANKS_MAX the camera behaves exactly like vanilla. */
 #define DW_MARGIN_MAX 64
+#define DW_MARGIN_BANKS_MAX 120
 
 static int32_t dw_margin_latch;
 
@@ -106,7 +111,7 @@ static int32_t dw_margin(void) {
         return 0;
     }
     off = psx_mod_ws_native_wide_offset();
-    if (off > 0 && off <= DW_MARGIN_MAX)
+    if (off > 0 && off <= DW_MARGIN_BANKS_MAX)
         dw_margin_latch = off;
     if (dw_margin_latch <= 0)
         return 0;
@@ -116,6 +121,9 @@ static int32_t dw_margin(void) {
         dw_margin_latch = 0;
         return 0;
     }
+    /* Asked every frame: an HD texture pack switched on refuses the banks. */
+    if (dw_margin_latch > DW_MARGIN_MAX && !dw_ws_banks_active())
+        return DW_MARGIN_MAX;
     return dw_margin_latch;
 }
 
@@ -188,8 +196,8 @@ static void dw_tile_ladder_enter(struct CPUState* cpu, uint32_t address) {
     (void)address;
     dw_tile_shift_applied = 0;
     m = dw_margin_for_map((int32_t)(int8_t)psx_mod_read_byte(DW_MAP_WIDTH));
-    if (m <= 0)
-        return;
+    if (m <= 0 || m > DW_MARGIN_MAX)
+        return;                       /* past the ring's reach the banks draw */
     c = dw_read_i16(DW_CAMERA_X);
     p = dw_read_i16(DW_CAMERA_X_PREVIOUS);
     s = m + dw_drawn_lag();

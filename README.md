@@ -113,7 +113,7 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 | **Run Speed** | Your tamer runs 1.5x or 2x faster in the field. Walls, doors, exits and talking work as normal; your partner catches up when you stop | Yes |
 | **Gameplay** | Better odds of learning techniques in battle; lower the stat requirements for evolutions | Tech Mastery yes; Evolution Unbound no, use the 1.5 edition |
 | **Evolution Unbound (1.5)** | Lower the stat requirements for 1.5's evolutions, the new lines included: Relaxed (75%) or Open (50%). Ticking it ticks 1.5 | 1.5 only |
-| **Widescreen** | 16:9 or 16:10. The wider view is rendered at full width and shown 1:1, so nothing is stretched — menus, text boxes and the HUD keep their original shapes, and the extra width is real extra view on both sides. Two rough edges remain, listed under Mods below | Yes |
+| **Widescreen** | 16:9, 16:10 or 21:9 (21:9 not with HD texture packs). The wider view is rendered at full width and shown 1:1, so nothing is stretched — menus, text boxes and the HUD keep their original shapes, and the extra width is real extra view on both sides. Two rough edges remain, listed under Mods below | Yes |
 | **Cheats** | All 57 GameShark-style codes as toggles, grouped by what they affect — infinite HP, freeze the clock, max stats, every card and item, and more. Off by default; while it is off, `cheats.txt` decides instead | Yes |
 | **Fast Loading** | Shorter loads. **Off by default and best left off on this game** -- it speeds up real time whenever it thinks a load is happening, and on Digimon World it stays engaged, running the whole game at 4x. | Not checked |
 
@@ -155,6 +155,9 @@ Worth knowing before you turn it on, so nothing looks like a fault in your copy:
 * A few interiors were only ever built as far as the original camera could see,
   so their edges can be dark. That is missing scenery on the disc, not a
   rendering fault, and nothing in the port can invent it.
+* At 21:9 the 36 smallest rooms are narrower than the picture and show an even
+  black bar on each side. 21:9 is not for use with HD texture packs: with one
+  on, black bands come and go at the sides.
 
 Anything else you see in widescreen is worth reporting. The picture should not
 be stretched, the sides should not go black while you walk, and no piece of the

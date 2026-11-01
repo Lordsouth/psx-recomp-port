@@ -11,28 +11,26 @@ save_compatibility = "shared"
 #
 # Why it exists: the builtin offers 16:9, 16:10 and 21:9 to every title
 # (mods/builtin/packages/psx.enhancement.widescreen/1.0.0/manifest.toml,
-# game_id "*"). This game cannot honour 21:9, and the failure is structural,
-# not a missing tuning constant:
+# game_id "*"). This game honours all three, but 21:9 only under a condition
+# the builtin cannot state, so the choice list and its text live here.
 #
 #   The reveal per side is off = (w*(3n-4d) + 4d) / (8d) at w = 320, so
 #   16:10 -> 32 px, 16:9 -> 53 px, 21:9 -> 120 px.
 #
-#   The backdrop streams as a ring of FOUR 128-px tile columns = 512 px, and
-#   the widened view spans [C-m, C+320+m). Coverage needs the ring origin's
-#   leftslack in [m, 192-m], which is EMPTY for m > 96 -- no policy, no
-#   alignment, no camera nudge can cover a 560-wide frame from 512 px of
-#   tiles. The fifth-column sliver (dw_ws_sliver.c) adds at most 106 px on the
-#   right, which lifts the bound to about m <= 78; a VRAM census found nowhere
-#   to put more. 120 clears neither bound.
+#   The game streams its backdrop as a ring of FOUR 128-px tile columns =
+#   512 px. With the fifth-column sliver (dw_ws_sliver.c) that ring can cover
+#   a reveal of about 78 px, so 16:9 and 16:10 work from it alone. 21:9's 560-
+#   px view cannot come from 512 px of tiles: it needs the texture-bank
+#   backdrop (dw_ws_sliver.c, dw_bank_draw), which draws every tile the view
+#   meets from the map's own tile file.
 #
-#   Worse than a void: at 120 the game's own plugins latch off entirely
-#   (dw_ws_camera.c DW_MARGIN_MAX), so the widened map-edge clamp and the
-#   tile-ladder shift stop too, and the LEFT reveal -- which the sliver does
-#   not serve -- voids at most camera positions.
+#   Texture banks are refused while an HD texture pack is on (and on Vulkan).
+#   The framework has no way to fall back to a narrower aspect at runtime, so
+#   the frame stays 21:9 and the ring tier runs at its 64-px cap
+#   (dw_ws_camera.c DW_MARGIN_MAX): the inner 64 px of each reveal are
+#   covered, the outer 56 are not. The option text says so.
 #
-# So 21:9 is not offered here. Offering a choice that silently degrades is
-# worse than not offering it: a player would rightly read a black band as a
-# bug in the port rather than as a limit of the aspect they picked.
+# Nothing wider than 21:9 is offered: only 30 maps fill a 32:9 view.
 #
 # The plugin id below is the framework's own registration
 # (runtime/src/mod_builtin_widescreen.c), which reads this option and calls
@@ -51,7 +49,7 @@ default_enabled = false
 feature = "widescreen"
 id = "aspect"
 label = "Aspect ratio"
-description = "16:9 is the tested default. 16:10 reveals a little less and needs no backdrop patching at all. Wider than 16:9 is not offered: this game's backdrop cannot cover it."
+description = "16:9 is the tested default. 16:10 reveals a little less. 21:9 (ultrawide) shows the most, with two limits: 36 small rooms are narrower than the 21:9 view and show an even black bar on each side, and it needs the backdrop drawn from the game's own tile files, which HD texture packs switch off. With an HD texture pack on, 21:9 keeps its full width but the backdrop reaches only about as far as at 16:9, so black bands up to 56 px wide come and go at both sides as the camera moves. Pick 16:9 to use HD texture packs. Nothing wider than 21:9 is offered."
 group = "Video"
 type = "choice"
 default = "16:9"
@@ -63,6 +61,10 @@ label = "16:9"
 [[option.choice]]
 value = "16:10"
 label = "16:10"
+
+[[option.choice]]
+value = "21:9"
+label = "21:9 (ultrawide)"
 
 [[plugin]]
 feature = "widescreen"

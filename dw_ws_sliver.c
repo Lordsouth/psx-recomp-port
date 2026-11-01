@@ -142,11 +142,12 @@ extern int32_t psx_mod_ws_native_wide_offset(void);
  *
  * The bound this file could support alone is m <= 78 or so (2m - 65 <= 106
  * plus the ladder's measured hysteresis lag); the ring's own structural bound
- * is m <= 96. Neither admits 21:9's 120 px, which is why the game ships its
- * own widescreen manifest offering 16:9 and 16:10 only
- * (mods/packages/psx.enhancement.widescreen). 64 is kept because those are the
- * two aspects that are actually offered and measured; raising it would ship an
- * untested path. */
+ * is m <= 96. Neither admits 21:9's 120 px: 21:9 is served by the texture
+ * banks below alone, and without them (an HD texture pack, Vulkan) the camera
+ * tier and this sliver serve the inner 64 px of each reveal and leave the
+ * rest uncovered (dw_ws_camera.c dw_margin). 64 is kept
+ * because 16:9 and 16:10 are the ring aspects actually offered and measured;
+ * raising it would ship an untested path. */
 #define DW_MARGIN_MAX 64
 
 struct dw_strip { int32_t row, vis0, vish; };
@@ -616,10 +617,12 @@ static void dw_sliver_render_exit(struct CPUState* cpu, uint32_t address) {
     (void)address;
 
     m = psx_mod_ws_native_wide_offset();
-    if (m <= 0 || m > DW_MARGIN_MAX)
+    if (m <= 0)
         return;
     if (dw_bank_draw(m))
         return;                             /* the banks drew the whole view */
+    if (m > DW_MARGIN_MAX)
+        m = DW_MARGIN_MAX;                  /* the camera tier's reveal too */
     w = dw_i8(DW_MAP_WIDTH);
     h = dw_i8(DW_MAP_HEIGHT);
     if (w <= DW_RING_COLS)
