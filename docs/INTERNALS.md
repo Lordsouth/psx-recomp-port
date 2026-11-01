@@ -1227,7 +1227,7 @@ sandbox memory card seeded from `saves/`; none of them touches your own saves.
 | Tool | Answers |
 |---|---|
 | `ws_sweep.py` | does the widescreen backdrop cover the frame **while walking**? Stops every 12 frames in four directions. Aspect-agnostic |
-| `scan_painted_extent.py` | which maps' tile art goes flat black at an edge, and what clamp would hide it? Offline, reads the disc only; a proposal, not a verdict (§5.0f) |
+| `scan_painted_extent.py` | which maps' tile art goes flat black at an edge, and what clamp would hide it? Offline, reads the disc only; a proposal, not a verdict (§5.0g) |
 | `verify_roster_evolution.py` | does the game's own chooser pick a roster species from requirements, and does its model actually stream? |
 | `verify_roster_triggers.py` | do the roster's raised flags land clear of the game's story flags? Reads the bits either side of an evolution |
 | `verify_roster_training.py` | is the relocated training table what a gym actually reads? |
