@@ -704,7 +704,7 @@ and mist copied into the reveals) -- and one framework primitive
 per need (`mod_function_exit_funcs`, `psx_mod_ws_native_wide_offset`,
 `psx_mod_vram_write`, `psx_mod_set_world_scene_predicate`). Section 5.0c has
 the 0.4.x pass and its numbers, 5.0d the plates and weather, 5.0e the
-codegen culls. The
+codegen culls, 5.0f why there is no per-map camera table. The
 wider field of view is rendered into a genuinely wider framebuffer (320 -> 426
 at 16:9, `EXTRA = 2 * round(W*(3n-4d)/(8d))`) and presented 1:1. Nothing is
 stretched, so the entire "screen-space 2D renders stretched" problem class —
@@ -901,6 +901,36 @@ widened in the generated code by the live margin `psx_ws_x_margin()` (53 at
   before a battle left its isOnScreen at 1, so the teleport never ran.
 * **Not done**: renderParticleFlash's cell cull (upper bounds ADDI, lower
   bounds against -DRAWING_OFFSET_X with no immediate), never seen cut.
+
+### 5.0f Painted-extent camera table: measured, no rows (0.4.x)
+
+Phase 6a planned a hand-verified per-map table that pulls the widened clamp
+in to the map's painted extent wherever a hard cut through painted objects
+still shows. The safety rule decides it: an entry may move a clamp end by at
+most m past the camera position the VANILLA game actually reaches, or the
+wide view stops showing something the 4:3 game showed (|C - C_vanilla| <= m).
+Today's clamp [m, scroll - m] already sits exactly m inside [0, scroll], so
+on any map whose vanilla camera reaches the map edge an entry has no room at
+all; the black there is in the 4:3 game too.
+
+`tools/scan_painted_extent.py` (stdlib, reads the disc, `--png` dumps the
+candidates) proposes the extents: 16 maps have a dark edge run of 6 px or
+more. Classified by eye and then swept (`ws_research/p6a`, 8 walks x 12
+stops per map, widescreen off, 16:9, 16:10; door-fade frames excluded):
+
+| map | scan | kind | vanilla C | edge void at the wide clamp ends, 16:9 / 16:10 | entry possible |
+|---|---|---|---|---|---|
+| 216 Item Shop | R 39 | cut, repainted (5.0b) | 0..270 | R 0 / 0; L 41-43 / 32 is the shadowed pillar, shown at C = 0 in 4:3 | no, and not needed |
+| 218 Jijimon (5x3) | L 24 | cut, repainted | 0..275 | 0 / 0 both sides | not needed |
+| 207 Birdra Transport | R 13 | cut, not repainted | 0..46 | L 21 / 0, R 33-35 / 12-14 | no: three tiles, the whole map is already in view, re-centring only moves black from one side to the other |
+| 205 Jijimon (4x3) | (L 0) | room floats in black | 0..192 | L 11 / 7, R 53 / 32 (below the floor) | no: vanilla reaches both ends |
+| 217 Secret Item Shop | L 21 | shadowed wall | 0..192 | L 5 / 5 | no: vanilla reaches C = 0 |
+| 26, 54-64, 108, 126, 137, 235 | 6-88 | mansion, caves, igloo, curling | - | - | left as designed (owner decision D2) |
+
+So the table would have no rows and is not in the code. The two hard cuts the
+camera could not hide were repainted instead (5.0b), and Birdra Transport's
+13 columns stay. Re-run the scanner and a widescreen-off sweep before adding
+an entry for a room this table does not list.
 
 
 
@@ -1108,6 +1138,7 @@ sandbox memory card seeded from `saves/`; none of them touches your own saves.
 | Tool | Answers |
 |---|---|
 | `ws_sweep.py` | does the widescreen backdrop cover the frame **while walking**? Stops every 12 frames in four directions. Aspect-agnostic |
+| `scan_painted_extent.py` | which maps' tile art goes flat black at an edge, and what clamp would hide it? Offline, reads the disc only; a proposal, not a verdict (§5.0f) |
 | `verify_roster_evolution.py` | does the game's own chooser pick a roster species from requirements, and does its model actually stream? |
 | `verify_roster_triggers.py` | do the roster's raised flags land clear of the game's story flags? Reads the bits either side of an evolution |
 | `verify_roster_training.py` | is the relocated training table what a gym actually reads? |
@@ -1320,6 +1351,9 @@ user's PATH, the fail-closed packaging guard, and the
   reached live. Fishing's own camera clamp (B5) was not measured. The
   partner-reappearance cull (§5.0e) is verified in the generated code only,
   and particle flashes still cull at the 4:3 edge.
+* **Widescreen, Birdra Transport (207)** shows 13 columns of black art past
+  its cage on the right (12-14 px at 16:10, inside the 33-35 px bar at
+  16:9). A repaint failed (§5.0b) and no camera clamp can hide it (§5.0f).
 * **Four inherited cheats remain suspect** (§6.3).
 * ~~Prosperity Points ignore new recruits.~~ **Stale — they have counted since
   0.3.0.** The recruit loop's bound WAS widened

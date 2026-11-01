@@ -123,6 +123,10 @@ Known at the time:
 
 * With 1.5 ticked, the launcher's memory card preview still shows the normal
   cards. The game itself uses `saves/dw15/`.
+* Widescreen: in Birdra Transport a thin black strip still shows right of
+  the cage, because the original art stops there. Rooms drawn floating in
+  black (the mansion, the caves, the igloo) show more of that black in the
+  wider view; that is the game's own art and is left as it is.
 
 ---
 
