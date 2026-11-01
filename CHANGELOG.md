@@ -99,21 +99,23 @@ Also:
   cover the whole wide screen; before, the side strips stayed bright. Snow
   falls across the full width, and mist on the misty maps no longer stops
   short of the edges. Animated scenery (water, torches, doors) no longer pops
-  in at the outer edge of the wide view.
+  in at the outer edge of the wide view. Fishing near either shore of
+  Dragon Eye Lake no longer swings the camera to where a black strip shows
+  past the edge of the lake.
 * Widescreen on OpenGL now draws the room backdrop from the room's own tile
   file instead of the game's four-column tile ring, so every column of the
   wide view is the real art: no void at the edges after a battle, a flee, an
   evolution or a load, and the middle of the screen is pixel-for-pixel what
-  it was. The Software renderer now does the same, at a price: it draws the
-  backdrop twice, which at the default 4x supersampling costs about 10 ms of
-  CPU per frame (measured: 17 to 13 frames per second at 16:9 on the test
-  machine, which was already short of full speed there). HD texture packs and
-  netplay keep the previous method, which also stays clean at 16:9 and
-  16:10. **Savestates
+  it was. The Software renderer keeps the previous method at 16:9 and 16:10,
+  which stays clean there and costs nothing extra, and uses the tile file only
+  at 21:9 (see below). HD texture packs and netplay keep the previous method
+  too. **Savestates
   made with widescreen on and with it off are no longer interchangeable**
   (memory-card saves are unaffected), and savestates from earlier builds will
   not load.
-* Widescreen offers **21:9 (ultrawide)**, on OpenGL and Software. The 36
+* Widescreen offers **21:9 (ultrawide)**, on OpenGL and Software (on
+  Software at a price: the backdrop is drawn twice, about 12 ms of CPU per
+  frame at the default 4x supersampling). The 36
   smallest rooms are narrower than a 21:9 view and show an even black bar on
   each side (88 px on the three-tile rooms, 24 px on the four-tile ones).
   21:9 needs the backdrop drawn from the room's tile file, which HD texture

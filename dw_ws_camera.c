@@ -53,7 +53,7 @@
 extern int psx_mod_ws_squash_params(int32_t* num, int32_t* den);
 extern int32_t psx_mod_ws_native_wide_offset(void);
 extern int32_t psx_mod_widescreen_x_margin(void);
-extern int dw_ws_banks_active(void); /* dw_ws_sliver.c */
+extern int dw_ws_banks_active(int32_t m); /* dw_ws_sliver.c */
 
 #define DW_CAMERA_IS_AT_EDGE 0x800D7F68u
 #define DW_HANDLE_TILE_UPDATE 0x800D78BCu  /* the backdrop streaming ladder */
@@ -80,6 +80,7 @@ extern int dw_ws_banks_active(void); /* dw_ws_sliver.c */
 #define DW_LIMIT_X_MIN 0x80134DB8u /* int16 */
 #define DW_LIMIT_Y_MAX 0x80134DBAu /* int16 */
 #define DW_LIMIT_Y_MIN 0x80134DBCu /* int16 */
+#define DW_FISHING_DATA_PTR 0x80134E6Cu /* FishingData*, set while FISH is loaded */
 
 #define DW_SCREEN_W 320
 #define DW_SCREEN_H 240
@@ -122,7 +123,7 @@ static int32_t dw_margin(void) {
         return 0;
     }
     /* Asked every frame: an HD texture pack switched on refuses the banks. */
-    if (dw_margin_latch > DW_MARGIN_MAX && !dw_ws_banks_active())
+    if (dw_margin_latch > DW_MARGIN_MAX && !dw_ws_banks_active(dw_margin_latch))
         return DW_MARGIN_MAX;
     return dw_margin_latch;
 }
@@ -239,6 +240,14 @@ static void dw_clamp_range(int32_t w, int32_t m, int32_t* lo, int32_t* hi) {
         *lo = *hi = scroll / 2;
 }
 
+/* The vanilla DRAW_OFFSET_LIMIT_X_MAX of a map w tiles wide. setupMap is the
+ * pair's only writer and sets it from the centred camera (map.c:4265-4268):
+ * MAX = w*64 and MIN = MAX - (w*128 - 320), so CAMERA_X + DRAWING_OFFSET_X =
+ * MAX at every camera position. */
+static int32_t dw_offset_limit_max(int32_t w) {
+    return w * 64;
+}
+
 /* The widened X clamp. Returns 1 if it fired.
  *
  * Idempotent, which is what lets the SAME logic serve both a replacement (where
@@ -252,20 +261,20 @@ static int dw_clamp_x(int32_t w, int32_t m) {
     int32_t lo, hi;
     dw_clamp_range(w, m, &lo, &hi);
     /* The offset is pinned to the limit of the edge clamped against, moved out
-     * by the camera's distance from that edge (setupMap: LIMIT_MAX - C is the
-     * offset at any camera position, map.c:4267-4268). At lo = m and
-     * hi = scroll - m that is exactly LIMIT_MAX - m and LIMIT_MIN + m. */
+     * by the camera's distance from that edge: LIMIT_MAX - C at any camera
+     * position (dw_offset_limit_max), which at lo = m and hi = scroll - m is
+     * exactly LIMIT_MAX - m and LIMIT_MIN + m. Computed, not read: the guest
+     * pair is widened while fishing (dw_fish_limits). */
     if (c < lo) {
         psx_mod_write_half(DW_CAMERA_X, (uint16_t)lo);
         psx_mod_write_word(DW_DRAWING_OFFSET_X,
-                           (uint32_t)(dw_read_i16(DW_LIMIT_X_MAX) - lo));
+                           (uint32_t)(dw_offset_limit_max(w) - lo));
         return 1;
     }
     if (c > hi) {
         psx_mod_write_half(DW_CAMERA_X, (uint16_t)hi);
         psx_mod_write_word(DW_DRAWING_OFFSET_X,
-                           (uint32_t)(dw_read_i16(DW_LIMIT_X_MIN) +
-                                      (w * 128 - DW_SCREEN_W - hi)));
+                           (uint32_t)(dw_offset_limit_max(w) - hi));
         return 1;
     }
     return 0;
@@ -330,7 +339,7 @@ static void dw_align_x(int32_t w, int32_t m) {
      * None of this matters when the backdrop comes from texture banks
      * (dw_ws_sliver.c): they draw every tile the view meets, so the camera
      * stays where the game put it. */
-    if (r >= m || dw_ws_banks_active())
+    if (r >= m || dw_ws_banks_active(m))
         return;
     d = m - r;
     if (c + d < lo || c + d > hi)
@@ -352,6 +361,33 @@ static void dw_camera_settle_exit(struct CPUState* cpu, uint32_t address) {
     dw_align_x(w, m);
 }
 
+/* Fishing. FISH (maps 6 and 8) moves the camera itself: FISH_scrollCameraTo
+ * clamps its target to the screen positions the DRAW_OFFSET_LIMIT_X pair stands
+ * for (fish.c:939-947, 4673-4690) and then moves CAMERA_X and the offset
+ * together. It is overlay code that no hook reaches, and measured on map 8 it
+ * centred the camera on the tamer at the vanilla 448 near the right shore,
+ * leaving all 53 px of the right reveal past the map edge until the tamer
+ * walked again. So while FISH is loaded the pair is widened to the clamp range
+ * -- MAX - lo and MAX - hi in place of MAX and MAX - scroll -- and FISH's own
+ * clamp, the D-pad pan and the bobber pan included, keeps the camera inside
+ * it. Nothing here moves the camera. setupMap writes the vanilla pair on every
+ * map load; the pair is put back here if widescreen goes off on the map. */
+static int dw_fish_widened;
+
+static void dw_fish_limits(void) {
+    const int32_t w = (int32_t)(int8_t)psx_mod_read_byte(DW_MAP_WIDTH);
+    const int32_t m = dw_margin_for_map(w);
+    int32_t lo = 0, hi = w * 128 - DW_SCREEN_W;
+
+    if (m > 0 && psx_mod_read_word(DW_FISHING_DATA_PTR) != 0)
+        dw_clamp_range(w, m, &lo, &hi);
+    else if (!dw_fish_widened)
+        return;
+    dw_fish_widened = lo != 0 || hi != w * 128 - DW_SCREEN_W;
+    psx_mod_write_half(DW_LIMIT_X_MAX, (uint16_t)(dw_offset_limit_max(w) - lo));
+    psx_mod_write_half(DW_LIMIT_X_MIN, (uint16_t)(dw_offset_limit_max(w) - hi));
+}
+
 /* The per-frame invariant. Measured after a savestate load and a fixed 7-warp
  * chain: 5 of 7 arrivals sat outside it for as long as the player stood still
  * -- C = 0 (vanilla clamp, 42-53 px of map-edge black), C = 42 (< m), and two
@@ -364,8 +400,10 @@ static void dw_camera_settle_exit(struct CPUState* cpu, uint32_t address) {
  * Gated to the plain field camera: battles, the evolution offset lerp,
  * scripted cameras and finishers each run with one of these off. Fishing and
  * curling are excluded while their overlay is resident (checkFishingMap loads
- * FISH on maps 6 and 8, checkCurlingMap KAR on 136): FISH_scrollCameraTo
- * clamps to the vanilla limits itself, and the two would fight every frame.
+ * FISH on maps 6 and 8, checkCurlingMap KAR on 136): their cameras pan by
+ * themselves and the nudge would fight them every frame. FISH's clamp follows
+ * the widened limits (dw_fish_limits); KAR moves the camera through
+ * cameraIsAtEdge, which is the widened clamp already.
  *
  * The nudge takes one more condition, that the ring origin is the one the
  * loader sets, MAP_TILE_X = C / 128 (setupMap). While walking, the shifted
@@ -375,7 +413,10 @@ static void dw_camera_follow_enter(struct CPUState* cpu, uint32_t address) {
     int32_t m, w, scr;
     (void)cpu;
     (void)address;
-    if (dw_margin() <= 0)
+    m = dw_margin();
+    if (m > 0 || dw_fish_widened)
+        dw_fish_limits();
+    if (m <= 0)
         return;
     if ((int8_t)psx_mod_read_byte(DW_GAME_STATE) != 0 ||
         psx_mod_read_word(DW_CAMERA_FOLLOW_PLAYER) != 1 ||

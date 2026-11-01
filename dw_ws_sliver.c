@@ -222,7 +222,8 @@ static void dw_tfs_load(int32_t map) {
         return;
     dw_tfs_size = size;
     dw_tfs_map = map;
-    dw_bank_prepare(map);
+    if (psx_mod_renderer_accelerated())
+        dw_bank_prepare(map);             /* Software: at its first draw (21:9) */
 }
 
 static void dw_read_map_tfs_enter(struct CPUState* cpu, uint32_t address) {
@@ -331,9 +332,10 @@ static uint32_t dw_uv(int32_t u, int32_t v, uint32_t hi16) {
  * on carry a section those made with it off do not; the banks themselves are
  * host state, rebuilt from disc, never saved.
  *
- * Where banks cannot draw -- Software renderer, HD texture packs, netplay's
- * CPU-authoritative path, a definition that failed -- the ring, the ladder
- * shift, the nudge and the sliver carry on exactly as before.
+ * Where banks cannot draw -- HD texture packs, netplay's CPU-authoritative
+ * path, a definition that failed -- and on the Software renderer at 16:9 and
+ * 16:10, where they would cost more than the ring (dw_bank_current), the ring,
+ * the ladder shift, the nudge and the sliver carry on exactly as before.
  */
 #define DW_ACTIVE_FRAMEBUFFER 0x80134ECCu   /* 0/1, top of each frame */
 #define DW_TILE_POS_X 6                     /* int16, col * 128 */
@@ -435,9 +437,15 @@ static int dw_bank_resolve(uint16_t id) {
     return ok;
 }
 
-/* The bank of the map on screen, or 0 when this frame belongs to the ring. */
-static uint16_t dw_bank_current(void) {
-    if (!dw_bank_arena || !psx_mod_texture_banks_supported())
+/* The bank of the map on screen for a reveal of m px per side, or 0 when this
+ * frame belongs to the ring. On the Software renderer a bank backdrop is a
+ * second raster of the whole view over the ring it covers -- measured +10-12 ms
+ * of CPU per vblank at supersampling 4 -- so there the banks draw only where
+ * the ring cannot reach (m > DW_MARGIN_MAX, 21:9) and 16:9 and 16:10 keep the
+ * ring, ladder shift, nudge and sliver. */
+static uint16_t dw_bank_current(int32_t m) {
+    if (!dw_bank_arena || !psx_mod_texture_banks_supported() ||
+        (m <= DW_MARGIN_MAX && !psx_mod_renderer_accelerated()))
         return 0;
     if (dw_tfs_map < 0 && !dw_tfs_tried)
         dw_tfs_load(psx_mod_read_byte(DW_CURRENT_SCREEN));
@@ -448,10 +456,10 @@ static uint16_t dw_bank_current(void) {
                ? (uint16_t)(dw_tfs_map + 1) : 0;
 }
 
-/* For dw_ws_camera.c: the ring no longer has to cover the view, so the
+/* For dw_ws_camera.c: the ring no longer has to cover a reveal of m, so the
  * load-time nudge that exists only to make it cover stays out of the way. */
-int dw_ws_banks_active(void) {
-    return psx_mod_widescreen_x_margin() > 0 && dw_bank_current() != 0;
+int dw_ws_banks_active(int32_t m) {
+    return psx_mod_widescreen_x_margin() > 0 && dw_bank_current(m) != 0;
 }
 
 static void dw_put_gt3(uint32_t p, uint32_t next, uint16_t bank, int32_t x0,
@@ -479,7 +487,7 @@ static int dw_bank_draw(int32_t m) {
 
     if (dw_bank_off)
         return 0;
-    bank = dw_bank_current();
+    bank = dw_bank_current(m);
     if (bank == 0)
         return 0;
     w = dw_i8(DW_MAP_WIDTH);

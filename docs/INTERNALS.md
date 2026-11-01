@@ -696,8 +696,8 @@ gauges each as ONE widget, the battle bars' slide table, and every other
 full-screen plate or mask band via one ordering-table walk),
 `dw_ws_camera.c` (both camera clamps, the tile-ladder shift, the load-time
 nudge, the per-frame clamp, narrow-map centring, the widened visibility
-cull), `dw_ws_sliver.c` (on OpenGL and Software the whole backdrop drawn
-from texture banks built from the tile file read off the disc; elsewhere the fifth
+cull, fishing's camera limits), `dw_ws_sliver.c` (on OpenGL, and on
+Software at 21:9, the whole backdrop drawn from texture banks built from the tile file read off the disc; elsewhere the fifth
 backdrop column, uploaded as a stacked VRAM sliver whenever the game's
 four-column ring falls short, from the same host copy) and `dw_ws_world.c` (keeps a field
 frame wide through a synchronous tile reload), plus `dw_ws_weather.c` (snow
@@ -705,7 +705,7 @@ and mist copied into the reveals) -- and one framework primitive
 per need (`mod_function_exit_funcs`, `psx_mod_ws_native_wide_offset`,
 `psx_mod_vram_write`, `psx_mod_set_world_scene_predicate`, live-palette
 texture banks). Section 5.0c has the 0.4.x pass and its numbers, 5.0d the
-plates and weather, 5.0e the codegen culls, 5.0f the bank backdrop, 5.0g why there is no per-map camera table, 5.0h 21:9. The
+plates and weather, 5.0e the codegen culls, 5.0f the bank backdrop, 5.0g why there is no per-map camera table, 5.0h 21:9, 5.0i fishing. The
 wider field of view is rendered into a genuinely wider framebuffer (320 -> 426
 at 16:9, `EXTRA = 2 * round(W*(3n-4d)/(8d))`) and presented 1:1. Nothing is
 stretched, so the entire "screen-space 2D renders stretched" problem class —
@@ -724,7 +724,7 @@ origin's leftslack in `[m, 192-m]`, an interval that is EMPTY for `m > 96`;
 the 106 px sliver lifts the practical bound to about 78. 21:9 clears neither,
 so it is served by the bank backdrop (5.0f) alone: `dw_ws_camera.c` lifts its
 margin cap from 64 to 120 (`DW_MARGIN_BANKS_MAX`) only while banks draw the
-map on screen (`dw_ws_banks_active()`, asked every frame). Where banks are
+map on screen (`dw_ws_banks_active(m)`, asked every frame). Where banks are
 refused (an HD texture pack, Vulkan, netplay's CPU-authoritative path) the
 framework still presents 21:9 -- there is no runtime fallback to a narrower
 aspect -- and the ring tier runs at 64: the inner 64 px of each reveal are
@@ -937,7 +937,9 @@ four-column VRAM tile ring (`dw_ws_sliver.c`, `dw.ws.sliver`).
   under it still does.
 * **The sliver and the load-time nudge stand down while banks draw**; both
   stay, unchanged, for HD texture packs, Vulkan and netplay's
-  CPU-authoritative path (`psx_mod_texture_banks_supported() == 0`). The
+  CPU-authoritative path (`psx_mod_texture_banks_supported() == 0`), and for
+  the Software renderer at 16:9 and 16:10, where a bank backdrop costs more
+  than the ring it replaces (`psx_mod_renderer_accelerated() == 0`, 5.0h). The
   arena makes savestates taken with widescreen on carry an expansion-memory
   section (state format v8): states made with it on and off are not
   interchangeable. Memory-card saves are unaffected.
@@ -1067,8 +1069,15 @@ Phase 5. Two pieces, plus the manifest choice.
   above 64 without banks it returns 64, so the clamp, nudge, ladder shift and
   sliver run exactly as at 16:9 on the inner 64 px. The tile-ladder shift is
   skipped above 64 (the banks cover the view; the ring keeps the game's own
-  origin). The sliver tries the banks at any width first and clamps its own
-  reveal to 64. Everything else (plates, parked HUD, battle bars, weather,
+  origin). The sliver tries the banks first and clamps its own reveal to 64.
+* **Software keeps the ring at 16:9 and 16:10** (owner decision, after the
+  cost below). Fork: `psx_mod_renderer_accelerated()` (1 on OpenGL and Vulkan,
+  0 on Software; asked per frame, since netplay can switch the backend).
+  `dw_bank_current(m)` returns no bank when that is 0 and m <= 64, so on
+  Software the bank draw, and with it `dw_ws_banks_active(m)`, is on only at
+  21:9; there banks are also defined at their first draw rather than at tile
+  file load, so Software at 16:9 and 16:10 builds none. OpenGL is unchanged:
+  banks at every aspect. Everything else (plates, parked HUD, battle bars, weather,
   culls) already scaled with the presented width.
 
 Measured at 21:9 (m = 120), headless, OpenGL (`--headless-opengl`) and
@@ -1126,7 +1135,7 @@ Software (`--headless --renderer software`, internal scale 4):
   what the manifest text tells the player.
 * **16:9 and 16:10 unchanged**: gapwalk 204 (4 walks, every frame) 0 void
   frames at 16:9 GL (1,392 images), 16:10 GL (1,399) and 16:9 Software (1,417,
-  now on banks); a battle on 69 at each: reveal medians 0-0.59 on GL, 2.8-3.5
+  on banks at the time; on the ring again since, see below); a battle on 69 at each: reveal medians 0-0.59 on GL, 2.8-3.5
   on Software (equal to its centre).
 * **Cost**, windowed, process CPU per vblank, standing on 204, alternating
   8-second windows, banks on vs off (off = the game's own ring only): OpenGL
@@ -1135,8 +1144,71 @@ Software (`--headless --renderer software`, internal scale 4):
   backdrop is a second full-screen textured raster on top of the ring it
   covers, +12.2 ms per vblank at 21:9 (30.1 vs 17.5) and +10 ms at 16:9
   (33 vs 23); on this machine the game fell from about 15 to 9 vblanks per
-  second at 21:9 and from 17 to 13 at 16:9. Software at 16:9 and 16:10 now
-  draws banks too, so this is new for Software players at every aspect.
+  second at 21:9 and from 17 to 13 at 16:9. So Software draws banks only at
+  21:9 now. Measured after the change, same method, Software 16:9 windowed
+  on 204: 16.46 ms per vblank median with the debug switch on and 16.66 off
+  (4 + 4 windows), against 25.33 on / 16.02 off before it (this run; the
+  machine was faster than in the run above); game frames per 8-s window
+  150-161 against 89-91 with banks. The camera at the 204 arrival is again
+  Phase 1's nudged C = 309 (was 257 with banks). Software 16:9: gapwalk 204
+  0 void frames (1,430 images), a 4-map sweep (204, 69, 12, 0; 116 stops) 0
+  void columns, `banks.frames` 0. Software 21:9: the same sweep plus 2 and 5
+  (143 stops) 0 void columns with `banks.frames` 5,002, gapwalk 204 0 void
+  frames. OpenGL 16:9 and 21:9: gapwalk 204 0 void frames, 4-map sweeps 0
+  void columns, banks drawing (3,455 / 3,254 frames), A/B centre identical
+  8/8 at both.
+
+### 5.0i Fishing camera (0.4.x)
+
+FISH (maps 6 and 8) moves the camera itself. `FISH_scrollCameraTo` clamps
+its target to the screen positions the `DRAW_OFFSET_LIMIT_X_MAX/MIN` pair
+(0x80134DB6/B8) stands for (fish.c:939-947, 4673-4690) and moves CAMERA_X
+and DRAWING_OFFSET_X together; it is overlay code, so no hook reaches it.
+Measured before: fishing started at the right shore of map 8 centred the
+camera on the tamer at the vanilla 448, leaving all 53 px of the right reveal
+past the map edge, and it stayed there until the tamer walked; the left shore
+gave 27 (26 px).
+
+* **While FISH is loaded (`FISHING_DATA_PTR` 0x80134E6C non-zero) the pair is
+  widened** to the camera clamp range (`dw_fish_limits`, at the existing
+  tickCameraFollowPlayer entry hook, before its field-camera gates): MAX - lo
+  and MAX - hi in place of MAX and MAX - scroll. FISH's own clamp, the
+  circle + D-pad pan and the bobber pan then stay inside [m, scroll - m].
+  Nothing moves the camera. setupMap writes the vanilla pair on every map
+  load; the plugin puts it back itself only if widescreen is switched off on
+  the map.
+* **The field clamp no longer reads the pair.** setupMap is its only writer
+  (map.c:4265-4268; the decomp has no undecompiled function) and sets
+  MAX = w*64, MIN = 320 - w*64, i.e. CAMERA_X + DRAWING_OFFSET_X = w*64 at
+  every camera position. `dw_clamp_x` uses that (`dw_offset_limit_max`), so
+  the widened values never reach it, and a savestate taken mid-fishing
+  restores to the same answer (a host-side cache of the originals would not).
+  The pair read live matched w*64 / 320 - w*64 on maps 0, 69, 136 and 204,
+  and on 8 with widescreen off.
+* The per-frame clamp still skips 6/8/136 (the nudge would fight the
+  overlays' pans). Curling (KAR, 136) moves the camera through
+  moveCameraByOffset / updateDrawingOffsets / tickCameraMovement, all of
+  which end in cameraIsAtEdge, the widened clamp; 136 is a three-tile map, so
+  the camera is pinned at 32 with 21 px of map edge per side at 16:9. Walking
+  the rink kept C = 32; a curling match itself was not reached (it starts
+  from a story script).
+
+Measured (`--headless-opengl`, map 8: right shore = the arrival spot, left
+shore walked to; triangle -> FISH -> bait, aim, 600-frame circle + D-pad pans
+both ways, a cast and the same pans on the bobber, exit, walk both ways, warp
+to 69), 27 states per run, read host-paused:
+
+| | right shore: start, aim, pans, bobber, exit | left shore | limit pair on 8 | reveal voids |
+|---|---|---|---|---|
+| 16:9 | C = 395 (was 448), pans stop at 395 | C = 53 (was 27), pans stop at 53 | (331, -11) | 0 edge columns, 0 past the map edge, every state |
+| 21:9 | C = 328 | C = 120 | (264, 56) | 0 |
+| widescreen off | C = 448 (vanilla) | C = 14, pans reach 0 | (384, -64), untouched | (4:3) |
+
+CAMERA_X + DRAWING_OFFSET_X = 384 in every state on map 8, walking resumes
+normally after the exit, and the pair read (576, -256) after the warp to 69,
+its vanilla values. States read mid-pan (the camera springing back toward
+the bobber) score high on the art compare because the frame is drawn one step
+behind CAMERA_X; their edge voids are 0 as well.
 
 ### 5.2 W2 — UI counter-squash (built, **dormant**, not working)
 
@@ -1427,7 +1499,8 @@ GameShark cheat engine, the widescreen plugin, the squash-gate export W1 needs,
 the dormant W2 machinery, a hash-pinned build toolchain that no longer edits the
 user's PATH, the fail-closed packaging guard, and the
 `[[widescreen.cull.relative_x_bound]]` cull kind (§5.0e) and live-palette
-texture banks (`psx_mod_define_texture_bank_live_clut`, §5.0f).
+texture banks (`psx_mod_define_texture_bank_live_clut`, §5.0f), Software
+texture banks and `psx_mod_renderer_accelerated` (§5.0h).
 
 ---
 
@@ -1536,15 +1609,16 @@ texture banks (`psx_mod_define_texture_bank_live_clut`, §5.0f).
   draws no band on that side, so a lit strip shows there; the STD lose wipe
   (32 narrow columns) and the scrolling star field stay 4:3-wide. Battle
   flashes (BTL POLY_F4), STD/VS and EAB plates match the rule but were not
-  reached live. Fishing's own camera clamp (B5) was not measured. The
+  reached live. The
   partner-reappearance cull (§5.0e) is verified in the generated code only,
   and particle flashes still cull at the 4:3 edge.
-* **Widescreen bank backdrop on Software costs a second backdrop raster**
-  (§5.0h: +10-12 ms CPU per vblank at supersampling 4). The ring quads under
-  the banks are still drawn so that a bank refused at GPU time leaves the ring
-  (5.0f); dropping them when banks draw, or keeping Software on the ring at
-  16:9/16:10, would remove the cost. Not decided.
-* **Widescreen bank backdrop** (§5.0f, §5.0h): OpenGL and Software; HD
+* ~~Widescreen bank backdrop on Software costs a second backdrop raster.~~
+  **CLOSED (0.4.0)**: Software keeps the ring at 16:9 and 16:10 and draws
+  banks only at 21:9, where it still pays the +12 ms (§5.0h).
+* ~~Fishing's camera clamp (B5) shows map-edge black.~~ **CLOSED (0.4.0)**:
+  the limit pair is widened while FISH is loaded (§5.0i). A curling match was
+  not reached live.
+* **Widescreen bank backdrop** (§5.0f, §5.0h): OpenGL, and Software at 21:9; HD
   texture packs, Vulkan and netplay's CPU-authoritative path keep the ring and
   the sliver, so at 21:9 they leave the outer 56 px of each reveal uncovered
   (the manifest text says so; there is no runtime fallback to 16:9).
