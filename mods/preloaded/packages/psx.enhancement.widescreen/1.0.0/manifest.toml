@@ -42,7 +42,7 @@ game_id = "*"
 [[feature]]
 id = "widescreen"
 name = "Widescreen"
-description = "Widens the field of view. 3D, menus, text boxes and the HUD all keep their original proportions; the extra width is real extra view on both sides. Two rooms whose art stopped at the original 4:3 edge (the Item Shop and Jijimon's house) come repainted. Known limits: the smallest rooms are narrower than the wide view and show an even black bar on each side, and some interiors are drawn floating in black, so their edges stay dark as designed."
+description = "Widens the field of view. 3D, menus, text boxes and the HUD all keep their original proportions; the extra width is real extra view on both sides. Two rooms whose art stopped at the original 4:3 edge (the Item Shop and Jijimon's house) come repainted. The smallest rooms are narrower than the wide view; past their edges their own art carries on, mirrored, and fades into black instead of stopping at a hard bar (plain black on Vulkan). Some interiors are drawn floating in black, so their edges stay dark as designed."
 group = "Video"
 default_enabled = false
 
@@ -50,7 +50,7 @@ default_enabled = false
 feature = "widescreen"
 id = "aspect"
 label = "Aspect ratio"
-description = "16:9 is the tested default. 16:10 reveals a little less. 21:9 (ultrawide) shows the most; 36 small rooms are narrower than the 21:9 view and show an even black bar on each side. HD texture packs work at every width, including the extra width at 21:9. Nothing wider than 21:9 is offered."
+description = "16:9 is the tested default. 16:10 reveals a little less. 21:9 (ultrawide) shows the most; 36 small rooms are narrower than the 21:9 view and fade into black at both sides. HD texture packs work at every width, including the extra width at 21:9. Nothing wider than 21:9 is offered."
 group = "Video"
 type = "choice"
 default = "16:9"

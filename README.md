@@ -159,8 +159,11 @@ Worth knowing before you turn it on, so nothing looks like a fault in your copy:
 * A few interiors were only ever built as far as the original camera could see,
   so their edges can be dark. That is missing scenery on the disc, not a
   rendering fault, and nothing in the port can invent it.
-* At 21:9 the 36 smallest rooms are narrower than the picture and show an even
-  black bar on each side.
+* The smallest rooms are narrower than the picture: 36 of them at 21:9, 19 at
+  16:9. Past their edges the room's own art carries on, mirrored, and fades
+  into black instead of stopping at a hard black bar. Rooms that are drawn
+  floating in black keep their black surround. On Vulkan the bars are still
+  plain black.
 
 Anything else you see in widescreen is worth reporting. The picture should not
 be stretched, the sides should not go black while you walk, and no piece of the

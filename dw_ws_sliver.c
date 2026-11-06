@@ -450,10 +450,11 @@ static int dw_bank_resolve(uint16_t id) {
  * second raster of the whole view over the ring it covers -- measured +10-12 ms
  * of CPU per vblank at supersampling 4 -- so there the banks draw only where
  * the ring cannot reach (m > DW_MARGIN_MAX, 21:9) and 16:9 and 16:10 keep the
- * ring, ladder shift, nudge and sliver. */
-static uint16_t dw_bank_current(int32_t m) {
+ * ring, ladder shift, nudge and sliver. `edges` asks for the edge fill alone
+ * (below), which is cheap enough for Software at every width. */
+static uint16_t dw_bank_select(int32_t m, int edges) {
     if (!dw_bank_arena || !psx_mod_texture_banks_supported() ||
-        (m <= DW_MARGIN_MAX && !psx_mod_renderer_accelerated()))
+        (!edges && m <= DW_MARGIN_MAX && !psx_mod_renderer_accelerated()))
         return 0;
     if (dw_tfs_map < 0 && !dw_tfs_tried)
         dw_tfs_load(psx_mod_read_byte(DW_CURRENT_SCREEN));
@@ -464,43 +465,229 @@ static uint16_t dw_bank_current(int32_t m) {
                ? (uint16_t)(dw_tfs_map + 1) : 0;
 }
 
+static uint16_t dw_bank_current(int32_t m) { return dw_bank_select(m, 0); }
+
 /* For dw_ws_camera.c: the ring no longer has to cover a reveal of m, so the
  * load-time nudge that exists only to make it cover stays out of the way. */
 int dw_ws_banks_active(int32_t m) {
     return psx_mod_widescreen_x_margin() > 0 && dw_bank_current(m) != 0;
 }
 
+/* One bank GT3. Each vertex has its own grey level (0x80 = the texel as is):
+ * the map tiles pass DW_GREY throughout, the edge fill below shades. */
 static void dw_put_gt3(uint32_t p, uint32_t next, uint16_t bank, int32_t x0,
-                       int32_t y0, int32_t u0, int32_t v0, int32_t x1,
-                       int32_t y1, int32_t u1, int32_t v1, int32_t x2,
-                       int32_t y2, int32_t u2, int32_t v2, uint32_t clut,
-                       uint32_t tpage) {
+                       int32_t y0, int32_t u0, int32_t v0, uint32_t g0,
+                       int32_t x1, int32_t y1, int32_t u1, int32_t v1,
+                       uint32_t g1, int32_t x2, int32_t y2, int32_t u2,
+                       int32_t v2, uint32_t g2, uint32_t clut, uint32_t tpage) {
     psx_mod_write_word(p + 0, (DW_POLY_GT3_LEN << 24) | (next & 0xFFFFFFu));
-    psx_mod_write_word(p + 4, (DW_POLY_GT3_CODE << 24) | DW_GREY);
+    psx_mod_write_word(p + 4, (DW_POLY_GT3_CODE << 24) | g0);
     psx_mod_write_word(p + 8, dw_xy(x0, y0));
     psx_mod_write_word(p + 12, dw_uv(u0, v0, clut));
-    psx_mod_write_word(p + 16, ((uint32_t)(bank & 0xFFu) << 24) | DW_GREY);
+    psx_mod_write_word(p + 16, ((uint32_t)(bank & 0xFFu) << 24) | g1);
     psx_mod_write_word(p + 20, dw_xy(x1, y1));
     psx_mod_write_word(p + 24, dw_uv(u1, v1, tpage));
-    psx_mod_write_word(p + 28, ((uint32_t)(bank >> 8) << 24) | DW_GREY);
+    psx_mod_write_word(p + 28, ((uint32_t)(bank >> 8) << 24) | g2);
     psx_mod_write_word(p + 32, dw_xy(x2, y2));
     psx_mod_write_word(p + 36, dw_uv(u2, v2, 0));
+}
+
+/* ---- Edge fill: narrow maps past their own edges ----
+ *
+ * 36 maps are narrower than the widened view -- the 19 three-tile rooms (384
+ * px) at 16:9 and 21:9, the 17 four-tile ones (512 px) at 21:9 -- and the
+ * camera centres them (dw_ws_camera.c), so each side shows the same gap past
+ * the map edge: 21 px per side at 16:9, 88 at 21:9 on three tiles, 24 at 21:9
+ * on four. Nothing on the disc was rendered there, and on most of them the
+ * art runs lit right up to the edge, so a black band cut it off flat.
+ *
+ * The gap is filled from the map's own edge, mirrored: world column -1-t
+ * shows column t, W+t shows W-1-t, each tile row from its own edge tile in the
+ * bank, so the fill joins the art without a seam and keeps its texture,
+ * palette and time of day. A mirror read straight would show the room twice,
+ * so the Gouraud grey ramps down from 0x80 at the map edge (the knots below)
+ * and the copy fades into black like light falling off at the edge of the
+ * scene; across the 88-px gaps the mirror is also stretched 2x, which smears
+ * what it copies past recognising (DW_EDGE_STRETCH). Bank texels, so an HD
+ * texture pack's replacement of an edge tile is what gets mirrored too: no
+ * texture changes, nothing for a pack to redo.
+ *
+ * Drawn wherever banks are supported, including the Software renderer at
+ * 16:9 and 16:10 where the backdrop itself stays on the ring: a few narrow
+ * quads per tile row are not the full-screen raster that made banks too dear
+ * there. Without banks (Vulkan, netplay's CPU raster, Software with an HD
+ * pack) the gap stays black as before. */
+#define DW_EDGE_FAR 0x00u                   /* grey at the fade's far end */
+static volatile int dw_edges_off;           /* debug: dw.ws.banks edges-off */
+
+static uint32_t dw_grey(uint32_t g) { return g | (g << 8) | (g << 16); }
+
+/* The gap per side, in px, of a map w tiles wide under a reveal of m: the
+ * camera centres any map narrower than the view. 0 for every other map.
+ * At most 127, the furthest a mirror of one 128-px tile reaches (u = 127 - t
+ * must stay >= 0); the widest real gap is 88. */
+static int32_t dw_edge_gap(int32_t w, int32_t m) {
+    const int32_t gap = (DW_SCREEN_W + 2 * m - w * DW_TILE_PX) / 2;
+    return gap > 0 ? (gap < DW_TILE_PX - 1 ? gap : DW_TILE_PX - 1) : 0;
+}
+
+/* The fade, as (distance from the map edge in 1/16ths of the gap, grey)
+ * knots joined by Gouraud ramps: down to a shadow, then slowly out to black
+ * at the view edge, so no band of flat black is left. A gap of
+ * DW_EDGE_ONE_RAMP px or less (16:9, and four tiles at 21:9) is one ramp
+ * straight to black over a plain mirror.
+ *
+ * Wider gaps were judged in game, variant against variant on the worst rooms
+ * (5.0j): a plain mirror at full strength for 88 px makes symmetric blots (a
+ * cave wall becomes a face, a gargoyle chair grows a second head); dropping
+ * faster hides them but the bend in the ramp then reads as a vertical
+ * pillar on bright rooms, the sharper the bend the plainer. What won is this
+ * gentle knee (the slope changes 2.1x, not 4.8x) over a mirror stretched 2x:
+ * the gap shows the inner half of its width, smeared, and the copies stop
+ * reading as objects. */
+static const uint8_t dw_edge_knot_t[] = {0, 6, 16};
+static const uint8_t dw_edge_knot_g[] = {0x80, 0x38, DW_EDGE_FAR};
+#define DW_EDGE_KNOTS 3
+#define DW_EDGE_ONE_RAMP 32
+#define DW_EDGE_STRETCH 1                   /* wide gaps: u = t >> 1 */
+
+/* A side whose own edge is mostly black is a room drawn floating in black:
+ * the black past it is the scene's frame, and a mirror would only copy a wall
+ * standing a few dozen px inside into the void as a detached ghost (the igloo
+ * 137 grew a second dome). Measured once per map from the disc copy: the
+ * share of the outer DW_EDGE_PROBE columns, every row, whose colour under the
+ * map's first palette is dark. Half or more dark: that side is not filled. */
+#define DW_EDGE_PROBE 8
+#define DW_EDGE_DARK_LUMA 3                 /* of 31: (2r + 5g + b) / 8 < 3 */
+static int32_t dw_edge_skip_map = -1;       /* map id the flags below are for */
+static uint8_t dw_edge_skip[2];             /* [0] left, [1] right */
+
+/* Two sides the rule above cannot see, left black:
+ *  - map 32 (TUNN09), left: the game draws a dark rock over that edge of the
+ *    backdrop as a separate object, so the tile art there is a lit cave mouth
+ *    the player never sees, and a mirror of the tile showed it beside the
+ *    rock with a hard seam. No other narrow map's visible edge differs from
+ *    its tiles (mirror residual checked on all 36);
+ *  - map 148 (OMOC05), both: high-contrast striped toy walls, which any
+ *    mirror turns into bold zig-zag chevrons; both judges preferred the bars. */
+static int dw_edge_excluded(int32_t map, int side) {
+    return (map == 32 && side == 0) || map == 148;
+}
+
+static void dw_edge_measure(int32_t w, int32_t h, const uint8_t* slot) {
+    uint32_t dark[2] = {0, 0}, total[2] = {0, 0};
+    int32_t side, row, y, x;
+    const uint8_t* clut = dw_tfs + 8;      /* first palette */
+    /* painted tile k's image: past the header, the CLUTs and k earlier tiles
+     * (the copy was checked for 1..16 CLUTs when it was banked) */
+    const uint32_t first = 8u + (uint32_t)dw_tfs[4] * DW_TFS_CLUT_BYTES + 4;
+
+    dw_edge_skip_map = dw_tfs_map;
+    for (side = 0; side < 2; side++) {
+        for (row = 0; row < h; row++) {
+            const uint32_t idx = (uint32_t)((side ? w - 1 : 0) + row * w);
+            const uint32_t off = first + (uint32_t)slot[idx] * DW_TFS_TILE_STRIDE;
+            if (dw_i16(DW_MAP_TILE_DATA + idx * DW_TILE_STRIDE + DW_TILE_ID) == -1 ||
+                off + DW_TILE_BYTES > dw_tfs_size)
+                continue;
+            for (y = 0; y < DW_TILE_PX; y++) {
+                for (x = 0; x < DW_EDGE_PROBE; x++) {
+                    const uint8_t v = dw_tfs[off + (uint32_t)y * DW_TILE_ROW_BYTES +
+                                             (uint32_t)(side ? DW_TILE_PX - 1 - x : x)];
+                    const uint32_t c = (uint32_t)clut[2 * v] | ((uint32_t)clut[2 * v + 1] << 8);
+                    const uint32_t l = (2 * (c & 31) + 5 * ((c >> 5) & 31) + ((c >> 10) & 31)) / 8;
+                    dark[side] += l < DW_EDGE_DARK_LUMA;
+                    total[side]++;
+                }
+            }
+        }
+        dw_edge_skip[side] = (uint8_t)(total[side] == 0 || 2 * dark[side] >= total[side] ||
+                                       dw_edge_excluded(dw_tfs_map, side));
+    }
+}
+
+/* Mirrored, shaded quads for tile row `row` on both sides, appended at p.
+ * Returns the new p; *last / *lastlen track the chain's final prim. */
+static uint32_t dw_edge_row(uint32_t p, uint32_t* last, uint32_t* lastlen,
+                            uint16_t bank, const uint8_t* slot, int32_t w,
+                            int32_t row, int32_t gap) {
+    int32_t side, kn;
+    const int32_t sh = gap > DW_EDGE_ONE_RAMP ? DW_EDGE_STRETCH : 0;
+
+    for (side = 0; side < 2; side++) {
+        const int32_t col = side ? w - 1 : 0;
+        const uint32_t idx = (uint32_t)(col + row * w);
+        const uint32_t tile = DW_MAP_TILE_DATA + idx * DW_TILE_STRIDE;
+        uint32_t k, tpage, clut;
+        int32_t x, y, y1, vh, edge, dir, u0;
+
+        if (dw_edge_skip[side])
+            continue;                       /* framed in black, or excluded */
+        if (dw_i16(tile + DW_TILE_ID) == -1 || slot[idx] >= DW_BANK_SLOTS)
+            continue;                       /* an empty edge tile: stays black */
+        k = slot[idx];
+        tpage = ((uint32_t)psx_mod_read_half(tile + DW_TILE_TPAGE) & ~DW_TPAGE_PAGE) |
+                ((k / DW_BANK_SLOT_COLS) << 4) | (k % DW_BANK_SLOT_COLS);
+        clut = psx_mod_read_half(tile + DW_TILE_CLUT);
+        vh = (dw_i16(tile + DW_TILE_TEX_V) % 256) != 0 ? DW_TILE_PX - 1 : DW_TILE_PX;
+        /* same placement as the tile itself (setPosDataMapTile) */
+        x = dw_i16(tile + DW_TILE_POS_X) - dw_i16(DW_CAMERA_X) - dw_i32(DW_DRAWING_OFFSET_X);
+        y = dw_i16(tile + DW_TILE_POS_Y) - dw_i16(DW_CAMERA_Y) - dw_i32(DW_DRAWING_OFFSET_Y);
+        y1 = y + DW_TILE_PX;
+        /* t px out from the map edge shows the texel t px in from it (t/2
+         * across a stretched gap): left, x = edge - t samples u = t; right,
+         * x = edge + t samples u = 127 - t. Not 128 - t: the rasteriser
+         * samples at the pixel's left edge, so u = 128 at x = edge would read
+         * the bank slot NEXT to the tile's and draw a 1-px line of some other
+         * tile's art down the seam. */
+        edge = side ? x + DW_TILE_PX : x;
+        dir = side ? 1 : -1;
+        u0 = side ? DW_TILE_PX - 1 : 0;
+        for (kn = 0; kn + 1 < DW_EDGE_KNOTS; kn++) {
+            int32_t ta, tb, xa, xb, ua, ub;
+            uint32_t ga, gb;
+            if (gap <= DW_EDGE_ONE_RAMP) {  /* one ramp: first knot to last */
+                if (kn > 0)
+                    break;
+                ta = 0; tb = gap;
+                ga = dw_grey(dw_edge_knot_g[0]);
+                gb = dw_grey(dw_edge_knot_g[DW_EDGE_KNOTS - 1]);
+            } else {
+                ta = gap * dw_edge_knot_t[kn] / 16;
+                tb = gap * dw_edge_knot_t[kn + 1] / 16;
+                ga = dw_grey(dw_edge_knot_g[kn]);
+                gb = dw_grey(dw_edge_knot_g[kn + 1]);
+            }
+            xa = edge + dir * ta; xb = edge + dir * tb;
+            ua = u0 - dir * (ta >> sh);  ub = u0 - dir * (tb >> sh);
+            dw_put_gt3(p, p + DW_POLY_GT3_BYTES, bank, xa, y, ua, 0, ga, xb, y, ub, 0, gb,
+                       xa, y1, ua, vh, ga, clut, tpage);
+            p += DW_POLY_GT3_BYTES;
+            dw_put_gt3(p, p + DW_POLY_GT3_BYTES, bank, xa, y1, ua, vh, ga, xb, y, ub, 0, gb,
+                       xb, y1, ub, vh, gb, clut, tpage);
+            *last = p;
+            *lastlen = DW_POLY_GT3_LEN;
+            p += DW_POLY_GT3_BYTES;
+        }
+    }
+    return p;
 }
 
 static int dw_bank_draw(int32_t m) {
     uint8_t slot[DW_MAP_TILE_COUNT];
     int32_t w, h, c, cy, dox, doy, col0, col1, row0, row1, col, row, i, n;
     uint32_t ot, org, tail, link, first, p, last, lastlen;
-    uint16_t bank;
+    uint16_t bank, edge_bank;
+    int32_t gap;
 
-    if (dw_bank_off)
-        return 0;
-    bank = dw_bank_current(m);
-    if (bank == 0)
-        return 0;
     w = dw_i8(DW_MAP_WIDTH);
     h = dw_i8(DW_MAP_HEIGHT);
     if (w <= 0 || h <= 0 || w * h > DW_MAP_TILE_COUNT)
+        return 0;
+    bank = dw_bank_off ? 0 : dw_bank_current(m);
+    gap = dw_edges_off ? 0 : dw_edge_gap(w, m);
+    edge_bank = gap > 0 ? (bank ? bank : dw_bank_select(m, 1)) : 0;
+    if (bank == 0 && edge_bank == 0)
         return 0;
     ot = psx_mod_read_word(DW_ACTIVE_ORDERING_TABLE);
     if (!dw_in_ram(ot, 8))
@@ -558,7 +745,7 @@ static int dw_bank_draw(int32_t m) {
     p = first;
     last = 0;
     lastlen = 0;
-    for (row = row0; row <= row1; row++) {
+    for (row = row0; row <= row1 && bank; row++) {
         for (col = col0; col <= col1; col++) {
             const uint32_t idx = (uint32_t)(col + row * w);
             const uint32_t tile = DW_MAP_TILE_DATA + idx * DW_TILE_STRIDE;
@@ -586,22 +773,37 @@ static int dw_bank_draw(int32_t m) {
                                        ? DW_TILE_PX - 1 : DW_TILE_PX;
                 const int32_t x1 = x + DW_TILE_PX, y1 = y + DW_TILE_PX;
                 /* the FT4's two halves, (0, 1, 2) and (2, 1, 3) */
-                dw_put_gt3(p, p + DW_POLY_GT3_BYTES, bank, x, y, 0, 0, x1, y,
-                           DW_TILE_PX, 0, x, y1, 0, vh, clut, tpage);
+                dw_put_gt3(p, p + DW_POLY_GT3_BYTES, bank, x, y, 0, 0, DW_GREY, x1, y,
+                           DW_TILE_PX, 0, DW_GREY, x, y1, 0, vh, DW_GREY, clut, tpage);
                 p += DW_POLY_GT3_BYTES;
-                dw_put_gt3(p, p + DW_POLY_GT3_BYTES, bank, x, y1, 0, vh, x1, y,
-                           DW_TILE_PX, 0, x1, y1, DW_TILE_PX, vh, clut, tpage);
+                dw_put_gt3(p, p + DW_POLY_GT3_BYTES, bank, x, y1, 0, vh, DW_GREY, x1, y,
+                           DW_TILE_PX, 0, DW_GREY, x1, y1, DW_TILE_PX, vh, DW_GREY, clut, tpage);
                 last = p;
                 lastlen = DW_POLY_GT3_LEN;
                 p += DW_POLY_GT3_BYTES;
             }
         }
     }
+    /* Narrow maps: the gap past each edge, after the tiles. Up to 8 GT3s per
+     * row (2 sides x 2 ramps), only on maps of 3 columns or fewer at that, so
+     * with the tiles at most 15 x 80 + 5 x 320 = 2800 bytes, the half's size;
+     * 4-column maps take one ramp: 20 x 80 + 5 x 160 = 2400. Guarded anyway. */
+    if (edge_bank && dw_edge_skip_map != dw_tfs_map)
+        dw_edge_measure(w, h, slot);
+    for (row = row0; row <= row1 && edge_bank; row++) {
+        if (p + 8 * DW_POLY_GT3_BYTES > first + DW_BANK_HALF_BYTES)
+            break;
+        p = dw_edge_row(p, &last, &lastlen, edge_bank, slot, w, row, gap);
+    }
     if (last == 0)
         return 0;
     psx_mod_write_word(last, (lastlen << 24) | link);
     psx_mod_write_word(tail, (psx_mod_read_word(tail) & 0xFF000000u) |
                                  (first & 0xFFFFFFu));
+    if (edge_bank)
+        psx_mod_counter_add("dw.ws.edges.frames", 1);
+    if (!bank)
+        return 0;                           /* edges only: the ring draws the map */
     psx_mod_counter_add("dw.ws.banks.frames", 1);
     return 1;
 }
@@ -613,15 +815,21 @@ static void dw_bank_activate(void) {
     psx_mod_set_texture_bank_resolver(dw_bank_resolve);
 }
 
-/* TCP {"cmd":"mod_cmd","name":"dw.ws.banks","args":"on|off"}: draw-only A/B
- * switch for verification (the nudge gate keeps following real support). */
+/* TCP {"cmd":"mod_cmd","name":"dw.ws.banks","args":"on|off|edges-on|edges-off"}:
+ * draw-only A/B switches for verification (the nudge gate keeps following
+ * real support). */
 static int dw_bank_command(const char* args, char* reply, int cap) {
-    if (args && args[0] == 'o' && args[1] == 'f')
+    if (args && strcmp(args, "off") == 0)
         dw_bank_off = 1;
-    else if (args && args[0] == 'o' && args[1] == 'n')
+    else if (args && strcmp(args, "on") == 0)
         dw_bank_off = 0;
-    snprintf(reply, (size_t)cap, "banks=%s arena=%08x", dw_bank_off ? "off" : "on",
-             (unsigned)dw_bank_arena);
+    else if (args && strcmp(args, "edges-off") == 0)
+        dw_edges_off = 1;
+    else if (args && strcmp(args, "edges-on") == 0)
+        dw_edges_off = 0;
+
+    snprintf(reply, (size_t)cap, "banks=%s edges=%s arena=%08x", dw_bank_off ? "off" : "on",
+             dw_edges_off ? "off" : "on", (unsigned)dw_bank_arena);
     return 0;
 }
 

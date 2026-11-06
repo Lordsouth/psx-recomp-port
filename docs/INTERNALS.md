@@ -1210,6 +1210,108 @@ its vanilla values. States read mid-pan (the camera springing back toward
 the bobber) score high on the art compare because the frame is drawn one step
 behind CAMERA_X; their edge voids are 0 as well.
 
+### 5.0j Narrow maps: the edge fill (0.4.x)
+
+36 maps are narrower than the widened view, read off the disc (`MAP` header
+width, every map in `MAP_ENTRIES`): 19 three-tile maps (384 px: 18, 29, 32,
+45, 49, 84, 86, 92, 102, 136, 137, 148, 150, 151, 156, 206, 207, 224, 235) and
+17 four-tile ones (512 px: 82, 91, 98, 121, 147, 149, 157, 164, 205, 209, 211,
+213, 214, 215, 217, 222, 231). No map is narrower than three tiles. The camera
+centres them (5.0c), so each side shows an even gap past the map edge: 88 px
+(three tiles) and 24 px (four) at 21:9, 21 px (three tiles) at 16:9, none at
+16:10. On all but a handful the art is lit right up to the edge (the outer
+4 px are lit on 34 of the 36 maps on at least one side), so the gap read as a
+hard black bar cutting the room off.
+
+**The fill** (`dw_ws_sliver.c`, edge fill): the bank backdrop draws, after the
+map's tiles, the gap from the map's own edge tile in each tile row, mirrored
+(world column -1-t shows column t; W+t shows W-1-t) and Gouraud-shaded down
+to black at the view edge. Gaps of 32 px or less (16:9, and four tiles at
+21:9) take one ramp from 0x80 to 0 over a plain mirror. The 88-px gaps take a
+mirror stretched 2x (u = t/2: the gap shows the inner 44 px of the edge,
+smeared) and two ramps, 0x80 to 0x38 at 6/16 of the gap, then to 0. The right
+side samples u = 127 - t, not 128 - t: the rasteriser samples at the pixel's
+left edge, and u = 128 at the seam read the NEXT bank slot, a 1-px line of
+another tile's art down the seam (seen on every map before the fix). The
+arena half (2,800 bytes) holds the worst case exactly: 15 three-tile tiles x
+80 + 5 rows x 320 bytes of edge prims.
+
+**Sides left black.** A side whose own outer 8 columns are half or more dark
+(luma under 3 of 31 under the map's first palette, every row, measured once
+per map from the disc copy) belongs to a room drawn floating in black: the
+black past it is the scene's frame, and a mirror only copied a wall standing
+a few dozen px inside out into the void as a detached ghost (the igloo, 137,
+grew a second dome). That skips 17 of the 72 sides: 84 L, 137 both, 157 L,
+205 both, 206 R, 207 R, 213 both, 214 both, 215 both, 217 L, 231 both, 235 L.
+Two more are listed by hand: 32's left, where the game draws a dark rock over
+the backdrop's edge as a separate object, so the tile art under it is a lit
+cave mouth no player sees and its mirror stood beside the rock with a hard
+seam (no other map's visible edge differs from its tiles: mirror residual
+0.3-2 on all the rest); and 148, whose high-contrast striped toy walls any
+mirror turns into bold zig-zags.
+
+**How the look was chosen.** Every narrow map was shot before and after at
+21:9 (36) and 16:9 (19) and reviewed by three independent reviewers, one per
+set, each followed by a skeptic re-checking the verdicts. The 24-px and
+21-px gaps came out a clear improvement nearly everywhere: on the four-tile
+maps the fill was better on 12 of 17, about the same on 4 and worse on 213
+(now black); at 16:9 it was better on all but 32 and 137, both now black. The 88-px gaps under a plain mirror at 0x28 by 5/16 were
+about the same as the bars on half the rooms: symmetric blots (a face in the
+cave wall of 29, a two-headed gargoyle chair in 224, an X of roof beams in
+206, the serial number on 206's wall read backwards). Four variants were then
+shot on the 12 worst rooms and ranked by two judges, one at normal viewing
+distance, one zoomed in hunting artifacts. Dropping faster hides the blots
+but the bend in the ramp reads as a vertical pillar on bright rooms (92,
+102), the sharper the bend the plainer (slope change 12x at 0x20 by 3/16,
+4.8x at 0x28 by 5/16, 2.1x at 0x38 by 6/16). The 2x stretch with the gentle
+knee ranked first on 9 of 11 filled rooms for the viewing-distance judge;
+the zoomed judge preferred the bars overall but ranked the gentle-knee
+variants best among the fills. The skip rule and the two exceptions came out
+of the same reviews.
+
+The fill draws wherever texture banks are supported, including Software at
+16:9 and 16:10, where the backdrop itself stays on the ring: a few narrow quads
+per row are not the full-screen raster that made banks too dear there (5.0h).
+Without banks (Vulkan, netplay's CPU raster, Software with an HD pack) the gap
+stays black. It is pure presentation: no texture, VRAM or guest state changes,
+so an HD texture pack's replacement of an edge tile is mirrored with it, and
+the HD Backdrops pack needs no new or changed tiles. `dw.ws.banks edges-off` /
+`edges-on` switches the fill alone for A/B, and `dw.ws.edges.frames` counts
+the frames the edge path ran.
+
+Measured on the final build (`--headless-opengl`, the framework at its
+committed state), arrival at every map by warp, fill off then on, black band
+at each screen edge over the HUD-free middle rows (luma under 6):
+
+* **21:9**: 238 of 241 maps measured (110, 165 and 220 did not finish the
+  warp: 165 and 220 sit in an arrival event, tamer state 10, with the fill
+  off too; 110 passed at 16:9). Every filled side of the 36 narrow maps went
+  from its 88 or 24 px bar to the last dark pixels of the fade, 1-14 px on
+  most rooms and up to 34 on dark ones (45); the sides left black are exactly
+  the ones listed above. The 205 wide maps measured the same with the fill
+  on and off; the 7 with an edge band (33, 54, 57, 60, 66, 124, 125) are their
+  own black art, as before (5.0g).
+* **16:9**: 237 of 241 (165, 220, 229, 230 in the same arrival event; 229
+  and 230 passed at 21:9). Every filled side of the 19 three-tile maps went
+  from 21 px to 0.5-7 px.
+* `dw.ws.edges.frames` over 120 frames standing still: 0 on every wide map
+  checked (0, 2, 12, 69, 88, 115, 204, 216, 218) at both aspects while
+  `dw.ws.banks.frames` kept counting; on 206 at both, on 98 at 21:9 only.
+* The menu still hides the clock and gauges on narrow maps with the fill
+  (206, 29, 98 at 21:9; 206, 29 at 16:9). With a Beetle-format pack holding
+  six of the maps' HD tiles, the fill mirrors the 4x art. Software draws the
+  fill at 21:9 (with its bank backdrop) and at 16:9 (fill alone, on the ring).
+
+**Why not generated art.** Outpainting the 72 strips was tried on the local
+ComfyUI before settling on the mirror: Z-Image-Turbo with a latent noise mask
+(full denoise invented whole neighbouring rooms beside a room drawn floating
+in black; entering at step 2-5 over a stretched edge left streaks), with the
+whole map as context and a per-map scene prompt (plausible on toy bricks and
+cave rock, wrong on ice, where it drew cartoon snowflakes), and
+Qwen-Image-Edit 2511 (kept the grey bands as content and moved the picture).
+None was better than the mirror across the set. A generated strip would also
+be new tiles that every HD pack lacks, and data the repo would have to ship.
+
 ### 5.2 W2 — UI counter-squash (built, **dormant**, not working)
 
 The machinery is committed to the framework fork behind
