@@ -48,6 +48,7 @@
  * access happens at all.
  */
 #include "cpu_state.h"
+#include "interrupts.h"
 #include "mod_plugins.h"
 
 extern int psx_mod_ws_squash_params(int32_t* num, int32_t* den);
@@ -210,6 +211,11 @@ static void dw_tile_ladder_enter(struct CPUState* cpu, uint32_t address) {
     psx_mod_write_half(DW_CAMERA_X, (uint16_t)(c - s));
     psx_mod_write_half(DW_CAMERA_X_PREVIOUS, (uint16_t)(p - s));
     dw_tile_shift_applied = s;
+    /* The shift lives only in this host static until the exit hook undoes it,
+     * so no savestate or rewind snapshot may be taken in between: loading one
+     * would resume mid-body with the camera shifted and nothing to put it
+     * back. A scheduler longjmp that abandons the span resets the gate. */
+    psx_snapshot_host_call_begin();
 }
 
 static void dw_tile_ladder_exit(struct CPUState* cpu, uint32_t address) {
@@ -223,6 +229,7 @@ static void dw_tile_ladder_exit(struct CPUState* cpu, uint32_t address) {
     psx_mod_write_half(DW_CAMERA_X_PREVIOUS,
                        (uint16_t)(dw_read_i16(DW_CAMERA_X_PREVIOUS) + m));
     dw_tile_shift_applied = 0;
+    psx_snapshot_host_call_end();
 }
 
 /* Narrow maps. The 19 three-tile maps have 64 px of scroll and at 16:9 the

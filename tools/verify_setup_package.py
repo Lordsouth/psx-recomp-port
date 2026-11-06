@@ -68,6 +68,11 @@ CANARIES = (
     "psxrecomp/recompiler/lib/rabbitizer/cplusplus/include/generated/"
     "UniqueId_enum_class.hpp",
     "psxrecomp/psxrecomp_cli.py",
+    # Local rewind's snap ring (psxrecomp submodule lib/retcomm-rbengine).
+    # Without it CMake only warns and builds the game with Rewind silently
+    # left out -- how 0.4.0 shipped, while the README promised F8 rewind.
+    "psxrecomp/lib/retcomm-rbengine/src/snap/rbe_snap_ring.c",
+    "psxrecomp/lib/retcomm-rbengine/include/retcomm_rbengine/snap_ring.h",
 )
 
 

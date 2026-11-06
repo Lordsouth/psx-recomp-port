@@ -26,6 +26,17 @@ else
   echo "cloning psxrecomp (${PSXRECOMP_REF})"
   git clone --branch "${PSXRECOMP_REF}" "${PSXRECOMP_URL}" psxrecomp
 fi
+# Rewind's snap ring is a psxrecomp submodule. Without it the game still
+# builds, with Rewind silently left out (0.4.0 shipped that way). Only fetch
+# it into a real checkout that lacks it; never reset one that has it.
+if [[ ! -e psxrecomp/lib/retcomm-rbengine/src/snap/rbe_snap_ring.c ]]; then
+  if [[ -e psxrecomp/.git ]]; then
+    git -C psxrecomp submodule update --init lib/retcomm-rbengine ||
+      echo "warning: could not fetch psxrecomp/lib/retcomm-rbengine -- the build will leave Rewind out"
+  else
+    echo "warning: psxrecomp/ is not a git checkout, so lib/retcomm-rbengine is missing -- the build will leave Rewind out"
+  fi
+fi
 
 if [[ -e recomp-ui ]]; then
   echo "recomp-ui/ already present -- leaving it alone"
