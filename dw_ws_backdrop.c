@@ -175,15 +175,14 @@ static int32_t dw_clock_decide(int32_t margin) {
     dw_clock_frame_check();
     if (!dw_clock_decided) {
         const int32_t s = dw_read_i16(DW_CLOCK_OFFSET_X);
-        dw_clock_shift = 0;
-        if (dw_clock_union_known) {
-            const int32_t lo = DW_SCREEN_W / 2 + s + dw_clock_union_lo;
-            const int32_t hi = DW_SCREEN_W / 2 + s + dw_clock_union_hi;
-            if (hi <= 0)
-                dw_clock_shift = -margin;         /* parked off the left  */
-            else if (lo >= DW_SCREEN_W)
-                dw_clock_shift = margin;          /* parked off the right */
-        }
+        /* The dial lives in the top-left corner, so it follows the WIDE frame's
+         * left edge: shown, sliding and parked alike get -margin. Shown, it sits
+         * in the corner instead of floating `margin` px in from the edge; parked,
+         * that same shift keeps it outside the wide frame. */
+        dw_clock_shift = -margin;
+        if (dw_clock_union_known &&
+            DW_SCREEN_W / 2 + s + dw_clock_union_lo >= DW_SCREEN_W)
+            dw_clock_shift = margin;              /* parked off the right */
         dw_clock_decided = 1;
     }
     return dw_clock_shift;
@@ -226,10 +225,10 @@ static int dw_in_status_bars(uint32_t ra) {
 }
 
 static int32_t dw_status_shift(int32_t margin) {
-    /* screen span is [160 + S, 235 + S]; parked once the near edge clears the
-     * vanilla frame. */
-    return (DW_SCREEN_W / 2 + dw_read_i16(DW_STATUS_UI_OFFSET_X)) >= DW_SCREEN_W
-               ? margin : 0;
+    /* The gauges live in the bottom-right corner, so they follow the WIDE
+     * frame's right edge: shown, sliding and parked alike get +margin, which
+     * keeps a parked cluster outside the wide frame too. */
+    return margin;
 }
 
 /* The battle partner's HP and MP bars.
