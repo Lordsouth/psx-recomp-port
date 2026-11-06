@@ -11,7 +11,9 @@ page for a setup package (`digimon-world-*-windows-x64.zip`). If none is attache
 build one yourself — see [DEVELOPING.md](DEVELOPING.md).
 
 Either way there is **no playable download**: the port is generated from your
-own disc, on your machine. Nothing game-related is distributed here.
+own disc, on your machine. The game itself is never distributed here. The one
+optional extra, the [HD Backdrops](#hd-backdrops-optional-download) art pack, is
+a separate download.
 
 ---
 
@@ -114,6 +116,7 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 | **Gameplay** | Better odds of learning techniques in battle; lower the stat requirements for evolutions | Tech Mastery yes; Evolution Unbound no, use the 1.5 edition |
 | **Evolution Unbound (1.5)** | Lower the stat requirements for 1.5's evolutions, the new lines included: Relaxed (75%) or Open (50%). Ticking it ticks 1.5 | 1.5 only |
 | **Widescreen** | 16:9, 16:10 or 21:9. The wider view is rendered at full width and shown 1:1, so nothing is stretched — menus, text boxes and the HUD keep their original shapes, and the extra width is real extra view on both sides. Two rough edges remain, listed under Mods below | Yes |
+| **HD Texture Packs** | Loads replacement art. With the free **HD Backdrops** download, every background is redrawn at 4x — see [HD Backdrops](#hd-backdrops-optional-download) | Yes |
 | **Cheats** | All 57 GameShark-style codes as toggles, grouped by what they affect — infinite HP, freeze the clock, max stats, every card and item, and more. Off by default; while it is off, `cheats.txt` decides instead | Yes |
 | **Fast Loading** | Shorter loads. **Off by default and best left off on this game** -- it speeds up real time whenever it thinks a load is happening, and on Digimon World it stays engaged, running the whole game at 4x. | Not checked |
 
@@ -161,6 +164,50 @@ Worth knowing before you turn it on, so nothing looks like a fault in your copy:
 Anything else you see in widescreen is worth reporting. The picture should not
 be stretched, the sides should not go black while you walk, and no piece of the
 HUD should sit out on its own.
+
+### HD Backdrops (optional download)
+
+Every one of the game's 242 pre-rendered backgrounds, redrawn at 4x resolution.
+The colours match the original at every time of day, and the HD art also fills
+the extra width in widescreen. Characters, items and other 3D objects are
+unchanged.
+
+It is a separate download because it is large (6.2 GB in four parts):
+**[HD Backdrops release](https://github.com/Lordsouth/psx-recomp-port/releases/tag/hd-backdrops-1.0)**.
+
+**1. Download all four parts**, `digimon-world-hd-backdrops-part1of4.zip` to
+`part4of4.zip`. You need every part; each one holds a different set of maps.
+
+**2. Extract each part into your game folder**, the folder that has
+`Digimon_World_Recompiled.exe` in it. Right-click a part → **Extract All…** →
+**Browse** to your game folder → **Extract**.
+
+> Windows suggests a new folder named after the zip, e.g.
+> `C:\Games\Digimon World\digimon-world-hd-backdrops-part1of4`. Delete that
+> last part so the box ends at your game folder, or the game won't find the pack.
+
+Do the same for all four parts, into the same game folder. If Windows asks
+about merging folders, say **Yes**. When you're done you'll have
+`mods\texture-packs\SLUS-01032\` in your game folder with about 15,900 files in it.
+
+**3. Turn it on.** Run the game, click **Mods**, tick **HD Texture Packs**
+(under Visual), and press **PLAY**. Leave the folder setting as it is; it
+already points at `mods\texture-packs\SLUS-01032`.
+
+**It needs the OpenGL renderer**, which is the default. On Vulkan or Software
+the game shows the original backgrounds.
+
+**Turning it off:** untick HD Texture Packs. To remove it completely, delete
+the `mods\texture-packs\SLUS-01032` folder.
+
+**Not working?** You'll see the original, blocky backgrounds. Check that
+`Hashes.ini` sits directly in `mods\texture-packs\SLUS-01032\`, not one folder
+deeper, and that all four parts were extracted.
+
+The art was generated with local AI upscaling, from tiles cut out of the
+game's own backgrounds. Now and then it adds a small detail that isn't in the
+original. The tool that made it is
+[`tools/gen_hd_backdrops.py`](tools/gen_hd_backdrops.py).
 
 ### Raising the new Digimon
 
