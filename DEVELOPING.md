@@ -77,7 +77,8 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file CMakeLists.txt --project-file game.toml --project-file VERSION \
   --project-file codegen_setup.c --project-file codegen_setup.h \
   --project-file dw_ws_backdrop.c --project-file dw_ws_camera.c \
-  --project-file dw_ws_sliver.c --project-file dw_roster_flags.c \
+  --project-file dw_ws_sliver.c --project-file dw_ws_world.c \
+  --project-file dw_ws_weather.c --project-file dw_roster_flags.c \
   --project-file dw_roster.c --project-file dw_roster_data.inc \
   --project-file dw_evolution.c \
   --project-file dw_cheats.c --project-file dw_cheats_data.inc \
@@ -141,10 +142,11 @@ tree sits outside this repository and is not packaged**, and every `research/...
 path in these docs is the same: cited so the reasoning can be traced by someone
 with the working tree, not because the file ships to anyone.
 
-**Only 16:9 and 16:10 are offered**, via a game-owned copy of the framework's
+**16:9, 16:10 and 21:9 are offered**, via a game-owned copy of the framework's
 widescreen manifest under `mods/preloaded/packages/psx.enhancement.widescreen`. 21:9 asks
-for 120 px of reveal per side and the tile ring tops out near 96 even with the
-sliver, so it degraded rather than widened. If the framework's builtin manifest
+for 120 px of reveal per side, more than the tile ring holds, so it draws the
+backdrop from the room's tile file instead, and the 36 rooms narrower than the
+view fill their bars with mirrored edge art (`dw_ws_sliver.c`). If the framework's builtin manifest
 version is ever bumped past 1.0.0 that override stops applying silently, since
 the loader takes the highest semver -- check the staged manifest, not the source
 one.

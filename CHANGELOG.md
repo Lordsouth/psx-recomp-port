@@ -9,6 +9,76 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ---
 
+## 0.5.0
+
+**Rewind is in.** Press **F8** (or **Select + R3** on a pad) and a strip of
+thumbnails from the last ~12 seconds appears. Pick a moment with Left/Right and
+press Cross to go back to it: a fumbled battle, a wasted feeding, a missed
+evolution. Turn it on under **Mods → Quality of Life → Rewind**; it is off by
+default.
+
+* The README has listed F8 rewind for a while, but no release ever had it. The
+  framework component that does the work was never included in the package,
+  so every build quietly left it out, 0.4.0 included. The release gate now
+  refuses a package without it.
+* It keeps 50 snapshots, one every 15 frames, and uses about 185 MB of memory
+  at those defaults; both numbers are options. Taking a snapshot costs about
+  2 ms, and jumping back about a tenth of a second.
+* Tested in town (across a map change), leaving and inside a battle, and in
+  the middle of a map load: position, clock, HP and the battle all come back,
+  and the audio keeps playing.
+* The history survives a savestate load, so going far enough back returns to
+  before the load.
+
+**Widescreen at 21:9 fills the narrow rooms.** The 36 smallest rooms are
+narrower than a 21:9 view and showed a black bar on each side (88 px on the
+three-tile rooms, 24 px on the four-tile ones; the three-tile rooms also had a
+21 px bar at 16:9). Those bars now show the room's own edge art, mirrored and
+fading to black at the screen edge. Where a room's edge is mostly black anyway
+(17 sides), and on two rooms where the mirror looked worse than the bar, the
+bar stays.
+
+**The clock and the mood gauges sit in the corners of the wide screen.** In
+widescreen they used to stay where the 4:3 picture had them, inset from the
+edges; the clock, its needle and the gauges now move out to the wide frame's
+corners, and still hide and return as before.
+
+**The launcher's memory card panel follows Digimon World 1.5.** With 1.5
+ticked it shows 1.5's own cards (`saves/dw15/`), and switches back when you
+untick it. In 0.4.0 it always showed the normal cards.
+
+**HD Texture Packs work with Digimon World 1.5.** With both ticked, the game
+closed at start-up. The pack folder was being treated as part of the game, and
+1.5's separate savestates require everything in the game to be checksummed,
+which a folder of images cannot be. The pack is now treated as presentation
+only, like the CRT filter, so it boots, 1.5's savestates work, and in netplay
+the pack is your own choice rather than the host's.
+
+**HD Backdrops**, a free optional download: all 242 pre-rendered backgrounds
+redrawn at 4x, including the extra width in widescreen. See the README's "HD
+Backdrops" section or the
+[release page](https://github.com/Lordsouth/psx-recomp-port/releases/tag/hd-backdrops-1.0).
+
+Also:
+
+* Netplay: changing a display option during a match no longer saves the host's
+  mod list as your own.
+
+Known at the time:
+
+* The narrow-room fill is a mirror. At normal distance it reads as the room
+  continuing; looked at closely, faint symmetric shapes show. It is not drawn
+  on Vulkan, in netplay, or on Software with an HD texture pack; those keep
+  the black bars.
+* Rewind with Digimon World 1.5 has only had a short test (rewinding
+  dialogue), not a play session.
+* Widescreen: in Birdra Transport a thin black strip still shows right of
+  the cage, because the original art stops there. Rooms drawn floating in
+  black (the mansion, the caves, the igloo) show more of that black in the
+  wider view; that is the game's own art and is left as it is.
+
+---
+
 ## 0.4.0
 
 **Digimon World 1.5 is in the Mods panel.**
