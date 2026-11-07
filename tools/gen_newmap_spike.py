@@ -16,7 +16,7 @@ world, all through guarded writes on the player's own disc:
 The manifest it writes carries stock bytes copied from the disc at generation
 time (MGEN17's warp table, MGEN11's Piddomon record), so it is written into a
 build's mods/installed/ and must never be committed or shipped. INTERNALS.md
-section 3.1 explains each write; verify_newmap_spike.py checks it in the game.
+section 3.1 explains each write; verify_newmap.py --map spike checks it in the game.
 
     py -3.12 tools/gen_newmap_spike.py [--bin disc.bin] [--build build-debug]
 """

@@ -183,9 +183,9 @@ Kuwagamon → Off/MP/Brain).
 doorsId, toiletId, loadingName) has 11 empty rows: 239–246 and 250–252. A
 screen id is a u8, so these 11 are all the stock engine offers without a hook
 layer. `gen_newmap_spike.py` fills row 239 with the unused Mt. Infinity floor
-MGEN17. `verify_newmap_spike.py` then walks in through a stock exit, wins a
-battle, saves on 239, walks out, relaunches, and continues onto 239. Both
-runs pass.
+MGEN17. `verify_newmap.py --map spike` then walks in through a stock exit, wins
+a battle, saves on 239, walks out, relaunches, and continues onto 239. Both
+runs pass. §3.2 puts an authored map on the same row.
 
 What a new row needs, each verified in that run:
 
@@ -230,6 +230,70 @@ The generated manifest copies stock bytes (MGEN17's warps, MGEN11's record).
 It is written into `build/mods/installed/` and never committed. An authored
 map ships its own MAP/TFS, DG script and MAPHEAD section, and needs none of
 those bytes.
+
+### 3.2 An authored map (M1, verified in game)
+
+`gen_newmap.py` builds the "Hidden Glade" from a scene described in code:
+props (trees, rocks, bushes), a dirt path, a pond and a meadow, all in world
+units. One description drives three outputs, so they cannot drift apart:
+
+- **The backdrop.** It is ray-traced from the map's own camera with the engine's
+  projection, then quantised to one 255-colour 15-bit palette and tinted into
+  the dusk and night palettes. Index 0 is reserved for `0x0000`, the
+  transparent texel.
+- **The collision grid.** Floor follows the scene. Cells are blocked under
+  props, under the pond, outside the painted frame, and wherever a prop would
+  cover a character standing there. Backdrops always draw behind characters,
+  so nothing may be walked behind.
+- **The MAP.** It holds the setup block (camera, the MAYO maps' character
+  lights, a 6×5 grid) and the warp table.
+
+The camera model, checked against the stock art of all 242 maps:
+
+```
+vp = 2*(s0,s1,s2)   vr = 2*(s3,s4,s5)   h = s27   W,H = s36,s37   (s = setup i32 words)
+f = norm(vr - vp)   r = norm((f.z, 0, -f.x))   d = f x r          (world +Y down, floor y = 0)
+q = P - vp          u = 64W + h*(q.r)/(q.f)    v = 64H + h*(q.d)/(q.f)   (stitched backdrop pixel)
+```
+
+Camera follow never changes the view. It scrolls the backdrop and the 3D
+layer together, keeping `cameraX + DRAWING_OFFSET_X = 64W`.
+
+The TFS layout is `u32 W|H<<16`, `u32 nCLUT`, the CLUTs, then for each grid
+slot a `u32` tile header and 128×128 8bpp pixels. Its size must stay within
+241 sectors (`0x78800`), the window from `GENERAL_BUFFER` up to
+`TEXTURE_BUFFER`, which allows 30 tiles with 3 CLUTs. Flag `0x40` is needed
+when there is only 1 CLUT. Avoid -1 grid slots: `updateTileRow` checks the
+wrong row and can blank real tiles.
+
+**Delivery** needs no runtime change. Two file-backed `disc_user` `[[overlay]]`s
+put our MAP and TFS over MGEN17's own sectors (6 and 241, both zero-padded).
+Overlays need `disc_sha256` on the `[[target]]`. Past the end of the disc a
+`disc_user` overlay reads as zeros, so an in-place slot is the only option.
+The row, the MAPHEAD section and the entrance are small guarded patches. The
+MAPHEAD section binds DG script 118, whose only section is a bare END. The
+MAPHEAD tail sectors overlap the `dw.1_5` delta, so the feature conflicts with
+1.5.
+
+`verify_newmap.py --map glade` proves the game loaded our files, from memory:
+- our TFS is resident in `GENERAL_BUFFER`
+- our collision grid is in `MAP_COLLISION_DATA`
+- our camera is in `GS_VIEWPOINT`
+- our palette is in VRAM row 480, and our dusk and night palettes go live at
+  16:00 and 20:00
+
+It also walks the meadow, pushes into the pond (the tamer stays ashore), saves
+on the map, continues onto it after a relaunch, and walks out. Screenshots
+taken against our own backdrop under the live camera match best at offset
+(0,0) or within 1 px.
+
+Still to do before players see it:
+- a real entrance instead of the Coela Point redirect
+- save isolation (a `dw_newmaps.c` memory-card plugin, like `dw_dw15.c`)
+- the release allowlist for the two payloads in `verify_setup_package.py`
+- its own DG script for NPCs and battles
+- foreground sprites (the MAP object section) so props can stand in front of
+  the player
 
 ---
 
@@ -1544,6 +1608,7 @@ different executables.
 | `gen_cheats_mod.py` | `dw.vanilla.cheats` and `dw_cheats_data.inc` from `cheats.txt` (`--check`) |
 | `gen_vice_mod.py` | a local-only package that must never be redistributed |
 | `gen_newmap_spike.py` | the local-only `dw.newmaps.spike` dev package (§3.1) in `build/mods/installed/`; never commit its output |
+| `gen_newmap.py` | the authored glade (§3.2): renders the backdrop and writes MAP, TFS and the `dw.newmaps` dev package into `build/mods/installed/`, plus previews and a collision overlay in `build/newmap/` (`--preview` renders only) |
 
 ### 7.1b Verification tools
 
@@ -1561,7 +1626,7 @@ sandbox memory card seeded from `saves/`; none of them touches your own saves.
 | `verify_model.py` | are a model file's bytes resident in guest RAM? |
 | `scan_trigger_ids.py` | which trigger ids do the disc scripts use? Run before widening any guard that writes one |
 | `extract_disc_file.py` | pull a file off the disc image by its ISO path, so a probe comes from the same disc as the build |
-| `verify_newmap_spike.py` | does map row 239 work like a real map? `run1` walks in, fights, saves and walks out; `run2` relaunches and continues onto it (§3.1) |
+| `verify_newmap.py` | does a map on row 239 work like a real map? `--map spike` or `glade`; `run1` walks in, runs the map's checks, saves and walks out; `run2` relaunches and continues onto it (§3.1, §3.2) |
 
 The pattern they all follow: **a verdict is a guest-memory read, never a**
 **screenshot**, and a probe that cannot fail is not a probe. Each one takes a
