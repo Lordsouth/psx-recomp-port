@@ -177,6 +177,60 @@ Selected `PARTNER_PARA` offsets, each recomputed by walking the struct:
 — and two of those flags *are* the gym upgrades (Kabuterimon → HP/Def/Speed,
 Kuwagamon → Off/MP/Brain).
 
+### 3.1 New maps on free rows (M0 spike, verified in game)
+
+`MAP_ENTRIES` (`0x801292D4`, 255 × 16: `filename[10]`, n8bpp, n4bpp, flags,
+doorsId, toiletId, loadingName) has 11 empty rows: 239–246 and 250–252. A
+screen id is a u8, so these 11 are all the stock engine offers without a hook
+layer. `gen_newmap_spike.py` fills row 239 with the unused Mt. Infinity floor
+MGEN17. `verify_newmap_spike.py` then walks in through a stock exit, wins a
+battle, saves on 239, walks out, relaunches, and continues onto 239. Both
+runs pass.
+
+What a new row needs, each verified in that run:
+
+- **The row.** Files resolve by basename only (`lookupFileTable`), so the
+  `\MAP\MAPnn\` folder `buildMapPath` builds never matters. n8/n4 must match the
+  MAP header word count (3 words means 0/0). Keep flag `0x40` when the TFS has a
+  single CLUT, because the day/night swap reads `MAP_CLUTS[1..2]`. Set `0x80` for
+  map Digimon. The low 5 bits are the sound bank (< 22). loadingName must be < 70.
+- **Its MAPHEAD.SCN section.** `changeMap` runs MAPHEAD section *mapId*, and
+  its `FB` op picks the DG script and loads the map. All free rows already have
+  a 14-byte filler that binds **script 0xB4, the Factorial Town sewer**. Its
+  arrival section plays the fog cutscene and sets T340 (so the real sewer's
+  intro never plays). With T341 set and T211 clear it starts the Numemon
+  battle. Never ship a free row on the filler. The spike moves the section
+  into the zero tail of the file's last sector (MAPHEAD ends at `0x606E`, and
+  the buffer is `0x61A8`) and repoints its table entry.
+- **Exits.** A MAP's entity block starts with `MapWarps` (10 × spawn xyz,
+  rotation, targetMap, targetExit). Collision is 100×100 bytes. 0 is floor,
+  `0x80` is wall, and 110+n fires warp n. 51–109 run DG sections instead; a
+  missing section makes the script pointer NULL. MGEN17's spawn 2 is inside a
+  wall.
+- **Wild battles** need four parts:
+  - map-Digimon records after the warp count (flag `0x80`; 84 bytes plus 6
+    per waypoint, layout in `loadMapDigimon`)
+  - `LOAD_DIGIMON` and `SET_DIGIMON type slot autotalk` in the MAPHEAD section
+  - a DG section numbered by the record's scriptId that runs `START_BATTLE`
+  - the player inside the record's trackingRange (400 for MGEN11's)
+
+  The spike borrows MGEN11's script `0xB9` and a weakened copy of its Piddomon
+  record. That script spawns MGEN11's chest from its arrival section and sets
+  trigger 0x11D after the fight. That is fine for a spike, but an authored map
+  needs its own DG script.
+- **Room to grow.** `readFile` loads whole sectors, so the zero tail of a
+  file's last sector is free space. The spike puts MGEN17's new entity block
+  there and changes only the header offset. Nothing in `FILE_OFFSET_TABLE`
+  changes.
+- **Saves** store the screen, the exit and the exact position. Continue reruns
+  the MAPHEAD section. A save made on a new row cannot load once the mod is
+  off, so a shipped map needs save isolation like `dw_dw15.c`.
+
+The generated manifest copies stock bytes (MGEN17's warps, MGEN11's record).
+It is written into `build/mods/installed/` and never committed. An authored
+map ships its own MAP/TFS, DG script and MAPHEAD section, and needs none of
+those bytes.
+
 ---
 
 ## 4. Mod packages
@@ -1489,6 +1543,7 @@ different executables.
 | `gen_dw15_extras.py` | the two 1.5-only features, below a marker in the `dw.1_5` manifest (needs the 1.5 image; `--check`) |
 | `gen_cheats_mod.py` | `dw.vanilla.cheats` and `dw_cheats_data.inc` from `cheats.txt` (`--check`) |
 | `gen_vice_mod.py` | a local-only package that must never be redistributed |
+| `gen_newmap_spike.py` | the local-only `dw.newmaps.spike` dev package (§3.1) in `build/mods/installed/`; never commit its output |
 
 ### 7.1b Verification tools
 
@@ -1506,6 +1561,7 @@ sandbox memory card seeded from `saves/`; none of them touches your own saves.
 | `verify_model.py` | are a model file's bytes resident in guest RAM? |
 | `scan_trigger_ids.py` | which trigger ids do the disc scripts use? Run before widening any guard that writes one |
 | `extract_disc_file.py` | pull a file off the disc image by its ISO path, so a probe comes from the same disc as the build |
+| `verify_newmap_spike.py` | does map row 239 work like a real map? `run1` walks in, fights, saves and walks out; `run2` relaunches and continues onto it (§3.1) |
 
 The pattern they all follow: **a verdict is a guest-memory read, never a**
 **screenshot**, and a probe that cannot fail is not a probe. Each one takes a
