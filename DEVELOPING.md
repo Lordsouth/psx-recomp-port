@@ -115,9 +115,9 @@ World 1.5 patch. It ships on purpose: it is the mod author's own file, holds
 only 1.5's changes, and is applied to the player's disc at run time. Beside it,
 `licenses/` carries the SIL OFL texts for the Ark Pixel and Cubic 11 glyphs the
 patch contains, which the OFL requires to travel with them. It also carries
-`mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.map` and `glade.tfs`, the
+`mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.map`, `glade.tfs` and `glade.dg`, the
 Hidden Glade: this project's own map and art (`tools/gen_newmap.py`, from
-`art/newmaps/glade.png`), with no game art or data in them. Those five are the
+`art/newmaps/glade.png`), with no game art or data in them. Those six are the
 only non-manifest files allowed under `mods/preloaded/packages`; the third gate
 below fails on anything else there, on a changed hash, or on one missing.
 

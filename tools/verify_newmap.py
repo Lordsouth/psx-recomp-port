@@ -17,6 +17,11 @@
     off   (glade) the mod OFF, on the stock game: Continue from run1's card
           (--card glade) or run2's (--card host) loads and plays. No card may ever
           depend on the mod
+    fight (glade) fresh sandbox card: the secret fight, won, fled and lost for real.
+          HP is poked so the outcome is the one under test: the numbers are not
+          judged here. --wide does it at 21:9 with the Expanded Roster on
+    measure (glade) a real fight: the partner evolved and set to --stats, then nothing
+          poked but --heal. Presses only the finisher button. Prints how it went, judges nothing
 
     py -3.12 tools/gen_newmap.py            (or gen_newmap_spike.py)
     cmake --build build-debug --target psx-runtime     (glade: stages the bundled package)
@@ -24,6 +29,7 @@
     py -3.12 tools/verify_newmap.py run2 --map glade
     py -3.12 tools/verify_newmap.py off --map glade --card glade
     py -3.12 tools/verify_newmap.py off --map glade --card host
+    py -3.12 tools/verify_newmap.py fight --map glade --seed <card dir> [--wide]
 
 The seed is any card dir whose slot 1 holds a Digimon World file; a never-saved
 New Game file plays Jijimon's intro first, which this drives through. It writes
@@ -53,11 +59,22 @@ GS_VIEWPOINT, VIEWPORT_DISTANCE, HOUR, CURRENT_FRAME = 0x80185BA8, 0x80134ED4, 0
 CAMERA = MAP_TILE_DATA + 7092                     # cameraX, cameraY (i16), width, height (i8)
 MAP_OBJECT_INSTANCE_COUNT = 0x80134D1C            # map objects (foreground sprites) loadMapObjects set up
 PREVIOUS_SCREEN, CURRENT_EXIT = 0x80134DA9, 0x80134DAA
+NPC_ANIM, NPC_ON_MAP, NPC_STATS = 0x80155828 + 0x2E, 0x80155828 + 0x34, 0x80155828 + 0x38   # NPC_ENTITIES[0]: animId, isOnMap, off ...
+PARTNER_STATS, PARTNER_MAX_HP, MONEY = 0x801557E0, 0x801557F0, 0x80134EB8    # off, def, speed, brain; max HP, MP, current HP, MP
+PARTNER_ANIM, WORLD_POOP = 0x801557A8 + 0x2E, 0x80138504
+CURRENT_COMMAND, HOVERED_COMMAND = 0x8013D640 + 0x64E, 0x8013D640 + 0x652   # COMBAT_DATA.player.*[0]
+ROW_122 = 122                                     # the other map bound to DG script 118 (TUNN07_2)
+BATTLE = (1, 2, 3)                                # GAME_STATE: 3 loading, 2 starting or ending, 1 fighting
 HOST_EXIT = (1858, -1142)                         # Coela Point's east-exit spawn
 STATE = ('format_version = 2\n\n[[package]]\nid = "%s"\nversion = "1.0.0"\n\n'
          '[[package]]\nid = "dw.vanilla.qol"\nversion = "1.0.0"\n\n'
          '[[feature]]\npackage_id = "%s"\nid = "%s"\nenabled = true\n\n'
          '[[feature]]\npackage_id = "dw.vanilla.qol"\nid = "save-anywhere"\nenabled = true\n')
+WIDE = ('\n[[package]]\nid = "psx.enhancement.widescreen"\nversion = "1.0.0"\n\n'
+        '[[package]]\nid = "dw.vanilla.roster"\nversion = "1.0.0"\n\n'
+        '[[feature]]\npackage_id = "psx.enhancement.widescreen"\nid = "widescreen"\nenabled = true\n'
+        '[feature.values]\naspect = "21:9"\n\n'
+        '[[feature]]\npackage_id = "dw.vanilla.roster"\nid = "roster"\nenabled = true\n')
 MAPS = {
     # spawn 0, then the legs from anywhere inside to the map's warp strip
     "spike": dict(package="dw.newmaps.spike", feature="spike", file="MGEN17",
@@ -69,7 +86,11 @@ MAPS = {
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=("run1", "run2", "off"))
+    ap.add_argument("mode", choices=("run1", "run2", "off", "fight", "measure"))
+    ap.add_argument("--stats", default="5500,5000,600,600,450,450", help="measure: partner HP, MP, off, def, speed, brains")
+    ap.add_argument("--heal", type=int, default=0, help="measure: stand-in for N recovery items, +5000 HP each below 2500")
+    ap.add_argument("--brains", type=int, help="fight: the partner's Brains going in, so the win's gain crosses a threshold")
+    ap.add_argument("--wide", action="store_true", help="fight: at 21:9, with the Expanded Roster on")
     ap.add_argument("--card", choices=("glade", "host"), default="glade", help="off: which saved card to load")
     ap.add_argument("--map", choices=sorted(MAPS), default="glade")
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
@@ -89,19 +110,20 @@ def main():
     pkg_dir = os.path.join(a.build, "mods", "bundled" if a.map == "glade" else "installed", mp["package"], "1.0.0")
     if a.map == "glade":                               # the exe serves the staged copy: test what was generated
         src = os.path.join(root, "mods", "preloaded", "packages", mp["package"], "1.0.0", "assets")
-        for name in os.listdir(src):
-            if open(os.path.join(src, name), "rb").read() != open(os.path.join(pkg_dir, "assets", name), "rb").read():
+        for name in ["manifest.toml"] + [os.path.join("assets", n) for n in os.listdir(src)]:
+            if open(os.path.join(src, "..", name), "rb").read() != open(os.path.join(pkg_dir, name), "rb").read():
                 print("%s in %s is stale: rebuild to stage what gen_newmap.py wrote" % (name, pkg_dir), file=sys.stderr)
                 return 2
     out = os.path.join(a.build, "newmap_%s" % a.map)
-    cards = os.path.join(out, "cards")
+    cards = os.path.join(out, "cards_fight" if a.mode in ("fight", "measure") else "cards")    # run2 needs run1's
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
-        fh.write("format_version = 2\n" if a.mode == "off" else STATE % (mp["package"], mp["package"], mp["feature"]))
+        fh.write("format_version = 2\n" if a.mode == "off" else STATE % (mp["package"], mp["package"], mp["feature"])
+                 + (WIDE if a.wide else ""))
     if a.mode == "off":                                # a copy of the card that save was left on
         shutil.rmtree(cards, ignore_errors=True)
         shutil.copytree(os.path.join(out, "cards_" + a.card), cards)
-    if a.mode == "run1":
+    if a.mode in ("run1", "fight", "measure"):
         shutil.rmtree(cards, ignore_errors=True)
         os.makedirs(cards)
         for name in ("card1.mcd", "card2.mcd"):
@@ -137,9 +159,8 @@ def main():
         return struct.unpack("<3i", g.d.read(ptr + 120, 12))
 
     def walk(mask, seconds):
-        pad(mask)
-        time.sleep(seconds)
-        pad(0)
+        """Counted in game frames, not wall time: a busy machine must not stretch the step."""
+        g.route("%d:%s,4:none" % (seconds * 60, {UP: "up", RIGHT: "right", DOWN: "down", LEFT: "left"}[mask]), poll_s=0.02)
 
     def wait_for(pred, timeout=30.0):
         end = time.time() + timeout
@@ -169,8 +190,11 @@ def main():
                 time.sleep(0.3)                   # (the spike's Piddomon respawns on entry)
                 continue
             want = (target[0] - p[0], target[1] - p[2])
-            for d in sorted(vec, key=lambda d: -(vec[d][0] * want[0] + vec[d][1] * want[1]))[:3]:
-                walk(d, 0.3)
+            order = sorted(vec, key=lambda d: -(vec[d][0] * want[0] + vec[d][1] * want[1]))[:3]
+            for d in order:
+                # 0.3 s runs about 300 units, wider than the targets: slow down to land on one
+                need = 0.35 * (vec[d][0] * want[0] + vec[d][1] * want[1]) / max(1, vec[d][0] ** 2 + vec[d][1] ** 2)
+                walk(d, min(0.3, max(0.1, need)) if d == order[0] else 0.3)
                 q = pos(TAMER)
                 if q is None or until() or abs(q[0] - p[0]) + abs(q[2] - p[2]) > 20:
                     break
@@ -326,7 +350,7 @@ def main():
         pad(0)
         edge = next(z for z in range(p[2], p[2] + 3000, 10) if wet_at(p[0], z))
         gap = edge - p[2]                                      # where the push ended, to the water's edge
-        check(0 < gap < 300 and not wet,
+        check(0 < gap <= 300 and not wet,
               "pushing into the pond for 3 s stops %d units short of the water "
               "(%s -> %s, %d samples in the water)" % (gap, start, p, len(wet)))
         shot("pond")
@@ -352,7 +376,7 @@ def main():
         check(go(via, lambda: near(*via), limit=60, vec=vec), "north of the bush island %s" % (pos(TAMER),))
         above = (spot[0], via[1])                              # then straight south: no sliding along the bush
         go(above, lambda: near(*above, r=80), limit=30, vec=vec)
-        check(go(spot, lambda: near(*spot, r=100), limit=60, vec=vec), "behind the bush island %s" % (pos(TAMER),))
+        check(go(spot, lambda: near(*spot, r=150), limit=60, vec=vec), "behind the bush island %s" % (pos(TAMER),))
         time.sleep(1.5)                                        # let the camera settle
         cam0 = struct.unpack("<2h", g.d.read(CAMERA, 4))
         p = pos(TAMER)
@@ -408,8 +432,211 @@ def main():
         shutil.copytree(cards, os.path.join(out, "cards_" + name))
         shutil.copy(os.path.join(out, "saved_pos.json"), os.path.join(out, "saved_pos_%s.json" % name))
 
-    def save_here(on_new_map=True):
+    def boss_fresh(when):
+        """The map's record is what the game spawned, at full strength."""
+        rec, npc = spec["boss"]["record"], struct.unpack("<I", g.d.read(NPC0, 4))[0]
+        st = g.d.read(NPC_STATS, 0x18)
+        p = pos(npc) if 0x80000000 <= npc < 0x80200000 else None
+        hp = list(struct.unpack_from("<4h", st, 0x10))
+        check(p is not None and (p[0], p[2]) == (spec["boss"]["at"][0], spec["boss"]["at"][2])
+              and hp == rec[11:15] and list(struct.unpack_from("<4h", st)) == rec[15:19]
+              and list(st[8:16]) == rec[26:30] + rec[22:26] and g.d.read(NPC_ON_MAP, 1)[0] == 1,
+              "%s: the boss stands at %s, HP %d/%d, moves %s" % (when, p, hp[2], hp[0], list(st[12:16])))
+
+    def talk(vec):
+        """Up the path to the boss. Standing there starts nothing; pressing confirm does."""
+        x, z = spec["boss"]["at"][0], spec["boss"]["at"][2]
+        centre = tuple(spec["meadow"][1])
+        go(centre, lambda: near(*centre), limit=60, vec=vec)
+        check(go((x, z - 700), lambda: near(x, z - 700, r=200), limit=40, vec=vec), "up the path, below the boss %s" % (pos(TAMER),))
+        north = max(vec, key=lambda d: vec[d][1])              # walk at it until it stops us: it is wide
+        pad(north)
+        last = None
+        for _ in range(30):
+            time.sleep(0.15)
+            if pos(TAMER) == last:
+                break
+            last = pos(TAMER)
+        pad(0)
+        time.sleep(3)
+        check(gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1,
+              "next to it at %s, standing still starts nothing" % (last,))
+        shot("boss")
+        g.route("6:cross,20:none")
+        time.sleep(1)
+        check(gstate() == 0 and i32(IS_SCRIPT_PAUSED) != 1, "confirm opens its dialogue (the game is still on the map)")
+        shot("talk")
+        end = time.time() + 30
+        while time.time() < end and gstate() not in BATTLE:
+            g.route("4:cross,20:none")
+        check(gstate() in BATTLE and g.d.read(0x80134D7C, 1)[0] == 0, "the battle starts, with fleeing allowed")
+        check(wait_for(lambda: gstate() == 1, 30), "the fight is on")    # setup has captured the starting stats
+        shot("battle")
+
+    def partner(stat, hp):
+        g.d.write_bytes(struct.pack("<4h", stat, stat, stat, stat), PARTNER_STATS)
+        g.d.write_bytes(struct.pack("<4h", hp, 9999, hp, 9999), PARTNER_MAX_HP)
+
+    def win():
+        """A maxed partner. First the boss fights for real until it has used every move (a move plays
+        the animation of its slot number), both sides topped up, then on 1 HP it takes a hit and runs off."""
+        if a.brains:
+            check(struct.unpack("<h", g.d.read(0x8013D610 + 10, 2))[0] == a.brains, "the battle started on Brains %d" % a.brains)
+        partner(999, 9999)
+        rec = spec["boss"]["record"]
+        moves, seen = set(rec[22:26]), {}
+        t0 = time.time()
+        while time.time() - t0 < 240 and gstate() == 1 and not moves <= set(seen):
+            m = g.d.read(NPC_ANIM, 1)[0]
+            if m in moves and m not in seen:
+                seen[m] = round(time.time() - t0)
+                shot("move%d" % m)
+            g.d.write_bytes(struct.pack("<hh", rec[11], rec[12]), NPC_STATS + 0x14)
+            g.d.write_bytes(struct.pack("<hh", 9999, 9999), PARTNER_MAX_HP + 4)
+            if time.time() - t0 > 12 and "menu" not in seen:
+                seen["menu"] = 0
+                shot("battle_ui")
+            time.sleep(0.05)
+        seen.pop("menu", None)
+        check(moves <= set(seen) and gstate() == 1, "the boss used all four moves %s (move: seconds in)" % seen)
+        bits, hit = i32(MONEY), False
+        end = time.time() + 240
+        while time.time() < end and not (hit and gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1):
+            if gstate() not in BATTLE:
+                hit = True
+            elif struct.unpack("<h", g.d.read(NPC_STATS + 0x14, 2))[0] > 1:
+                g.d.write_bytes(struct.pack("<h", 1), NPC_STATS + 0x14)
+            g.route("4:cross,20:none")
+        check(hit and gstate() == 0 and g.tamer_state == 0 and screen() == 239,
+              "won: the run-off ended, player in control, still on map 239")
+        check(i32(MONEY) - bits == spec["boss"]["record"][19], "the bits were paid: %d -> %d" % (bits, i32(MONEY)))
+        check(g.d.read(NPC_ON_MAP, 1)[0] == 0, "the boss has left the map")
+        g.advance(30)
+        shot("won")
+
+    def flee():
+        """Back to the host's side of the entrance, as any fled battle goes back where it came from."""
+        partner(999, 9999)
+        end = time.time() + 30
+        while time.time() < end and g.d.read(HOVERED_COMMAND, 1)[0] != 1:
+            g.route("6:left,12:none")
+        check(g.d.read(HOVERED_COMMAND, 1)[0] == 1, "cursor on Flee")
+        end = time.time() + 30
+        while time.time() < end and g.d.read(CURRENT_COMMAND, 1)[0] != 1:
+            g.route("6:cross,12:none")
+        check(g.d.read(CURRENT_COMMAND, 1)[0] == 1, "the tamer runs")
+        arrived = lambda: (screen() == mp["host_row"] and gstate() == 0 and g.tamer_state == 0
+                           and i32(IS_SCRIPT_PAUSED) == 1)
+        ok = wait_for(arrived, 120)
+        g.advance(120)                                 # the arrival settles
+        check(ok and arrived() and near(*mp["host_at"], r=400), "fled to the entrance on map %d %s" % (screen(), pos(TAMER)))
+        shot("fled")
+
+    def lose():
+        """A feeble partner on 1 HP. Jijimon's home, as every lost battle."""
+        partner(1, 1)
+        free = lambda: gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1 and screen() != 239
+        end = time.time() + 300
+        while time.time() < end and not free():
+            if gstate() in BATTLE and struct.unpack("<h", g.d.read(PARTNER_MAX_HP + 4, 2))[0] > 1:
+                g.d.write_bytes(struct.pack("<h", 1), PARTNER_MAX_HP + 4)
+            g.route("4:cross,20:none")
+        check(free(), "lost, and back in control on map %d" % screen())
+        check(screen() in (205, 218), "the loss ends at Jijimon's (map %d)" % screen())
+        shot("lost")
+        g.advance(120)
+
+    def measure_fight():
+        hp, mp_, off, de, spd, brain = (int(v) for v in a.stats.split(","))
+        g.warp(mp["host_row"], spec["host"]["exit"])
+        for field, value in (("remaining_lifetime", 9999), ("poop_level", 9999), ("tiredness", 0), ("script_sync_bit", 1),
+                             ("evolution_target", 12)):      # MetalGreymon
+            g.set(field, value)
+        g.set_atomic(("tamer_state", 6), ("tamer_substate", 0))
+        g.set_atomic(("partner_state", 13), ("partner_sub_state", 0))
+        check(wait_for(lambda: g.partner_type == 12 and g.evolution_target == -1
+                       and (g.partner_state == 1 or g.tamer_state == 20), 240), "the partner evolved")
+        for _ in range(12):
+            if g.tamer_state == 0 and g.partner_state == 1:
+                break
+            g.route("4:cross,45:none")
+        g.settle()
+        wait_for(lambda: g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1, 30)
+        g.advance(120)                                 # the evolution's last box has closed
+        g.d.write_bytes(struct.pack("<4h", off, de, spd, brain), PARTNER_STATS)
+        # Buster Dive, Pulse Laser, Metal Sprinter, and its finisher: animation 46 + the slot in its move list
+        g.d.write_bytes(bytes([34, 33, 33, 0, 50, 54, 56, 60]), PARTNER_STATS + 8)
+        g.d.write_bytes(struct.pack("<4h", hp, mp_, hp, mp_), PARTNER_MAX_HP)
+        g.warp(239, 0)                                 # coming back from the glade a big partner lands in the entrance's
+        vec = calibrate()                              # lane, as it would at any stock exit: not what this measures
+        talk(vec)
+        rec = spec["boss"]["record"]
+        h = lambda addr: struct.unpack("<h", g.d.read(addr, 2))[0]
+        picks, ours, last, last_p, dry, printed, boss_hp, partner_hp = {}, 0, 0, 0, None, 0, rec[11], hp
+        heals = 0
+        t0 = time.time()
+        while time.time() - t0 < 600 and gstate() == 1:
+            anim, t = g.d.read(NPC_ANIM, 1)[0], time.time() - t0
+            if anim in rec[22:26] and anim != last:
+                picks[anim] = picks.get(anim, 0) + 1
+            last = anim
+            mine = g.d.read(PARTNER_ANIM, 1)[0]
+            ours += mine == 60 and last_p != 60          # our finisher
+            last_p = mine
+            now = h(NPC_STATS + 0x14), h(PARTNER_MAX_HP + 4)
+            if gstate() == 1:                            # still fighting: the game restores them at the end
+                boss_hp, partner_hp = now
+                if heals < a.heal and 0 < partner_hp < 2500:
+                    g.d.write_bytes(struct.pack("<h", min(hp, partner_hp + 5000)), PARTNER_MAX_HP + 4)
+                    heals += 1
+            if dry is None and h(NPC_STATS + 0x16) < 96:
+                dry = round(t)
+            if t - printed >= 15:
+                printed = t
+                print("  %3ds: boss HP %d MP %d, partner HP %d MP %d, picks %s"
+                      % (t, h(NPC_STATS + 0x14), h(NPC_STATS + 0x16), h(PARTNER_MAX_HP + 4), h(PARTNER_MAX_HP + 6), picks), flush=True)
+            g.route("2:square,2:none", poll_s=0.02)   # the finisher, whenever its meter is full
+        secs = round(time.time() - t0)
+        shot("measure_end")
+        print("MEASURE fight: partner %s: %ds, boss HP left %d, partner HP left %d, heals %d, boss picks %s, our finishers %d, MP ran out at %s"
+              % (a.stats, secs, boss_hp, partner_hp, heals, picks, ours, dry), flush=True)
+        end = time.time() + 300
+        while time.time() < end and not (gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1):
+            g.route("4:cross,20:none")
+        over = gstate() == 0 and g.tamer_state == 0
+        print("MEASURE outcome: %s (map %d)" % ("unfinished" if not over else "won" if screen() == 239 else "lost", screen()), flush=True)
+
+    def fight():
+        def stage(*steps):                             # each step runs on what the last left: stop at a failure
+            for step in steps:
+                if fails:
+                    raise SystemExit("RESULT newmap glade fight: FAIL %s" % fails)
+                step()
+
+        vec = {}
+        stage(lambda: g.warp(mp["host_row"], spec["host"]["exit"]), walk_in, loaded_files,
+              lambda: boss_fresh("on arrival"), lambda: vec.update(calibrate()),
+              lambda: a.brains and (g.d.write_bytes(struct.pack("<h", a.brains), PARTNER_STATS + 6),
+                                    g.d.write_bytes(struct.pack("<h", 999), NPC_STATS + 6)),   # a sure gain
+              lambda: talk(vec), win,
+              loaded_files,                            # the battle left the map's art and collision as they were
+              lambda: measure("after_win"), save_here, walk_out,
+              lambda: wait_for(lambda: i32(IS_SCRIPT_PAUSED) == 1, 20), lambda: g.advance(60),
+              walk_in, lambda: boss_fresh("back on the next visit"), lambda: talk(vec), flee,
+              walk_in, lambda: boss_fresh("after fleeing"), lambda: talk(vec), lose,
+              lambda: save_here(on_new_map=False, anywhere=True),
+              lambda: g.warp(mp["host_row"], spec["host"]["exit"]), walk_in, lambda: boss_fresh("after losing"))
+        g.warp(ROW_122, 0)                             # the other map on DG script 118
+        g.advance(120)
+        f0 = g.d.frame()
+        time.sleep(2)
+        check(screen() == ROW_122 and gstate() == 0 and g.d.frame() > f0 + 60, "map %d still plays" % ROW_122)
+        shot("row122")
+
+    def save_here(on_new_map=True, anywhere=False):
         check((g.para_condition & 1) == 0, "partner not sleepy, so Save Anywhere is offered")
+        if on_new_map and a.map == "glade":            # a pile dropped here, in the table's last slot
+            g.d.write_bytes(bytes([239, 50, 50, 5]), WORLD_POOP + 99 * 4)
         g.route("6:triangle,40:none")
         check(wait_for(lambda: i32(TRI_STATE) == -1, 10), "field menu open")
         g.route("6:left,20:none")
@@ -428,7 +655,12 @@ def main():
         blk = next(i for i in range(1, 16) if card[i * 128 + 10:i * 128 + 26] == b"BASLUS-01032DMR0")
         s0 = card[blk * 0x2000 + 0x200:]
         main_state, px, py, pz = struct.unpack_from("<4i", s0)
-        if a.map == "glade":                           # no card names the new map, or the new exit
+        if a.map == "glade":
+            check(239 not in s0[0x24:0x24 + 0x190:4], "no poop pile on the card names map 239")
+        if anywhere:
+            check(main_state == 1 and s0[0x49A] != 239 and s0[0x49B] != 239,
+                  "card save: map %d (before: map %d) at %s" % (s0[0x49A], s0[0x49B], (px, py, pz)))
+        elif a.map == "glade":                         # no card names the new map, or the new exit
             host = spec["host"]
             check(main_state == 1 and s0[0x49A] == host["row"] and s0[0x49C] == host["save_exit"]
                   and s0[0x49B] != 239 and not (s0[0x49B] == host["row"] and s0[0x49D] == host["exit"]),
@@ -462,7 +694,11 @@ def main():
             print("RESULT newmap off %s: %s" % (a.card, "FAIL %s" % fails if fails else "PASS"))
             return 1 if fails else 0
         check(g.map_record(239)["file"] == mp["file"], "row 239 holds %s (is %s enabled?)" % (mp["file"], mp["package"]))
-        if a.mode == "run1":
+        if a.mode == "measure":
+            measure_fight()
+        elif a.mode == "fight":
+            fight()
+        elif a.mode == "run1":
             if a.map == "glade":
                 g.warp(mp["host_row"], spec["host"]["exit"])
                 check(screen() == mp["host_row"], "standing in the host's notch %s" % (pos(TAMER),))

@@ -7,11 +7,16 @@
  * one set of cards. (A separate card folder, as dw_dw15.c has, would hide their
  * existing run behind an optional side area.)
  *
- * Every save reaches the card through writeSavegame (two callers, both in
- * tickMainMenu) and is summed right after by createSavegameChecksum. This hook runs
- * on that call, so the rewritten bytes are what get summed, copied to saves[1] and
+ * A poop pile dropped on the new map also saves its map (partner_impl.c:1283,
+ * main_menu.c:5108). The card gets a free slot in its place: the pile stays in play,
+ * and is simply not there after Continue.
+ *
+ * Every save of a game in play reaches the card through writeSavegame (two callers,
+ * both in tickMainMenu) and is summed right after by createSavegameChecksum. This hook
+ * runs on that call, so the rewritten bytes are what get summed, copied to saves[1] and
  * written. The live CURRENT_SCREEN and position are not touched: play goes on where
- * it is. The load paths also sum, hence the return-address filter.
+ * it is. The load paths also sum, and so does new-file creation (menu 0x11), which
+ * writes the default payload without writeSavegame, hence the return-address filter.
  *
  * Entry hooks are selected by the plan ([[plugin]] in the manifest), so this is inert
  * with the feature off. It holds no state, so savestates and rewind have nothing to do.
@@ -36,6 +41,8 @@
 #define PREV_SCREEN (S0 + 0x49B)
 #define EXIT        (S0 + 0x49C)    /* currentExit */
 #define PREV_EXIT   (S0 + 0x49D)
+#define POOP        (S0 + 0x24)     /* worldPoop[100]: u8 map, x, y; i8 size */
+#define POOP_FREE   0x00FFFFFFu     /* what an eaten pile and the save default hold */
 
 /* Slot 1 of the new map's own warp table says where a save resumes. No collision
  * cell is 111, so it never fires as a warp. gen_newmap.py writes it. */
@@ -77,6 +84,9 @@ static void dw_newmaps_pre_checksum(struct CPUState* cpu, uint32_t address) {
     if (cpu->gpr[31] != DW_RA_SLEEP && cpu->gpr[31] != DW_RA_MACHINE)
         return;
 
+    for (uint32_t i = 0; i < 100; i++)
+        if (psx_mod_read_byte(POOP + i * 4) == DW_ROW)
+            psx_mod_write_word(POOP + i * 4, POOP_FREE);
     if (psx_mod_read_byte(SCREEN) == DW_ROW)
         move_save_to_host();
     if (psx_mod_read_byte(PREV_SCREEN) == DW_ROW) {     /* walked out, then saved next door */

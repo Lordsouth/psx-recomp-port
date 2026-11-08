@@ -18,10 +18,14 @@ and you can walk behind its bushes. It is the first map in this port that the
 original game never had: the art, the walkable ground and the sprites are all
 this project's own, and no game data is in the mod.
 
+Something strong waits at the end of the path. It is a hard secret fight: bring a
+fully grown, well-trained partner and strong healing items. It starts only when
+you press confirm next to it, you can run, and it is back on your next visit.
+
 * A save made inside resumes just outside it, in Native Forest. No memory card
   depends on the mod, so turning it off is always safe.
 * It needs the exact disc image in `DISC.md` and cannot run with Digimon World 1.5.
-* It has no Digimon or items of its own yet.
+* It has no other Digimon, and no items of its own yet.
 
 ## 0.5.0
 

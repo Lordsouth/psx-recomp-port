@@ -202,7 +202,9 @@ MOD_PAYLOADS = {
     "mods/preloaded/packages/dw.1_5/1.0.0/licenses/LICENSE-OFL-Cubic11.txt":
         "2b6e5938e5cffa0b9e183bd05f8c363e174e7ebed1a0556e2855fd1707fa2188",
     "mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.map":
-        "1c714c29a9e5eb93a82539b2678979787840afcf4fa71fb46cb2c803c43240e2",
+        "858369ce8d5e3def667db4306889673d0e40a48a1b31a7af1c0b51a302519b74",
+    "mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.dg":
+        "19115e350ac326fe4426e67628e178719be00d505364114ab53d2a6dde0f8b0b",
     "mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.tfs":
         "11a3c9fbf3743f9452f9808266dbe524477924b120ec23f4008bf15288a130d8",
 }

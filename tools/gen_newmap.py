@@ -18,6 +18,7 @@ them. The scene drives all outputs, so they cannot drift apart:
   * the 100x100 collision grid: floor where the scene says ground, blocked under
     props, the pond and anything outside the painted frame, and blocked wherever
     the painting shows something other than ground under a character's feet;
+  * the secret fight (BOSS, boss_script), in the entity block and DG script 118;
   * foreground sprites, cut from the art, so characters can walk behind foliage
     and trunks (backdrops always draw behind characters: anything without a
     sprite may not be walked behind);
@@ -61,7 +62,8 @@ MAP_ENTRIES = 0x801292D4
 FILE_OFFSET_TABLE = 0x8011FE1C       # {sector, size, name*} per disc file: lookupFileTable resolves names here
 FLAGS = 0x80                         # sound bank 0 (Native Forest), time of day on, map-Digimon format
 LOADING_NAME = 0                     # "Native Forest" on the arrival card
-SCRIPT = 118                         # DG script whose only section is a bare END: no arrival side effects
+SCRIPT = 118                         # DG slot we rewrite (boss_script). Stock it is one bare END section, which stays:
+                                     # no arrival side effects, and row 122, the other map bound to it, plays on
 BGM, BGM_PSTAT = 0x01, 0             # the Native Forest theme, day/night variants as MAYO01/02
 MH_NEW, MH_BUFFER = 0x6070, 0x61A8   # MAPHEAD.SCN ends at 0x606E; MAPHEAD_SCRIPT_BUFFER size
 # The entrance: on Native Forest's north edge a lit lane runs on between the bushes, over a notch of floor.
@@ -70,6 +72,25 @@ HOST_CELLS = ((22, 23), range(62, 68))       # collision rows and columns that b
                                              # the wall test runs a radius ahead, so row 23 alone would never fire
 HOST_SPAWN = (1350, 0, 2350, 0)              # coming back: x, y, z, rotation (0 faces south, away from the exit)
 HOST_SAVE_EXIT = 0                           # the stock exit a card names instead of slot 4 (dw_newmaps.c)
+# The secret fight: at the end of the dirt path, turns to face you, and fights when you press confirm next to it.
+# tools/fight_sim.py and verify_newmap.py's measure mode show how hard it is. No flags: it is back on every visit.
+BOSS_SPECIES, BOSS_DG_SECTION = 60, 5        # H-Kabuterimon, which the game places nowhere
+BOSS_AT = (350, 0, 1150)
+BOSS = struct.pack("<45h", BOSS_SPECIES, 2, *BOSS_AT,  # type, followMode 2 (turns, never walks), position
+                   0, 0, 0, 1200, 0, BOSS_DG_SECTION,  # rotation, tracking range, unused, DG section to run when talked to
+                   # HP, MP, current HP, current MP. Fights you can flee spend the enemy's MP (cost x 3, 217 a move on
+                   # average), and a dry enemy only backs away, so MP must outlast the longest fight
+                   8800, 16000, 8800, 16000,
+                   820, 640, 520, 400, 5000,           # offense, defense, speed, brains (at 300 or less it can go senile), bits
+                   1, 1,                               # charge mode (reset at its first decision), read only with more enemies
+                   # animations, each picking from the species' move list: Buster Dive, Bug, Insect Plague, and in the
+                   # only slot a finisher can use, High Electro Shocker (tech 0x70, on this species and animation)
+                   50, 56, 55, 60,
+                   35, 25, 40, 10,                     # how often it picks each; the finisher ignores this, it fires on its meter
+                   3400, 0, 1150,                      # the bearing it runs off on when beaten: east, into the foliage
+                   1, 0, -1, -1, -1, -1, -1, -1, -1,   # one AI step, a wait, whose count is the next word
+                   *BOSS_AT)
+BOSS_LINES = ("So you found my glade.", "Show me your strength!")   # at most 28 characters each
 
 PAINT = (6, 5)                       # the frame the art is painted in (768 x 640) ...
 GW, GH = 6, 4                        # ... and the backdrop, its centre crop: 768 x 512, 24 tiles. Six fewer
@@ -788,6 +809,18 @@ def build_tfs(idx, cluts):
     return bytes(out)
 
 
+def boss_script():
+    """The glade's DG script: section table, the bare END section map arrival runs, the boss's section.
+    Text is fullwidth Shift-JIS. 1B 05 pauses the game (it must come first), 1A 00 shows the text and waits
+    for confirm, 27 00 closes the box, 67 00 01 00 waits a frame, 66 00 starts the battle, FE 00 ends."""
+    wide = {32: 0x3000, 46: 0x3002, **{c: c + 0xFEE0 for c in range(33, 127) if c != 46}}
+    # the font has no glyph behind other symbols (they draw a triangle), and Shift-JIS has no fullwidth apostrophe
+    assert all(len(line) <= 28 and re.fullmatch(r"[A-Za-z0-9 .!?]*", line) for line in BOSS_LINES)
+    text = b"\x0d\x00".join(line.translate(wide).encode("shift_jis") for line in BOSS_LINES)
+    return (struct.pack("<6H", 12, 0xFE, 12, BOSS_DG_SECTION, 14, 0xFFFF) + b"\xfe\x00"
+            + bytes.fromhex("1b05 1a00") + text + bytes.fromhex("0d00 0000 2700 6700 0100 6600 fe00 ff00"))
+
+
 def build_map(grid, host_row, host_exit, tims=(), objects=b""):
     """Header (offsets: setup, the 8bpp images, the object block, entities, collision; the images
     and objects only when MAP_ENTRIES says n8 > 0), then the blocks in that order."""
@@ -799,7 +832,7 @@ def build_map(grid, host_row, host_exit, tims=(), objects=b""):
     warps[:, 1] = HOST_SPAWN + (host_row, HOST_SAVE_EXIT)        # where a save resumes: dw_newmaps.c reads this.
                                                                  # No cell is 111, so it never fires as a warp
     blocks = ([struct.pack("<%di" % len(setup), *setup)] + list(tims) + ([objects] if tims else [])
-              + [warps.astype("<i2").tobytes() + struct.pack("<h", 0), grid.tobytes()])   # no map Digimon
+              + [warps.astype("<i2").tobytes() + struct.pack("<h", 1) + BOSS, grid.tobytes()])
     offs, at = [], 4 * len(blocks)
     for b in blocks:
         offs.append(at)
@@ -879,6 +912,8 @@ def main():
         grid[bad] = 0x80
         print("dense order check: %d cells blocked" % bad.sum())
         assert grid[50 - int(sz / 100) - (sz > 0), int(sx / 100) + 50 - (sx < 0)] == 0 and (grid == 110).any()
+    bx, bz = BOSS_AT[0], BOSS_AT[2]
+    assert grid[50 - int(bz / 100) - (bz > 0), int(bx / 100) + 50 - (bx < 0)] == 0, "the boss must stand on floor"
     tims = [build_tim(pg, k, day) for k, pg in enumerate(pages)]
     objects = build_objects(rects) if rects else b""
     for name, c in zip(("day", "dusk", "night"), cluts):
@@ -910,6 +945,7 @@ def main():
                                    strip=(HOST_SPAWN[0], (50 - HOST_CELLS[0][0]) * 100 - 50)),
                 spawn=SPAWN, strip_z=WARP_STRIP_Z, camera=dict(vp=VP.tolist(), vr=VR.tolist(), h=H_PROJ, gw=GW, gh=GH),
                 path=PATH.tolist(), meadow=meadow, pond=dict(shore=shore, lobes=POND),
+                boss=dict(species=BOSS_SPECIES, at=BOSS_AT, record=list(struct.unpack("<45h", BOSS))),
                 backdrop=os.path.join(prev, "backdrop_day.png"))
     if rects:
         gi = fg["groups"].index("island")
@@ -949,6 +985,8 @@ def main():
     dg = rd("DG.SCN")
     so = struct.unpack_from("<I", dg, 4 * SCRIPT)[0]
     assert dg[so + 2:so + 8] == bytes.fromhex("fe000800ffff") and dg[so + 8:so + 10] == b"\xfe\x00"
+    dg_new = boss_script()
+    assert len(dg_new) <= struct.unpack_from("<I", dg, 4 * SCRIPT + 4)[0] - so, "the script must fit its DG slot"
     mh = rd("MAPHEAD.SCN")
     p = 2
     while struct.unpack_from("<H", mh, p)[0] != ROW:
@@ -985,7 +1023,8 @@ def main():
     for name, _, blob in blobs:
         open(os.path.join(pkg, "assets", name), "wb").write(blob)
     section = (bytes([0xFB, 0]) + struct.pack("<HH", SCRIPT, ROW) + bytes([0x1E, 0, 0xF5, BGM_PSTAT])
-               + bytes([0x5D, BGM]) + b"\xfe\x00")
+               + bytes([0x5D, BGM]) + bytes([0x46, BOSS_SPECIES, 0x47, BOSS_SPECIES, 0, 0]) + b"\xfe\x00")
+    assert MH_NEW + len(section) <= MH_BUFFER
     row = FILE.encode().ljust(10, b"\0") + bytes([len(tims), 0, FLAGS, 0, 0, LOADING_NAME])
     mh_base = files["MAPHEAD.SCN"][0] * 2048
     out = ["# New maps. Generated by tools/gen_newmap.py: regenerate rather than hand-editing, so every guard stays",
@@ -999,7 +1038,8 @@ def main():
            'resolver = "declarative"', 'save_compatibility = "isolated"', "",
            "[[target]]", 'game_id = "SLUS-01032"', 'disc_sha256 = "%s"' % disc_sha, "",
            "[[feature]]", 'id = "glade"', 'name = "Hidden Glade"',
-           'description = "A new map to explore: a quiet forest glade with a pond, painted for this port. Find it '
+           'description = "A new map to explore: a quiet forest glade with a pond, painted for this port, and '
+           'something strong waiting at the end of the path. Find it '
            'in Native Forest, on the screen where Palmon waits: walk north through the gap in the bushes at the top '
            'right. A save made inside resumes just outside it, so your cards stay safe with this off. Needs the '
            'exact disc image listed in DISC.md. Turns off Digimon World 1.5, which rewrites the same files."',
@@ -1011,6 +1051,12 @@ def main():
         out += ["# our %s in %s's sectors" % (name, FILE), "[[overlay]]", 'feature = "glade"',
                 'target = "disc_user"', "offset = %d" % (lba * 2048), 'file = "assets/%s"' % name,
                 'sha256 = "%s"' % hashlib.sha256(blob).hexdigest(), ""]
+    # A file, not a [[patch]]: a patch must repeat the stock bytes it replaces, and these are live script bytecode.
+    # The generator's asserts above and disc_sha256 guard the slot.
+    open(os.path.join(pkg, "assets", "glade.dg"), "wb").write(dg_new)
+    out += ["# DG script %d: the arrival END, plus the boss's section" % SCRIPT, "[[overlay]]", 'feature = "glade"',
+            'target = "disc_user"', "offset = %d" % (files["DG.SCN"][0] * 2048 + so), 'file = "assets/glade.dg"',
+            'sha256 = "%s"' % hashlib.sha256(dg_new).hexdigest(), ""]
     patch = lambda target, where, old, new: ('target = "%s"\n%s = %s\nexpected = "%s"\nreplace = "%s"'
                                              % (target, "address" if target == "main_exe" else "offset",
                                                 ("0x%08X" if target == "main_exe" else "%d") % where,

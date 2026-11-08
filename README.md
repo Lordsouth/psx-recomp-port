@@ -102,7 +102,7 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 | Mod | What it does | With 1.5 |
 |---|---|---|
 | **Digimon World 1.5** | Capablemite's fan mod (Test Build 1.3.1) on your own disc: Veemon, Wormmon, Renamon and Guilmon lines, new eggs and special attacks. Has its own memory cards — see below | — |
-| **Hidden Glade** | A new map to explore: a quiet forest glade with a pond, painted for this port, with a new exit in Native Forest — see below | No |
+| **Hidden Glade** | A new map to explore: a quiet forest glade with a pond, painted for this port, and a secret fight, with a new exit in Native Forest — see below | No |
 | **Expanded Roster** | **Adds 52 Digimon.** Machinedramon fills the game's one unused slot; the other 51 — Tentomon, Myotismon, Guardromon, Gigadramon, Panjyamon, BlueMeramon, Otamamon, Gotsumon and more — are finished Digimon that were on the disc all along as enemies only. All of them become partners you can genuinely raise and evolve into — see below | No |
 | **Trainer** | Fifteen independent toggles: never hungry, tired, sick or dead; no lifespan loss; plus the Training group below | Yes |
 | **Perfect Training** | Every training session pays the jackpot rate. The slot minigame secretly grades your reels into a reward multiplier, from 0.5x for a miss up to 10x for triple sevens — this makes every spin pay the top rate | Yes |
@@ -153,12 +153,17 @@ it in memory each time you play. Your disc file is never changed.
 
 ### Hidden Glade
 
-A map the original game never had. Its art, walkable ground and bushes you can
-walk behind are all this port's own; no game data is in the mod.
+A map the original game never had, with a secret fight at the end of its dirt
+path. Its art, walkable ground and bushes you can walk behind are all this port's
+own; no game data is in the mod.
 
 * **How to get there:** go to the Native Forest screen where Palmon waits, and
   walk north through the gap in the bushes at the top right. The path at the
   bottom of the glade brings you back.
+* **The secret fight** is hard: bring a fully grown, well-trained partner and
+  strong healing items. It starts only when you press confirm next to it, you can
+  run, and losing costs what any lost battle costs. Win or lose, it is back on your
+  next visit.
 * **Your saves are safe.** Saving works as usual, but a save made inside the
   glade resumes just outside it, in Native Forest. No memory card ever depends
   on the mod, so you can turn it off at any time. Savestates stay with the mod
@@ -166,8 +171,7 @@ walk behind are all this port's own; no game data is in the mod.
 * **It needs the exact disc image** listed in [DISC.md](DISC.md). With any other
   image the game will not start while it is ticked: untick it to get back in.
 * **It cannot run with Digimon World 1.5**, which rewrites the same files.
-* It is small for now: a place to walk around, with no Digimon or items of its
-  own yet.
+* It is small for now: it has no other Digimon, and no items of its own yet.
 
 ### What is still rough in Widescreen
 
