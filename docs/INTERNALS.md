@@ -233,20 +233,61 @@ those bytes.
 
 ### 3.2 An authored map (M1, verified in game)
 
-`gen_newmap.py` builds the "Hidden Glade" from a scene described in code:
-props (trees, rocks, bushes), a dirt path, a pond and a meadow, all in world
-units. One description drives three outputs, so they cannot drift apart:
+`gen_newmap.py` builds the "Hidden Glade" from a seeded scene described in
+code: a wobbly clearing walled in by foliage masses, trees at its back edge, a
+bush island, rocks, a stump, a fallen log, a three-lobed pond and a dirt path,
+all in world units. The scene drives every output, so they cannot drift apart:
 
-- **The backdrop.** It is ray-traced from the map's own camera with the engine's
-  projection, then quantised to one 255-colour 15-bit palette and tinted into
-  the dusk and night palettes. Index 0 is reserved for `0x0000`, the
-  transparent texel.
-- **The collision grid.** Floor follows the scene. Cells are blocked under
-  props, under the pond, outside the painted frame, and wherever a prop would
-  cover a character standing there. Backdrops always draw behind characters,
-  so nothing may be walked behind.
+- **The guide and label map.** The scene is ray-traced from the map's own
+  camera with the engine's projection, in flat material colours with sun, sky
+  and cast shadows (`build/newmap/guide.png`), plus a per-pixel material map
+  (grass, earth, water, foliage, rock, wood).
+- **The backdrop.** `paint_newmap.py` paints the guide into finished art with
+  local models and writes `art/newmaps/glade.png` (committed, with its seeds
+  and prompts in `glade.json`). `gen_newmap.py` checks the art against the
+  label map: a per-material Gaussian classifier, fitted on the painting itself
+  where the scene's label is unambiguous, must find ground where the scene has
+  ground (IoU at least 0.75). The art is then quantised to 255 15-bit colours
+  (k-means in Lab over a sample stratified by material, so the rocks and pond
+  get colours too) and tinted into the dusk and night palettes. Index 0 is
+  reserved for `0x0000`, the transparent texel. Without painted art the flat
+  guide is used.
+- **The collision grid.** Floor follows the scene: the clearing and the path,
+  minus the pond, foliage and tree footprints, anything outside the painted
+  frame, and anything a prop would cover (backdrops always draw behind
+  characters, so nothing may be walked behind). Then the painting decides: a
+  cell stays floor only if the art shows ground at 7 of 9 points of a
+  character's footprint. Painted non-ground unprojected onto the floor covers
+  a prop's base and the floor hidden behind it, so this also keeps characters
+  from walking behind anything the painter drew. The small props (rocks,
+  stump, log) take their collision from the painting alone, because the
+  painter may nudge them.
 - **The MAP.** It holds the setup block (camera, the MAYO maps' character
   lights, a 6×5 grid) and the warp table.
+
+The painter (`paint_newmap.py`, ComfyUI through the studio's `comfy.py`
+client):
+1. **Qwen-Image-Edit 2511** (Q4 GGUF, Lightning 4-step) reads the guide as a
+   blockout and renders a detailed 3D scene with every outline kept.
+2. **Z-Image-Turbo img2img** enters at step 4 of 8 and adds real materials.
+   Step 5 adds too little and step 3 redesigns the layout.
+3. **Masked Z-Image** repaints only the scene's foliage (eroded) at step 2,
+   with a photographic prompt at 1920×1600, so the leaves land at the stock
+   maps' 3–6 px. The clearing is untouched by the mask.
+4. **Ground textures.** At backdrop size, a generated grass and a generated
+   dirt texture are laid onto the painted ground in the camera's perspective as
+   luminance detail, the way the 1999 pre-renders were textured.
+5. **Grade and tone.** A grade moves the colour statistics half way toward the
+   stock Native Forest maps' Lab mean and standard deviation. A per-material
+   tone pass sets turf to the stock olive at half the blade contrast, with
+   single-pixel rust and dark-green flecks, sets earth to a darker brown, and
+   makes the foliage calmer.
+
+No pixel of the game is read; the targets are a few numbers measured on the
+stock maps. Seeds reproduce bit-exactly on the same models and GPU. Plain
+prompting alone gives modern stylised art (glossy rosette bushes, smooth
+painted grass): blind judges scored those 3–5/10 for style match before steps
+3–5 were added.
 
 The camera model, checked against the stock art of all 242 maps:
 
@@ -282,7 +323,8 @@ MAPHEAD tail sectors overlap the `dw.1_5` delta, so the feature conflicts with
 - our palette is in VRAM row 480, and our dusk and night palettes go live at
   16:00 and 20:00
 
-It also walks the meadow, pushes into the pond (the tamer stays ashore), saves
+It also walks the meadow (targets the generator picks from the fitted grid, in
+`spec.json`), pushes into the pond (the tamer stays ashore), saves
 on the map, continues onto it after a relaunch, and walks out. Screenshots
 taken against our own backdrop under the live camera match best at offset
 (0,0) or within 1 px.
@@ -1608,7 +1650,8 @@ different executables.
 | `gen_cheats_mod.py` | `dw.vanilla.cheats` and `dw_cheats_data.inc` from `cheats.txt` (`--check`) |
 | `gen_vice_mod.py` | a local-only package that must never be redistributed |
 | `gen_newmap_spike.py` | the local-only `dw.newmaps.spike` dev package (§3.1) in `build/mods/installed/`; never commit its output |
-| `gen_newmap.py` | the authored glade (§3.2): renders the backdrop and writes MAP, TFS and the `dw.newmaps` dev package into `build/mods/installed/`, plus previews and a collision overlay in `build/newmap/` (`--preview` renders only) |
+| `gen_newmap.py` | the authored glade (§3.2): renders the guide, checks `art/newmaps/glade.png` against the scene, fits collision to it, and writes MAP, TFS and the `dw.newmaps` dev package into `build/mods/installed/`, plus previews and a collision overlay in `build/newmap/` (`--preview` renders only) |
+| `paint_newmap.py` | paints the glade's guide into `art/newmaps/glade.png` with local ComfyUI models (§3.2); `--sweep-foliage` writes candidates to `build/newmap/paint/` |
 
 ### 7.1b Verification tools
 

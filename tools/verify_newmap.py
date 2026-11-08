@@ -250,26 +250,28 @@ def main():
     def glade():
         loaded_files()
         measure("arrival")
-        targets = [(1300, -1600), (-1700, -400), (600, 1300)]
         vec = calibrate()
-        for i, t in enumerate(targets):
+        for i, t in enumerate(spec["meadow"]):                 # deep floor cells the generator picked
+            t = tuple(t)
             ok = go(t, lambda: near(*t), limit=60, vec=vec)
             p = pos(TAMER)
             check(ok and screen() == 239, "walked the meadow to %s (at %s)" % (t, p))
             measure("meadow%d" % i)
         # the pond is solid: stand on its south shore, walk straight at it, stay ashore
-        pond, south = (-1300, 600), (-1300, -100)
-        check(go(south, lambda: near(*south, r=250), limit=60, vec=vec), "on the pond's south shore %s" % (pos(TAMER),))
+        lobes, south = spec["pond"]["lobes"], tuple(spec["pond"]["shore"])
+        wet_at = lambda x, z: min(((x - cx) / rx) ** 2 + ((z - cz) / rz) ** 2 for cx, cz, rx, rz in lobes) < 1
+        check(go(south, lambda: near(*south, r=60), limit=60, vec=vec), "on the pond's south shore %s" % (pos(TAMER),))
         north = max(vec, key=lambda d: vec[d][1])              # the pad direction for +z
         start, wet = pos(TAMER), []
         pad(north)
         for _ in range(30):                                    # 3 s pushing at the water
             time.sleep(0.1)
             p = pos(TAMER)
-            if ((p[0] - pond[0]) / 650) ** 2 + ((p[2] - pond[1]) / 380) ** 2 < 1:
+            if wet_at(p[0], p[2]):
                 wet.append(p)
         pad(0)
-        gap = pond[1] - 380 - p[2]                             # where the push ended, to the water's edge
+        edge = next(z for z in range(p[2], p[2] + 3000, 10) if wet_at(p[0], z))
+        gap = edge - p[2]                                      # where the push ended, to the water's edge
         check(0 < gap < 300 and not wet,
               "pushing into the pond for 3 s stops %d units short of the water "
               "(%s -> %s, %d samples in the water)" % (gap, start, p, len(wet)))

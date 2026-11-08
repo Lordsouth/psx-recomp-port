@@ -2,17 +2,23 @@
 """Build an authored field map (our own art, collision and camera) for the free map row 239.
 
 Everything the game loads for the new screen comes from the scene described in
-scene() below: no byte of the game disc is copied. One description drives all
-three outputs, so they cannot drift apart:
+scene() below and the backdrop painted over it: no byte of the game disc is
+copied. The scene drives all outputs, so they cannot drift apart:
 
-  * the backdrop, ray-traced from the map's own game camera with the projection
-    the engine uses (INTERNALS.md 3.1: u = 64W + h*Xc/Zc, v = 64H + h*Yc/Zc,
-    world +Y down, floor y = 0), quantised to one 255-colour 15-bit palette and
-    tinted into the three time-of-day palettes the engine swaps between;
+  * a guide render: the scene ray-traced from the map's own game camera with the
+    projection the engine uses (INTERNALS.md 3.1: u = 64W + h*Xc/Zc,
+    v = 64H + h*Yc/Zc, world +Y down, floor y = 0) in flat colours, plus a
+    per-pixel material label map. tools/paint_newmap.py paints the guide into
+    finished pre-rendered-CG art with local models and writes art/newmaps/glade.png;
+  * the backdrop: that painted art, checked against the label map (it must show
+    ground where the scene has ground), quantised to one 255-colour 15-bit
+    palette and tinted into the three time-of-day palettes the engine swaps
+    between. Without painted art the flat guide is used (playable, plain);
   * the 100x100 collision grid: floor where the scene says ground, blocked under
-    props, the pond and anything outside the painted frame, and blocked wherever
-    a prop would cover a character standing there (backdrops always draw behind
-    characters, so nothing may be walked behind);
+    props, the pond and anything outside the painted frame, blocked wherever a
+    prop would cover a character standing there (backdrops always draw behind
+    characters, so nothing may be walked behind), and blocked wherever the
+    painting shows something other than ground under a character's feet;
   * the MAP setup block (camera, lights, tile grid) and its warp table.
 
 The files replace the unused MGEN17.MAP/TFS sectors through two file-backed
@@ -21,11 +27,11 @@ those files reaches RAM. The remaining writes are small guarded patches: the
 row itself, the row's MAPHEAD section (the stock filler binds the sewer
 script), and, for now, Coela Point's east exit as a dev entrance.
 
-    py -3.12 tools/gen_newmap.py [--bin disc.bin] [--build build-debug] [--preview]
+    py -3.12 tools/gen_newmap.py [--bin disc.bin] [--build build-debug] [--art PNG] [--preview]
 
 Writes build/mods/installed/dw.newmaps/1.0.0/ (local only: entrance is a dev
-redirect, no save isolation yet) and build/newmap/ previews. verify_newmap.py
-checks it in the game.
+redirect, no save isolation yet) and build/newmap/ previews (guide.png is the
+painter's input). verify_newmap.py checks it in the game.
 """
 import argparse
 import hashlib
@@ -62,49 +68,22 @@ SUN /= np.linalg.norm(SUN)
 SPAWN = (-100, 0, -3500)                  # arrival, facing up the path (rotation 0x800 = +z)
 SPAWN_ROT = 0x800
 WARP_STRIP_Z = -4050                      # path cells nearer the camera than this send you back
+MIN_GROUND_IOU = 0.75                     # painted art must show ground where the scene has ground
+PAINTED_PROPS = ("rock", "stump", "log")  # small props: their collision follows where the painting puts them
 
 BW, BH = GW * 128, GH * 128
 
 
 # ---- scene -----------------------------------------------------------------
-def scene():
-    """Props as primitives in world units (100 = one collision cell)."""
-    p = []
-
-    def tree(x, z, s=1.0, tone=0.0):
-        p.append(dict(kind="cyl", c=(x, z), r=55 * s, y0=-420 * s, y1=0, mat="bark"))
-        for dx, dy, dz, r in ((0, -620, 0, 330), (-160, -470, 60, 230), (170, -500, -40, 240), (20, -820, 30, 220)):
-            p.append(dict(kind="ell", c=(x + dx * s, dy * s, z + dz * s), r=(r * s, r * s * 0.85, r * s),
-                          mat="leaf", tone=tone))
-
-    def rock(x, z, rx, ry, rz):
-        p.append(dict(kind="ell", c=(x, -ry * 0.35, z), r=(rx, ry, rz), mat="rock"))
-
-    def bush(x, z, r):
-        p.append(dict(kind="ell", c=(x, -r * 0.55, z), r=(r * 1.25, r, r), mat="leaf", tone=0.4))
-
-    # forest: three staggered rows across the back, tree lines hugging both frame edges
-    for row, z in enumerate((2700, 3350, 4050, 4750)):
-        for i, x in enumerate(range(-5600, 5700, 600)):
-            tree(x + (row % 2) * 300 + (i % 3) * 60, z + (i % 2) * 180, 1.15 + 0.1 * ((i + row) % 3),
-                 tone=((i + row) % 4) * 0.25)
-    for i, z in enumerate(range(-5000, 2700, 520)):
-        edge = half_width(z)
-        tree(-edge + 120 - (i % 2) * 260, z, 1.0 + 0.1 * (i % 3), tone=(i % 3) * 0.3)
-        tree(edge - 120 + (i % 2) * 260, z + 260, 1.0 + 0.1 * ((i + 1) % 3), tone=((i + 1) % 3) * 0.3)
-    # inside the meadow
-    tree(-1500, 1700, 1.35, tone=0.5)
-    tree(1300, 2050, 1.2, tone=0.2)
-    rock(1700, 700, 300, 220, 260)
-    rock(2000, 520, 150, 110, 130)
-    rock(-2100, -1200, 280, 200, 250)
-    rock(1550, -2600, 210, 150, 190)
-    rock(-650, 1300, 120, 80, 100)
-    bush(-2400, 600, 210)
-    bush(2550, -600, 190)
-    bush(-1300, -2700, 160)
-    bush(450, 1900, 170)
-    return p
+CLEAR_C = np.array([0.0, -700.0])         # the clearing: a wobbly ellipse around this point
+PATH = np.array([[-200, -5200], [-150, -3800], [150, -2600], [-100, -1500], [200, -400], [500, 600], [300, 1500]],
+                float)
+POND = [(-1500, 900, 620, 360), (-1050, 700, 380, 260), (-1850, 1150, 300, 220)]   # union of ellipses (x, z, rx, rz)
+LABELS = ("grass", "water", "foliage", "rock", "wood", "earth")
+GROUND = (0, 5)                           # labels a character may stand on
+MATS = dict(leaf=2, rock=3, bark=4, stump=4, log=4)
+FLAT = dict(leaf=(46, 92, 40), bark=(96, 70, 46), rock=(128, 126, 120), stump=(110, 84, 56),
+            log=(96, 70, 46))
 
 
 def half_width(z):
@@ -114,9 +93,15 @@ def half_width(z):
     return 2469 + t * (5284 - 2469)
 
 
-PATH = np.array([[-150, -4900], [-100, -3600], [150, -2400], [-150, -1300], [100, -200], [300, 700]], float)
-POND = dict(c=(-1300, 600), r=(650, 380))
-GLADE = dict(c=(0, -900), r=(3200, 3300))
+def clear_r(theta):
+    ex, ez = 2700.0, 2900.0
+    base = 1 / np.sqrt((np.cos(theta) / ex) ** 2 + (np.sin(theta) / ez) ** 2)
+    return base * (1 + 0.10 * np.sin(3 * theta + 1.0) + 0.06 * np.sin(5 * theta + 2.3) + 0.04 * np.sin(9 * theta))
+
+
+def in_clearing(x, z, grow=0.0):
+    dx, dz = x - CLEAR_C[0], z - CLEAR_C[1]
+    return np.hypot(dx, dz) <= clear_r(np.arctan2(dz, dx)) + grow
 
 
 def path_dist(x, z):
@@ -129,8 +114,62 @@ def path_dist(x, z):
     return d
 
 
+def pond_e(x, z, grow=0.0):
+    """Smallest normalised ellipse distance over the pond's lobes (< 1 is water)."""
+    return np.min([((x - cx) / (rx + grow)) ** 2 + ((z - cz) / (rz + grow)) ** 2 for cx, cz, rx, rz in POND], axis=0)
+
+
 def in_ellipse(x, z, e, grow=0.0):
     return ((x - e["c"][0]) / (e["r"][0] + grow)) ** 2 + ((z - e["c"][1]) / (e["r"][1] + grow)) ** 2 <= 1
+
+
+def earth_patch(x, z, pd):
+    """Worn bare-earth patches in the grass (0..1), kept off the path's verge."""
+    return np.clip((noise(x, z, 700, 4, 21) - 0.62) / 0.04, 0, 1) * np.clip((pd - 260) / 80, 0, 1)
+
+
+def scene():
+    """Props as primitives in world units (100 = one collision cell). Seeded: the painted
+    art was made over exactly this scene, so changing it means repainting."""
+    rng = np.random.default_rng(7)
+    p = []
+
+    def blob(x, z, r, h, mat="leaf", tone=0.0, flat=0.85):
+        p.append(dict(kind="ell", c=(x, -h, z), r=(r, r * flat, r), mat=mat, tone=tone))
+
+    def tree(x, z, s, tone):
+        p.append(dict(kind="cyl", c=(x, z), r=60 * s, y0=-520 * s, y1=0, mat="bark"))
+        for k in range(6):
+            a = k * 1.05 + rng.uniform(0, 0.6)
+            rr = rng.uniform(80, 220) * s
+            blob(x + np.cos(a) * rr, z + np.sin(a) * rr * 0.6, rng.uniform(230, 330) * s, rng.uniform(650, 900) * s,
+                 tone=tone)
+    # foliage outside the clearing on a jittered grid, bigger toward the back
+    for gz in np.arange(-5200, 6200, 330):
+        for gx in np.arange(-6500, 6600, 330):
+            x, z = gx + rng.uniform(-140, 140), gz + rng.uniform(-140, 140)
+            if in_clearing(x, z, grow=120) or path_dist(x, z) < 380:
+                continue
+            if abs(x) > half_width(z) + 700:
+                continue
+            depth = np.clip((z + 4000) / 9000, 0, 1)
+            r = rng.uniform(200, 330) * (1 + 0.6 * depth)
+            outside = not in_clearing(x, z, grow=700)
+            h = r * (0.55 if not outside else rng.uniform(0.9, 1.6))
+            blob(x, z, r, h, tone=rng.uniform(0, 1))
+    # broadleaf trees standing at the clearing's back edge
+    for x, z, s in ((-2300, 2300, 1.2), (900, 2700, 1.35), (2600, 1500, 1.1), (-200, 3300, 1.4)):
+        tree(x, z, s, rng.uniform(0, 1))
+    for k in range(14):                         # a bush island right of the path
+        blob(1550 + rng.uniform(-450, 450), -900 + rng.uniform(-300, 300), rng.uniform(200, 290),
+             rng.uniform(150, 260), tone=rng.uniform(0, 0.5))
+    for x, z, rx, ry, rz in ((-2050, 450, 230, 170, 200), (-850, 1250, 160, 110, 140), (-2300, 1300, 190, 150, 170),
+                             (2100, -2700, 200, 150, 180), (-1700, -2300, 240, 170, 210)):
+        p.append(dict(kind="ell", c=(x, -ry * 0.35, z), r=(rx, ry, rz), mat="rock"))
+    p.append(dict(kind="cyl", c=(-1100, -1200), r=170, y0=-140, y1=0, mat="stump"))   # old stump
+    for k in range(5):                                                              # fallen log
+        p.append(dict(kind="ell", c=(700 + k * 120, -70, -3000 + k * 40), r=(110, 70, 75), mat="log"))
+    return p
 
 
 # ---- camera ----------------------------------------------------------------
@@ -200,7 +239,31 @@ def occluded(prims, o, d, limit=None):
     return blocked
 
 
-# ---- materials -------------------------------------------------------------
+def trace(prims, scale):
+    """First hit per pixel: ray directions, distance, owning prop (-1 = floor), normal."""
+    w, h = BW * scale, BH * scale
+    d = rays(w, h, scale)
+    vp32 = VP.astype(np.float32)
+    best = np.where(d[..., 1] > 0, -VP[1] / np.maximum(d[..., 1], 1e-9), np.inf).astype(np.float32)
+    owner = np.full((h, w), -1, np.int32)
+    normal = np.zeros_like(d)
+    normal[..., 1] = -1
+    for i, prim in enumerate(prims):                 # trace each prop only inside its screen box
+        u, v = project(corners(prim))
+        u0, u1 = max(0, int(u.min() * scale) - 2), min(w, int(u.max() * scale) + 3)
+        v0, v1 = max(0, int(v.min() * scale) - 2), min(h, int(v.max() * scale) + 3)
+        if u0 >= u1 or v0 >= v1:
+            continue
+        sub = d[v0:v1, u0:u1]
+        t, n = hit(prim, np.broadcast_to(vp32, sub.shape), sub)
+        closer = t < best[v0:v1, u0:u1]
+        best[v0:v1, u0:u1][closer] = t[closer]
+        owner[v0:v1, u0:u1][closer] = i
+        normal[v0:v1, u0:u1][closer] = n[closer]
+    return d, best, owner, normal
+
+
+# ---- guide -----------------------------------------------------------------
 def noise(x, y, scale, octaves=4, seed=0):
     """Smooth value-noise fBm in [0, 1] on world coordinates."""
     total, amp, norm = 0.0, 1.0, 0.0
@@ -226,37 +289,17 @@ def mix(a, b, t):
 
 
 def ground_albedo(x, z):
-    n1, n2, fine = noise(x, z, 900, 4, 1), noise(x, z, 260, 3, 2), noise(x, z, 30, 2, 3)
-    grass = mix([62, 112, 40], [118, 150, 62], np.clip(n1 * 1.4 - 0.25, 0, 1))
-    grass = mix(grass, [42, 86, 32], np.clip(0.9 - n2 * 1.6, 0, 1) * 0.6)
-    grass *= (0.85 + 0.3 * fine)[..., None]
-    pd = path_dist(x, z) + (noise(x, z, 160, 2, 4) - 0.5) * 120
-    dirt = mix([132, 102, 66], [98, 76, 50], noise(x, z, 120, 3, 5))
-    dirt *= (0.9 + 0.2 * noise(x, z, 18, 2, 6))[..., None]
-    col = mix(grass, dirt, np.clip((190 - pd) / 60, 0, 1))
-    edge = ((x - POND["c"][0]) / POND["r"][0]) ** 2 + ((z - POND["c"][1]) / POND["r"][1]) ** 2
-    mud = np.clip((1.25 - edge) / 0.25, 0, 1)
-    col = mix(col, [92, 82, 56], mud * 0.8)
-    water = mix([34, 70, 98], [70, 118, 140], np.clip((z - POND["c"][1] + POND["r"][1]) / (2 * POND["r"][1]), 0, 1))
-    water *= (0.92 + 0.16 * noise(x * 3, z, 300, 2, 7))[..., None]
-    return np.where((edge < 1)[..., None], water, col), edge < 1
+    """Flat guide colours: grass, worn earth, the path, the pond."""
+    col = np.zeros(np.shape(x) + (3,))
+    col[:] = (104, 140, 60)
+    pd = path_dist(x, z)
+    col = mix(col, np.array([138, 112, 72]), earth_patch(x, z, pd) * 0.85)
+    col = mix(col, np.array([150, 118, 78]), np.clip((180 - pd) / 40, 0, 1))
+    water = pond_e(x, z) < 1
+    col[water] = (60, 110, 150)
+    return col
 
 
-def prop_albedo(prim, pt, n):
-    x, y, z = pt[..., 0], pt[..., 1], pt[..., 2]
-    if prim["mat"] == "bark":
-        streak = noise(np.arctan2(z - prim["c"][1], x - prim["c"][0]) * 400, y, 90, 3, 11)
-        return mix([70, 50, 34], [112, 84, 58], streak)
-    if prim["mat"] == "leaf":
-        clump = noise(x + y * 0.5, z - y * 0.3, 110, 4, 12 + int(prim.get("tone", 0) * 10))
-        base = mix([30, 74, 32], [70, 118, 44], np.clip(prim.get("tone", 0) * 0.5 + clump * 0.8, 0, 1))
-        return base * (0.7 + 0.5 * clump)[..., None]
-    moss = np.clip(-n[..., 1] * 1.5 - 0.6, 0, 1) * noise(x, z, 80, 2, 13)
-    stone = mix([104, 102, 96], [150, 146, 136], noise(x + y, z, 70, 4, 14))
-    return mix(stone, [70, 104, 48], moss)
-
-
-# ---- rendering -------------------------------------------------------------
 def corners(prim):
     if prim["kind"] == "ell":
         c, r = np.array(prim["c"]), np.array(prim["r"])
@@ -301,43 +344,63 @@ def sunlit(sm, pt, soft=2):
     return acc / (2 * soft + 1) ** 2
 
 
-def render(prims, scale=2):
-    w, h = BW * scale, BH * scale
-    d = rays(w, h, scale)
-    vp32 = VP.astype(np.float32)
-    best = np.where(d[..., 1] > 0, -VP[1] / np.maximum(d[..., 1], 1e-9), np.inf).astype(np.float32)
-    owner = np.full((h, w), -1, np.int32)
-    normal = np.zeros_like(d)
-    normal[..., 1] = -1
-    for i, prim in enumerate(prims):                 # trace each prop only inside its screen box
-        u, v = project(corners(prim))
-        u0, u1 = max(0, int(u.min() * scale) - 2), min(w, int(u.max() * scale) + 3)
-        v0, v1 = max(0, int(v.min() * scale) - 2), min(h, int(v.max() * scale) + 3)
-        if u0 >= u1 or v0 >= v1:
-            continue
-        sub = d[v0:v1, u0:u1]
-        t, n = hit(prim, np.broadcast_to(vp32, sub.shape), sub)
-        closer = t < best[v0:v1, u0:u1]
-        best[v0:v1, u0:u1][closer] = t[closer]
-        owner[v0:v1, u0:u1][closer] = i
-        normal[v0:v1, u0:u1][closer] = n[closer]
-    pt = vp32 + d * best[..., None]
-    alb = np.zeros_like(d)
-    gmask = owner < 0
-    galb, water = ground_albedo(pt[..., 0], pt[..., 2])
-    alb[gmask] = galb[gmask]
+def guide(prims, scale=2):
+    """The painter's input: flat material colours, sun and sky shading, cast shadows."""
+    d, best, owner, normal = trace(prims, scale)
+    pt = VP.astype(np.float32) + d * best[..., None]
+    alb = ground_albedo(pt[..., 0], pt[..., 2]).astype(np.float32)
     for i, prim in enumerate(prims):
         m = owner == i
         if m.any():
-            alb[m] = prop_albedo(prim, pt[m], normal[m])
+            alb[m] = np.array(FLAT[prim["mat"]], np.float32) * (0.85 + 0.3 * prim.get("tone", 0.5))
     lit = sunlit(shadow_map(prims), pt + normal * 2.0)
     lam = np.clip((normal * -SUN.astype(np.float32)).sum(-1), 0, 1)
-    sky = 0.42 + 0.18 * np.clip(-normal[..., 1], 0, 1)
-    light = sky + 0.78 * lam * lit
-    spec = np.where(water, 0.25 * lit * np.clip(1 - np.abs(d[..., 0]) * 3, 0, 1), 0)   # sun glint
-    rgb = alb * light[..., None] + 255 * spec[..., None]
-    rgb = rgb.reshape(BH, scale, BW, scale, 3).mean((1, 3))
+    light = 0.42 + 0.18 * np.clip(-normal[..., 1], 0, 1) + 0.78 * lam * lit
+    water = pond_e(pt[..., 0], pt[..., 2]) < 1
+    glint = np.where(water, 0.25 * lit * np.clip(1 - np.abs(d[..., 0]) * 3, 0, 1), 0)   # sun on the pond
+    rgb = (alb * light[..., None] + 255 * glint[..., None]).reshape(BH, scale, BW, scale, 3).mean((1, 3))
     return np.clip(rgb, 0, 255)
+
+
+def labels(prims):
+    """Per backdrop pixel, the material a ray meets first (an index into LABELS)."""
+    d, best, owner, _ = trace(prims, 1)
+    lab = np.zeros(owner.shape, np.uint8)
+    for i, prim in enumerate(prims):
+        lab[owner == i] = MATS[prim["mat"]]
+    pt = VP.astype(np.float32) + d * best[..., None]
+    px, pz = pt[..., 0], pt[..., 2]
+    pd = path_dist(px, pz)
+    floor = owner < 0
+    lab[floor & ((pd < 180) | (earth_patch(px, pz, pd) > 0.5))] = 5
+    lab[floor & (pond_e(px, pz) < 1)] = 1
+    return lab
+
+
+# ---- painted art -----------------------------------------------------------
+def classify(rgb, lab_map):
+    """What the painting shows per pixel, as LABELS: one Gaussian per material over colour,
+    blurred colour and local contrast, fitted on the painting itself where the scene's label
+    is unambiguous (eroded masks). Cast shadows on grass read as foliage: harmless, as that
+    only blocks more of the ground beside a bush."""
+    import cv2
+    lab = cv2.cvtColor(rgb.astype(np.uint8), cv2.COLOR_RGB2LAB).astype(np.float32)
+    lum = lab[..., 0]
+    mu = cv2.GaussianBlur(lum, (0, 0), 2)
+    std = np.sqrt(np.maximum(cv2.GaussianBlur(lum * lum, (0, 0), 2) - mu * mu, 0))
+    F = np.concatenate([lab, cv2.GaussianBlur(lab, (0, 0), 4), std[..., None]], -1)
+    X = F.reshape(-1, F.shape[-1])
+    ll = np.full((len(X), len(LABELS)), -np.inf, np.float32)
+    for c in range(len(LABELS)):
+        m = cv2.erode((lab_map == c).astype(np.uint8), np.ones((9, 9), np.uint8)).astype(bool)
+        if m.sum() < 200:
+            continue
+        x = F[m]
+        mean, cov = x.mean(0), np.cov(x.T) + np.eye(F.shape[-1])
+        inv, (_, logdet) = np.linalg.inv(cov), np.linalg.slogdet(cov)
+        dx = X - mean
+        ll[:, c] = -0.5 * (np.einsum("ij,jk,ik->i", dx, inv, dx) + logdet) + np.log(m.mean())
+    return ll.argmax(1).reshape(lab_map.shape)
 
 
 # ---- collision -------------------------------------------------------------
@@ -345,12 +408,18 @@ def cell_centre(tx, tz):
     return (tx - 50) * 100 + 50, (50 - tz) * 100 - 50
 
 
-def collision(prims):
-    """100x100 grid: 0 floor, 0x80 blocked, 110 warp 0 (back to the host)."""
+def collision(prims, painted=None):
+    """100x100 grid: 0 floor, 0x80 blocked, 110 warp 0 (back to the host). `painted` is
+    classify()'s map of the art; a cell then also needs ground painted under its footprint, and the
+    small PAINTED_PROPS stop counting: the painter may nudge a rock, and the painting decides where
+    it is. (Painted non-ground unprojected onto the floor covers both a prop's base and the floor
+    hidden behind it, so the painted test also keeps characters from walking behind them.)"""
     tz, tx = np.mgrid[0:100, 0:100]
     x, z = cell_centre(tx, tz)
     x, z = x.astype(float), z.astype(float)
-    ok = (in_ellipse(x, z, GLADE) | (path_dist(x, z) < 160)) & ~in_ellipse(x, z, POND, grow=90)
+    ok = (in_clearing(x, z) | (path_dist(x, z) < 160)) & (pond_e(x, z, grow=90) > 1)
+    if painted is not None:
+        prims = [prim for prim in prims if prim["mat"] not in PAINTED_PROPS]
     for prim in prims:                      # footprints, plus a character radius
         if prim["kind"] == "cyl":
             ok &= np.hypot(x - prim["c"][0], z - prim["c"][1]) > prim["r"] + 110
@@ -361,22 +430,67 @@ def collision(prims):
         u, v = project(np.stack([x, np.full_like(x, y), z], -1))
         ok &= (u > 24) & (u < BW - 24) & (v > 16) & (v < BH - 8)
     # nothing may be walked behind: a prop between the eye and the character
-    pts = []
     for dx, dz in ((0, 0), (-50, 0), (50, 0), (0, 50)):
         for y in (-20, -180, -340):
-            pts.append(np.stack([x + dx, np.full_like(x, y), z + dz], -1))
-    cand = np.argwhere(ok)
-    for pnt in pts:
-        P = pnt[ok].astype(np.float32)
-        dvec = P - VP.astype(np.float32)
-        dist = np.linalg.norm(dvec, axis=-1)
-        hid = occluded(prims, np.broadcast_to(VP.astype(np.float32), P.shape), dvec / dist[:, None], limit=dist - 5)
-        ok[tuple(cand[hid].T)] = False
+            cand = np.argwhere(ok)
+            P = np.stack([x + dx, np.full_like(x, y), z + dz], -1)[ok].astype(np.float32)
+            dvec = P - VP.astype(np.float32)
+            dist = np.linalg.norm(dvec, axis=-1)
+            hid = occluded(prims, np.broadcast_to(VP.astype(np.float32), P.shape), dvec / dist[:, None],
+                           limit=dist - 5)
+            ok[tuple(cand[hid].T)] = False
+    if painted is not None:                 # the painting must show ground under the feet (7 of 9 samples)
         cand = np.argwhere(ok)
+        cx, cz = x[ok], z[ok]
+        good = np.zeros(len(cx), int)
+        for a in [None] + list(np.linspace(0, 2 * np.pi, 8, endpoint=False)):
+            ox, oz = (0.0, 0.0) if a is None else (70 * np.cos(a), 70 * np.sin(a))
+            u, v = project(np.stack([cx + ox, np.zeros_like(cx), cz + oz], -1))
+            good += np.isin(painted[np.clip(v.astype(int), 0, BH - 1), np.clip(u.astype(int), 0, BW - 1)], GROUND)
+        ok[tuple(cand[good < 7].T)] = False
     grid = np.where(ok, 0, 0x80).astype(np.uint8)
     strip = ok & (z < WARP_STRIP_Z) & (path_dist(x, z) < 160)
     grid[strip] = 110
     return grid
+
+
+def deep_floor(grid, want):
+    """The floor cell nearest `want` (x, z) whose 5x5 neighbourhood is all floor: a test target."""
+    floor = grid == 0
+    deep = floor.copy()
+    for dz in range(-2, 3):
+        for dx in range(-2, 3):
+            deep[2:-2, 2:-2] &= floor[2 + dz:98 + dz, 2 + dx:98 + dx]
+    deep[:2], deep[-2:], deep[:, :2], deep[:, -2:] = False, False, False, False
+    tz, tx = np.nonzero(deep)
+    x, z = cell_centre(tx, tz)
+    i = np.argmin(np.hypot(x - want[0], z - want[1]))
+    return int(x[i]), int(z[i])
+
+
+def shore_spot(grid):
+    """A floor cell due south of the pond's main lobe whose way north ends at a flat wall: the
+    same blocked row in the columns either side, so a push north stops dead instead of sliding
+    along a jagged edge. Returns the spot 4 cells south of the wall, and the wall's z."""
+    cx, cz, rx, rz = POND[0]
+    best = None
+    for tx in range(100):
+        x = (tx - 50) * 100 + 50
+        if abs(x - cx) > 0.6 * rx:
+            continue
+        walls = []
+        for c in (tx - 1, tx, tx + 1):
+            tz = 50 - int((cz - rz - 700) / 100)           # start well south of the water
+            while tz > 0 and grid[tz, c] == 0:
+                tz -= 1
+            walls.append(tz)
+        if len(set(walls)) == 1 and grid[walls[0] + 1:walls[0] + 6, tx - 1:tx + 2].min() == 0 == \
+                grid[walls[0] + 1:walls[0] + 6, tx - 1:tx + 2].max():
+            wall_z = (50 - walls[0]) * 100 - 100                 # the wall cell's south edge
+            if best is None or wall_z > best[1]:
+                best = ((x, (50 - walls[0] - 4) * 100 - 50), wall_z)
+    assert best, "no flat stretch of shore south of the pond"
+    return best
 
 
 # ---- palettes and files ----------------------------------------------------
@@ -385,15 +499,38 @@ def to15(rgb):
     return np.where(c == 0, 0x8000, c).astype(np.uint16)       # 0x0000 is the transparent texel
 
 
-def quantise(rgb):
+def quantise(rgb, painted=None):
+    """255 colours + Floyd-Steinberg. For painted art the palette is k-means in Lab over a sample
+    stratified by material (quota ~ sqrt(area), at least 8% each): median cut spends nearly every
+    colour on the greens and leaves the rocks and the pond to dither noise."""
     im = Image.fromarray((rgb.astype(np.uint8) >> 3) << 3)
-    pal_img = im.quantize(255, method=Image.Quantize.MEDIANCUT)
+    if painted is None:
+        pal_img = im.quantize(255, method=Image.Quantize.MEDIANCUT)
+    else:
+        import cv2
+        lab = cv2.cvtColor(np.asarray(im), cv2.COLOR_RGB2LAB).reshape(-1, 3).astype(np.float32)
+        flat = painted.reshape(-1)
+        areas = np.bincount(flat, minlength=len(LABELS)).astype(float)
+        share = np.where(areas > 0, np.maximum(np.sqrt(areas) / np.sqrt(areas).sum(), 0.08), 0)   # every material
+        quota = share / share.sum() * 60000                                                     # gets colours
+        rng = np.random.default_rng(0)
+        pick = np.concatenate([rng.choice(np.nonzero(flat == c)[0], int(quota[c])) for c in range(len(LABELS))
+                               if areas[c] > 0])
+        cv2.setRNGSeed(0)
+        _, _, centres = cv2.kmeans(lab[pick], 255, None, (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_MAX_ITER, 30, 0.5),
+                                   1, cv2.KMEANS_PP_CENTERS)
+        centres = cv2.cvtColor(np.clip(centres, 0, 255).astype(np.uint8)[None], cv2.COLOR_LAB2RGB)[0]
+        pal_img = Image.new("P", (1, 1))
+        centres = (centres >> 3) << 3
+        pal_img.putpalette(np.concatenate([centres, centres[:1]]).reshape(-1).tolist())   # 256th = 1st, folded below
     q = im.quantize(palette=pal_img, dither=Image.Dither.FLOYDSTEINBERG)
     pal = np.array(q.getpalette()[:255 * 3], np.uint16).reshape(-1, 3)
     clut = np.full(256, 0x8000, np.uint16)
     clut[0] = 0                                                  # index 0 reserved, never painted
     clut[1:1 + len(pal)] = to15(pal)
-    return (np.asarray(q, np.uint8).astype(np.int32) + 1).astype(np.uint8), clut
+    idx = np.asarray(q, np.uint8)
+    idx = np.where(idx > 254, 0, idx)                            # the padding entry is a copy of entry 0
+    return (idx.astype(np.int32) + 1).astype(np.uint8), clut
 
 
 def tint(clut, k):
@@ -439,20 +576,39 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default=os.path.join(root, "disc", "Digimon World (USA).bin"))
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
+    ap.add_argument("--art", default=os.path.join(root, "art", "newmaps", "glade.png"),
+                    help="painted backdrop (paint_newmap.py); the flat guide is used if it does not exist")
     ap.add_argument("--preview", action="store_true", help="render previews only")
     a = ap.parse_args()
     prev = os.path.join(a.build, "newmap")
     os.makedirs(prev, exist_ok=True)
+    pal = lambda c: np.stack([(c & 31) << 3, ((c >> 5) & 31) << 3, ((c >> 10) & 31) << 3], -1).astype(np.uint8)
 
     prims = scene()
-    grid = collision(prims)
+    rgb = guide(prims)
+    lab_map = labels(prims)
+    Image.fromarray(rgb.astype(np.uint8)).save(os.path.join(prev, "guide.png"))
+    painted = None
+    if os.path.exists(a.art):
+        art = Image.open(a.art).convert("RGB")
+        assert art.size == (BW, BH), "painted art must be %dx%d" % (BW, BH)
+        rgb = np.asarray(art, np.float32)
+        painted = classify(rgb, lab_map)
+        gl, pg = np.isin(lab_map, GROUND), np.isin(painted, GROUND)
+        iou = (gl & pg).sum() / (gl | pg).sum()
+        print("painted art %s: ground IoU %.3f against the scene" % (os.path.relpath(a.art, root), iou))
+        if iou < MIN_GROUND_IOU:
+            raise SystemExit("the painted art does not match the scene (ground IoU %.3f < %.2f): repaint it"
+                             % (iou, MIN_GROUND_IOU))
+    else:
+        print("no painted art at %s: using the flat guide" % a.art)
+    grid = collision(prims, painted)
     sx, sz = SPAWN[0], SPAWN[2]                  # tile maths as getTileTrigger (C truncation)
     assert grid[50 - int(sz / 100) - (sz > 0), int(sx / 100) + 50 - (sx < 0)] == 0, "spawn must be floor"
-    rgb = render(prims)
-    idx, day = quantise(rgb)
+    assert (grid == 110).any(), "the warp strip back to the host must be reachable floor"
+    idx, day = quantise(rgb, painted)
     cluts = [day, tint(day, (1.0, 0.78, 0.62)), tint(day, (0.42, 0.5, 0.78))]
     assert not (day[idx] == 0).any()
-    pal = lambda c: np.stack([(c & 31) << 3, ((c >> 5) & 31) << 3, ((c >> 10) & 31) << 3], -1).astype(np.uint8)
     for name, c in zip(("day", "dusk", "night"), cluts):
         Image.fromarray(pal(c)[idx]).save(os.path.join(prev, "backdrop_%s.png" % name))
     ov = pal(day)[idx].astype(float)
@@ -466,6 +622,14 @@ def main():
     ov[int(v) - 3:int(v) + 4, int(u) - 3:int(u) + 4] = (255, 255, 0)
     Image.fromarray(ov.astype(np.uint8)).save(os.path.join(prev, "collision_overlay.png"))
     print("walkable cells %d, warp cells %d, colours %d" % ((grid == 0).sum(), (grid == 110).sum(), len(np.unique(idx))))
+    # in-game test targets: three meadow spots, and a shore spot due south of the pond
+    meadow = [deep_floor(grid, w) for w in ((-1900, -1000), (300, 300), (1500, -2000))]
+    shore, _ = shore_spot(grid)
+    spec = dict(row=ROW, host_row=HOST_ROW, host_exit=HOST_WARP, spawn=SPAWN, strip_z=WARP_STRIP_Z,
+                camera=dict(vp=VP.tolist(), vr=VR.tolist(), h=H_PROJ, gw=GW, gh=GH),
+                path=PATH.tolist(), meadow=meadow, pond=dict(shore=shore, lobes=POND),
+                backdrop=os.path.join(prev, "backdrop_day.png"))
+    json.dump(spec, open(os.path.join(prev, "spec.json"), "w"), indent=1)
     if a.preview:
         return 0
 
@@ -532,10 +696,6 @@ def main():
         out += ["# " + why, "[[patch]]", 'feature = "glade"', body, ""]
     with open(os.path.join(pkg, "manifest.toml"), "w", newline="\n") as fh:
         fh.write("\n".join(out))
-    spec = dict(row=ROW, host_row=HOST_ROW, host_exit=HOST_WARP, spawn=SPAWN, strip_z=WARP_STRIP_Z,
-                camera=dict(vp=VP.tolist(), vr=VR.tolist(), h=H_PROJ, gw=GW, gh=GH),
-                path=PATH.tolist(), backdrop=os.path.join(prev, "backdrop_day.png"))
-    json.dump(spec, open(os.path.join(prev, "spec.json"), "w"), indent=1)
     print("wrote %s (MAP %d B, TFS %d B before padding)" % (pkg, len(mapb.rstrip(b"\0")), 8 + 3 * 512 + 16388 * GW * GH))
     return 0
 
