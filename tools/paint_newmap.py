@@ -9,12 +9,13 @@ Local ComfyUI passes turn it into art in the style of the game's own field maps:
   2. Z-Image-Turbo img2img entering at step 4 of 8 repaints that with real materials,
      keeping the layout (props may shift a little: gen_newmap fits collision to the art);
   3. the forest alone (the scene's foliage, eroded) is repainted by a masked Z-Image pass
-     entering at step 2, at 2.5x the backdrop so the leaves come out at the game's scale:
+     entering at step 2, at 2.5x the paint frame so the leaves come out at the game's scale:
      matte, tangled, photographic leaf masses like the stock maps' photo-textured bushes.
      The clearing is untouched by the mask;
-  4. at backdrop size, a grass and a dirt texture (Z-Image, generated once) are laid onto
-     the painted ground in the camera's perspective as luminance detail, the way 1999
-     pre-renders were textured: the fine grainy speckle of the stock maps' grass;
+  4. at paint-frame size (768x640; gen_newmap crops the 768x512 backdrop from it), a grass
+     and a dirt texture (Z-Image, generated once) are laid onto the painted ground in the
+     camera's perspective as luminance detail, the way 1999 pre-renders were textured: the
+     fine grainy speckle of the stock maps' grass;
   5. the colour statistics are pulled half way toward the Lab mean/std of the stock Native
      Forest maps, then each material is toned toward the stock look: grass to the stock turf's
      olive at half the blade contrast with single-pixel rust and dark-green flecks, worn earth
@@ -67,9 +68,9 @@ TEXTURES = {
              "few tiny pebbles and sparse dry grass bits, flat overcast light, no shadows, no objects, uniform "
              "pattern, seamless tileable texture.", 4),
 }
-WORK = (1152, 960)          # passes 1-2 at 1.5x the backdrop (about one megapixel)
+WORK = (1152, 960)          # passes 1-2 at 1.5x the paint frame (about one megapixel)
 Z_START = 4                 # of 8 Z-Image-Turbo steps: 5 keeps every prop but adds little; 3 redesigns the layout
-FOLIAGE_WORK = (1920, 1600)  # pass 3 at 2.5x: leaves land at 3-6 px once scaled to the backdrop
+FOLIAGE_WORK = (1920, 1600)  # pass 3 at 2.5x: leaves land at 3-6 px once scaled to the paint frame
 FOLIAGE_START = 2
 SEEDS = dict(qwen=2, z=13, foliage=55)    # foliage 55: cleanest of six by a blind artefact + style panel
 TEXEL = 1.2                 # world units per grass texel (dirt: 1.3x); 100 units = one collision cell
@@ -91,8 +92,8 @@ def grade(rgb, k=GRADE):
 
 # ---- ground textures -------------------------------------------------------
 def floor_xz(scale):
-    """World x, z of the floor point under each backdrop pixel (rendered at `scale`x)."""
-    d = G.rays(G.BW * scale, G.BH * scale, scale)
+    """World x, z of the floor point under each paint-frame pixel (rendered at `scale`x)."""
+    d = G.rays(G.PBW * scale, G.PBH * scale, scale, G.PAINT)
     t = np.where(d[..., 1] > 1e-6, -G.VP[1] / np.maximum(d[..., 1], 1e-6), np.nan)
     p = G.VP + d * t[..., None]
     return p[..., 0], p[..., 2]
@@ -110,11 +111,11 @@ def sample(tex, x, z, texel, rot=0.0, off=(0.0, 0.0)):
 
 
 def ground_detail(tex, texel, ss=3):
-    """Mean-1 luminance detail of `tex` laid on the floor, per backdrop pixel (ss x ss supersampled)."""
+    """Mean-1 luminance detail of `tex` laid on the floor, per paint-frame pixel (ss x ss supersampled)."""
     import cv2
     x, z = floor_xz(ss)
     smp = 0.6 * sample(tex, x, z, texel) + 0.4 * sample(tex, x, z, texel * 1.7, rot=0.9, off=(300, 700))
-    smp = smp.reshape(G.BH, ss, G.BW, ss, 3).mean((1, 3))
+    smp = smp.reshape(G.PBH, ss, G.PBW, ss, 3).mean((1, 3))
     ratio = smp / np.maximum(cv2.GaussianBlur(smp, (0, 0), 6), 1)
     return np.repeat(ratio.mean(-1, keepdims=True), 3, -1)
 
@@ -197,7 +198,7 @@ def paint(comfy, work, guide_name, lab_map, seeds, cache):
     init, mask = cache[z]
     comfy.run(masked(comfy.zgraph(FOLIAGE_PROMPT, seeds["foliage"], *FOLIAGE_WORK, init=init,
                                   start_step=FOLIAGE_START), mask), f, timeout=1800)
-    P = np.asarray(Image.open(f).convert("RGB").resize((G.BW, G.BH), Image.LANCZOS), np.float32)
+    P = np.asarray(Image.open(f).convert("RGB").resize((G.PBW, G.PBH), Image.LANCZOS), np.float32)
     grass, dirt = [cache[os.path.join(work, "tex_%s_%d.png" % (n, TEXTURES[n][1]))] for n in ("grass", "dirt")]
     return tone(grade(np.clip(texture_ground(P, grass, dirt, lab_map), 0, 255)), lab_map)
 
@@ -229,7 +230,7 @@ def main():
     os.makedirs(work, exist_ok=True)
     shutil.copy(guide, os.path.join(work, "newmap_guide.png"))
     guide_name = comfy.upload(os.path.join(work, "newmap_guide.png"))
-    lab_map = G.labels(G.scene())
+    lab_map = G.labels(G.scene(), G.PAINT)          # the painter works in the paint frame; gen_newmap crops
     seeds = dict(qwen=a.qwen_seed, z=a.z_seed, foliage=a.foliage_seed)
     cache = {}
     if a.sweep_foliage:

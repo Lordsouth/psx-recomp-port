@@ -250,8 +250,10 @@ all in world units. The scene drives every output, so they cannot drift apart:
   ground (IoU at least 0.75). The art is then quantised to 255 15-bit colours
   (k-means in Lab over a sample stratified by material, so the rocks and pond
   get colours too) and tinted into the dusk and night palettes. Index 0 is
-  reserved for `0x0000`, the transparent texel. Without painted art the flat
-  guide is used.
+  reserved for `0x0000`, the transparent texel. The art is painted in a 6×5
+  frame (768×640) and the backdrop is its 6×4 centre crop (768×512): six fewer
+  tiles leave room for the foreground sprites' image (below). Without painted
+  art the flat guide is used.
 - **The collision grid.** Floor follows the scene: the clearing and the path,
   minus the pond, foliage and tree footprints, anything outside the painted
   frame, and anything a prop would cover (backdrops always draw behind
@@ -262,8 +264,46 @@ all in world units. The scene drives every output, so they cannot drift apart:
   from walking behind anything the painter drew. The small props (rocks,
   stump, log) take their collision from the painting alone, because the
   painter may nudge them.
+- **Foreground sprites** let characters walk behind the foliage, as on the
+  stock maps. Scene foliage and trunks that the painting shows (grown 6 px into
+  the painter's leaves) are cut into sprites per clump, but only where they
+  overlap a character's box on some walkable cell. Each sprite is drawn over
+  characters by depth. Behind a bush, a character may stand under its overhang,
+  down to the patch where it touches the floor, and the sprite hides their
+  legs. In front, the bush's whole width stays blocked. Each walkable cell is
+  sampled over a character's box (378 points, about pixel pitch) and must order
+  cleanly against every sprite it overlaps: a point the sprite's surface hides
+  needs the sprite's anchor in front (depth − 100), and a visible point on
+  sprite pixels needs it behind (depth + 100). Each clump's anchor is the depth
+  that satisfies the most cells, and cells that no anchor satisfies stay
+  blocked. After the sprites are cut, a dense check (5×10 units, finer than a
+  pixel) blocks any cell that would still be drawn wrong. An independent
+  review found the thin sprite edges the coarser sampling missed.
 - **The MAP.** It holds the setup block (camera, the MAYO maps' character
-  lights, a 6×5 grid) and the warp table.
+  lights, a 6×4 grid), the sprites' 8bpp images and object block, and the warp
+  table.
+
+**The MAP object section** (`loadMap`, `loadMapObjects`, `renderMapOverlays`)
+is read only when `MAP_ENTRIES` n8 or n4 is nonzero. The header words are then:
+
+```
+setup, n8 x 8bpp TIM, n4 x 4bpp TIM, objects, entities, collision
+```
+
+- Each 8bpp TIM is uploaded at its pixel rect. The stock maps use
+  `(384 + 128k, 0)`, 128 halfwords wide (k = 0..2; map tiles stream at x 768
+  and up).
+- A CLUT rect at row 480 (`0x1E0`) is not uploaded. The sprite then samples the
+  live palette, so dusk and night apply to it.
+- The object block is `i16 nDefs`, then `nDefs` × 9 `i16` (texX, texY, w, h,
+  anchor x, y, z, clut, trans), then `i16 nInst`, then `nInst` × 19 `i16`
+  (8 sprite ids, 8 frame times, x, y, flag; at most 188).
+- texX/256 picks the texture page.
+- clut −1 means row 480. trans 4 means opaque.
+- x, y is the backdrop pixel of the sprite's top-left corner.
+- The OT slot is the anchor's GTE screen z >> 2, the same scale
+  `GsSortObject4J` uses for models (shift 2). That is what puts a sprite in
+  front of or behind a character.
 
 The painter (`paint_newmap.py`, ComfyUI through the studio's `comfy.py`
 client):
@@ -308,9 +348,14 @@ when there is only 1 CLUT. Avoid -1 grid slots: `updateTileRow` checks the
 wrong row and can blank real tiles.
 
 **Delivery** needs no runtime change. Two file-backed `disc_user` `[[overlay]]`s
-put our MAP and TFS over MGEN17's own sectors (6 and 241, both zero-padded).
-Overlays need `disc_sha256` on the `[[target]]`. Past the end of the disc a
-`disc_user` overlay reads as zeros, so an in-place slot is the only option.
+lay our MAP and TFS across MGEN17's 247 adjacent sectors (MAP, then TFS, then
+zero padding). Two guarded `main_exe` patches move the files'
+`FILE_OFFSET_TABLE` entries (`0x8011FE1C`, 12 bytes each: sector, size, name
+pointer; `lookupFileTable` resolves names there) to match. Overlays need
+`disc_sha256` on the `[[target]]`. Past the end of the disc a `disc_user`
+overlay reads as zeros, and every other sector belongs to a file the game uses
+(no slack between files), so MGEN17's own sectors are all there is: a 30-tile
+TFS leaves 2 KB, and the 24-tile backdrop leaves room for 2 texture pages.
 The row, the MAPHEAD section and the entrance are small guarded patches. The
 MAPHEAD section binds DG script 118, whose only section is a bare END. The
 MAPHEAD tail sectors overlap the `dw.1_5` delta, so the feature conflicts with
@@ -322,6 +367,10 @@ MAPHEAD tail sectors overlap the `dw.1_5` delta, so the feature conflicts with
 - our camera is in `GS_VIEWPOINT`
 - our palette is in VRAM row 480, and our dusk and night palettes go live at
   16:00 and 20:00
+- our foreground sprites are loaded (`MAP_OBJECT_INSTANCE_COUNT`) and their
+  texels are in VRAM
+- standing behind the bush island, the screenshot shows the bush, not the
+  tamer, under the sprite, and the tamer above it
 
 It also walks the meadow (targets the generator picks from the fitted grid, in
 `spec.json`), pushes into the pond (the tamer stays ashore), saves
@@ -334,8 +383,8 @@ Still to do before players see it:
 - save isolation (a `dw_newmaps.c` memory-card plugin, like `dw_dw15.c`)
 - the release allowlist for the two payloads in `verify_setup_package.py`
 - its own DG script for NPCs and battles
-- foreground sprites (the MAP object section) so props can stand in front of
-  the player
+- foreground sprites for the rocks, stump and log (their collision comes from
+  the painting, so a sprite would need the painted footprint)
 
 ---
 

@@ -48,8 +48,10 @@ from extract_disc_file import parse_record, read_extent, sector, walk  # noqa: E
 
 # ---- the screen ------------------------------------------------------------
 ROW, FILE = 239, "MGEN17"            # free row; unused stock file slot we overlay
-MAP_SECTORS, TFS_SECTORS = 6, 241    # MGEN17's own extents; 241 = the GENERAL_BUFFER window
+MAP_SECTORS, TFS_SECTORS = 6, 241    # MGEN17's own extents, adjacent on the disc: 247 sectors we lay out
+MAX_FILE = 0x78800                   # readFile's window, GENERAL_BUFFER up to TEXTURE_BUFFER (241 sectors)
 MAP_ENTRIES = 0x801292D4
+FILE_OFFSET_TABLE = 0x8011FE1C       # {sector, size, name*} per disc file: lookupFileTable resolves names here
 FLAGS = 0x80                         # sound bank 0 (Native Forest), time of day on, map-Digimon format
 LOADING_NAME = 0                     # "Native Forest" on the arrival card
 SCRIPT = 118                         # DG script whose only section is a bare END: no arrival side effects
@@ -57,7 +59,10 @@ BGM, BGM_PSTAT = 0x01, 0             # the Native Forest theme, day/night varian
 MH_NEW, MH_BUFFER = 0x6070, 0x61A8   # MAPHEAD.SCN ends at 0x606E; MAPHEAD_SCRIPT_BUFFER size
 HOST, HOST_ROW, HOST_WARP = "MAYO02", 1, 2   # dev entrance: Coela Point's east exit (stock -> map 4)
 
-GW, GH = 6, 5                        # tile grid: 768 x 640 backdrop, 30 tiles
+PAINT = (6, 5)                       # the frame the art is painted in (768 x 640) ...
+GW, GH = 6, 4                        # ... and the backdrop, its centre crop: 768 x 512, 24 tiles. Six fewer
+                                     # tiles leave room in the 247 sectors for the foreground sprites' image
+CROP = (PAINT[1] - GH) * 64          # rows cut from the top (and from the bottom) of the painted art
 VP = np.array([0.0, -5600.0, -7400.0])    # eye; the MAP stores half (the engine doubles it)
 VR = np.array([0.0, 0.0, -1500.0])        # look-at point, lands on the backdrop centre
 H_PROJ = 927                              # GsSetProjection distance
@@ -67,11 +72,12 @@ SUN /= np.linalg.norm(SUN)
 
 SPAWN = (-100, 0, -3500)                  # arrival, facing up the path (rotation 0x800 = +z)
 SPAWN_ROT = 0x800
-WARP_STRIP_Z = -4050                      # path cells nearer the camera than this send you back
+WARP_STRIP_Z = -3750                      # path cells nearer the camera than this send you back
 MIN_GROUND_IOU = 0.75                     # painted art must show ground where the scene has ground
 PAINTED_PROPS = ("rock", "stump", "log")  # small props: their collision follows where the painting puts them
 
 BW, BH = GW * 128, GH * 128
+PBW, PBH = PAINT[0] * 128, PAINT[1] * 128
 
 
 # ---- scene -----------------------------------------------------------------
@@ -134,16 +140,18 @@ def scene():
     rng = np.random.default_rng(7)
     p = []
 
-    def blob(x, z, r, h, mat="leaf", tone=0.0, flat=0.85):
-        p.append(dict(kind="ell", c=(x, -h, z), r=(r, r * flat, r), mat=mat, tone=tone))
+    def blob(x, z, r, h, mat="leaf", tone=0.0, flat=0.85, group=None):
+        group = group or "bush %d,%d" % (x // 700, z // 700)        # a clump: one foreground sprite group
+        p.append(dict(kind="ell", c=(x, -h, z), r=(r, r * flat, r), mat=mat, tone=tone, group=group))
 
     def tree(x, z, s, tone):
-        p.append(dict(kind="cyl", c=(x, z), r=60 * s, y0=-520 * s, y1=0, mat="bark"))
+        group = "tree %d,%d" % (x, z)
+        p.append(dict(kind="cyl", c=(x, z), r=60 * s, y0=-520 * s, y1=0, mat="bark", group=group))
         for k in range(6):
             a = k * 1.05 + rng.uniform(0, 0.6)
             rr = rng.uniform(80, 220) * s
             blob(x + np.cos(a) * rr, z + np.sin(a) * rr * 0.6, rng.uniform(230, 330) * s, rng.uniform(650, 900) * s,
-                 tone=tone)
+                 tone=tone, group=group)
     # foliage outside the clearing on a jittered grid, bigger toward the back
     for gz in np.arange(-5200, 6200, 330):
         for gx in np.arange(-6500, 6600, 330):
@@ -162,7 +170,7 @@ def scene():
         tree(x, z, s, rng.uniform(0, 1))
     for k in range(14):                         # a bush island right of the path
         blob(1550 + rng.uniform(-450, 450), -900 + rng.uniform(-300, 300), rng.uniform(200, 290),
-             rng.uniform(150, 260), tone=rng.uniform(0, 0.5))
+             rng.uniform(150, 260), tone=rng.uniform(0, 0.5), group="island")
     for x, z, rx, ry, rz in ((-2050, 450, 230, 170, 200), (-850, 1250, 160, 110, 140), (-2300, 1300, 190, 150, 170),
                              (2100, -2700, 200, 150, 180), (-1700, -2300, 240, 170, 210)):
         p.append(dict(kind="ell", c=(x, -ry * 0.35, z), r=(rx, ry, rz), mat="rock"))
@@ -179,19 +187,27 @@ def basis():
     return r, np.cross(f, r), f
 
 
-def project(P):
+def project(P, frame=None):
+    """Backdrop pixel (u, v) of world points; `frame` (tiles wide, high) defaults to the backdrop's."""
+    gw, gh = frame or (GW, GH)
     r, d, f = basis()
     q = np.asarray(P, float) - VP
     zc = q @ f
-    return 64 * GW + H_PROJ * (q @ r) / zc, 64 * GH + H_PROJ * (q @ d) / zc
+    return 64 * gw + H_PROJ * (q @ r) / zc, 64 * gh + H_PROJ * (q @ d) / zc
 
 
-def rays(width, height, scale):
+def depth(P):
+    """Camera-space z: what the GTE puts in SZ, and what map objects and models are ordered by (>> 2)."""
+    return (np.asarray(P, float) - VP) @ basis()[2]
+
+
+def rays(width, height, scale, frame=None):
     """World-space ray directions through backdrop pixel centres (render at `scale`x)."""
+    gw, gh = frame or (GW, GH)
     r, d, f = basis()
     v, u = np.mgrid[0:height, 0:width].astype(np.float32)
-    xu = ((u + 0.5) / scale - 64 * GW) / H_PROJ
-    yv = ((v + 0.5) / scale - 64 * GH) / H_PROJ
+    xu = ((u + 0.5) / scale - 64 * gw) / H_PROJ
+    yv = ((v + 0.5) / scale - 64 * gh) / H_PROJ
     dirs = xu[..., None] * r + yv[..., None] * d + f
     return (dirs / np.linalg.norm(dirs, axis=-1, keepdims=True)).astype(np.float32)
 
@@ -239,17 +255,18 @@ def occluded(prims, o, d, limit=None):
     return blocked
 
 
-def trace(prims, scale):
+def trace(prims, scale, frame=None):
     """First hit per pixel: ray directions, distance, owning prop (-1 = floor), normal."""
-    w, h = BW * scale, BH * scale
-    d = rays(w, h, scale)
+    frame = frame or (GW, GH)
+    w, h = frame[0] * 128 * scale, frame[1] * 128 * scale
+    d = rays(w, h, scale, frame)
     vp32 = VP.astype(np.float32)
     best = np.where(d[..., 1] > 0, -VP[1] / np.maximum(d[..., 1], 1e-9), np.inf).astype(np.float32)
     owner = np.full((h, w), -1, np.int32)
     normal = np.zeros_like(d)
     normal[..., 1] = -1
     for i, prim in enumerate(prims):                 # trace each prop only inside its screen box
-        u, v = project(corners(prim))
+        u, v = project(corners(prim), frame)
         u0, u1 = max(0, int(u.min() * scale) - 2), min(w, int(u.max() * scale) + 3)
         v0, v1 = max(0, int(v.min() * scale) - 2), min(h, int(v.max() * scale) + 3)
         if u0 >= u1 or v0 >= v1:
@@ -344,9 +361,10 @@ def sunlit(sm, pt, soft=2):
     return acc / (2 * soft + 1) ** 2
 
 
-def guide(prims, scale=2):
+def guide(prims, scale=2, frame=None):
     """The painter's input: flat material colours, sun and sky shading, cast shadows."""
-    d, best, owner, normal = trace(prims, scale)
+    frame = frame or (GW, GH)
+    d, best, owner, normal = trace(prims, scale, frame)
     pt = VP.astype(np.float32) + d * best[..., None]
     alb = ground_albedo(pt[..., 0], pt[..., 2]).astype(np.float32)
     for i, prim in enumerate(prims):
@@ -358,13 +376,14 @@ def guide(prims, scale=2):
     light = 0.42 + 0.18 * np.clip(-normal[..., 1], 0, 1) + 0.78 * lam * lit
     water = pond_e(pt[..., 0], pt[..., 2]) < 1
     glint = np.where(water, 0.25 * lit * np.clip(1 - np.abs(d[..., 0]) * 3, 0, 1), 0)   # sun on the pond
-    rgb = (alb * light[..., None] + 255 * glint[..., None]).reshape(BH, scale, BW, scale, 3).mean((1, 3))
+    rgb = (alb * light[..., None] + 255 * glint[..., None]).reshape(frame[1] * 128, scale, frame[0] * 128, scale,
+                                                                     3).mean((1, 3))
     return np.clip(rgb, 0, 255)
 
 
-def labels(prims):
+def labels(prims, frame=None):
     """Per backdrop pixel, the material a ray meets first (an index into LABELS)."""
-    d, best, owner, _ = trace(prims, 1)
+    d, best, owner, _ = trace(prims, 1, frame)
     lab = np.zeros(owner.shape, np.uint8)
     for i, prim in enumerate(prims):
         lab[owner == i] = MATS[prim["mat"]]
@@ -408,15 +427,29 @@ def cell_centre(tx, tz):
     return (tx - 50) * 100 + 50, (50 - tz) * 100 - 50
 
 
-def collision(prims, painted=None):
-    """100x100 grid: 0 floor, 0x80 blocked, 110 warp 0 (back to the host). `painted` is
-    classify()'s map of the art; a cell then also needs ground painted under its footprint, and the
-    small PAINTED_PROPS stop counting: the painter may nudge a rock, and the painting decides where
-    it is. (Painted non-ground unprojected onto the floor covers both a prop's base and the floor
-    hidden behind it, so the painted test also keeps characters from walking behind them.)"""
+FG_MATS = ("leaf", "bark")           # scene props drawn over characters by foreground sprites: foliage, trunks
+FG_MARGIN = 100                      # camera-depth gap kept between a sprite's anchor and a character it overlaps
+CHAR_SAMPLES = [(dx, y, dz) for dx in np.arange(-50, 51, 12.5) for y in np.arange(-10, -350, -25) for dz in (-40, 0, 40)]
+                                     # a character's box at about pixel pitch: a pixel is 7-15 units here
+
+
+def cell_grid():
     tz, tx = np.mgrid[0:100, 0:100]
     x, z = cell_centre(tx, tz)
-    x, z = x.astype(float), z.astype(float)
+    return x.astype(float), z.astype(float)
+
+
+def collision(prims, painted=None, fg=None):
+    """100x100 grid: 0 floor, 0x80 blocked, 110 warp 0 (back to the host), and the sprite order.
+
+    `painted` is classify()'s map of the art: a cell then also needs ground painted under its
+    footprint, and the small PAINTED_PROPS stop counting (the painter may nudge a rock, and the
+    painting decides where it is). Painted non-ground unprojected onto the floor covers both a
+    prop's base and the floor hidden behind it, so this also keeps characters from walking behind
+    anything the painter drew. `fg` is foreground_pixels(): its pixels are redrawn over characters
+    by sprites, so they hide floor rather than block it, and sprite_order() decides who stands in
+    front of whom. Without `fg` nothing may be walked behind: backdrops draw behind characters."""
+    x, z = cell_grid()
     ok = (in_clearing(x, z) | (path_dist(x, z) < 160)) & (pond_e(x, z, grow=90) > 1)
     if painted is not None:
         prims = [prim for prim in prims if prim["mat"] not in PAINTED_PROPS]
@@ -424,34 +457,222 @@ def collision(prims, painted=None):
         if prim["kind"] == "cyl":
             ok &= np.hypot(x - prim["c"][0], z - prim["c"][1]) > prim["r"] + 110
         elif prim["c"][1] + prim["r"][1] > -300:     # an ellipsoid low enough to bump into
-            ok &= ~in_ellipse(x, z, dict(c=(prim["c"][0], prim["c"][2]), r=prim["r"][::2]), grow=90)
+            e = dict(c=(prim["c"][0], prim["c"][2]), r=prim["r"][::2])
+            if fg is not None and prim["mat"] in FG_MATS:
+                # behind a bush (farther from the camera) a character may stand under its overhang, down to
+                # the patch it touches the floor with: its sprite hides the character's legs there. In front,
+                # its whole width stays blocked, or a character would seem to stand on the drawn bush.
+                touch = np.sqrt(max(0.0, 1 - (prim["c"][1] / prim["r"][1]) ** 2))
+                base = dict(c=e["c"], r=(e["r"][0] * touch, e["r"][1] * touch))
+                behind = z > prim["c"][2]
+                ok &= ~((~behind & in_ellipse(x, z, e, grow=90)) | (behind & in_ellipse(x, z, base, grow=60)))
+            else:
+                ok &= ~in_ellipse(x, z, e, grow=90)
     # whole character inside the painted frame (feet to head, with a margin)
     for y in (0, -380):
         u, v = project(np.stack([x, np.full_like(x, y), z], -1))
         ok &= (u > 24) & (u < BW - 24) & (v > 16) & (v < BH - 8)
-    # nothing may be walked behind: a prop between the eye and the character
-    for dx, dz in ((0, 0), (-50, 0), (50, 0), (0, 50)):
-        for y in (-20, -180, -340):
-            cand = np.argwhere(ok)
-            P = np.stack([x + dx, np.full_like(x, y), z + dz], -1)[ok].astype(np.float32)
-            dvec = P - VP.astype(np.float32)
-            dist = np.linalg.norm(dvec, axis=-1)
-            hid = occluded(prims, np.broadcast_to(VP.astype(np.float32), P.shape), dvec / dist[:, None],
-                           limit=dist - 5)
-            ok[tuple(cand[hid].T)] = False
     if painted is not None:                 # the painting must show ground under the feet (7 of 9 samples)
+        seen = painted if fg is None else np.where(fg["pix"], 0, painted)   # sprite pixels hide floor
         cand = np.argwhere(ok)
         cx, cz = x[ok], z[ok]
         good = np.zeros(len(cx), int)
         for a in [None] + list(np.linspace(0, 2 * np.pi, 8, endpoint=False)):
             ox, oz = (0.0, 0.0) if a is None else (70 * np.cos(a), 70 * np.sin(a))
             u, v = project(np.stack([cx + ox, np.zeros_like(cx), cz + oz], -1))
-            good += np.isin(painted[np.clip(v.astype(int), 0, BH - 1), np.clip(u.astype(int), 0, BW - 1)], GROUND)
+            good += np.isin(seen[np.clip(v.astype(int), 0, BH - 1), np.clip(u.astype(int), 0, BW - 1)], GROUND)
         ok[tuple(cand[good < 7].T)] = False
+    order = None
+    if fg is None:                          # nothing may be walked behind: a prop between the eye and the character
+        for dx, dz in ((0, 0), (-50, 0), (50, 0), (0, 50)):
+            for y in (-20, -180, -340):
+                cand = np.argwhere(ok)
+                P = np.stack([x + dx, np.full_like(x, y), z + dz], -1)[ok].astype(np.float32)
+                dvec = P - VP.astype(np.float32)
+                dist = np.linalg.norm(dvec, axis=-1)
+                hid = occluded(prims, np.broadcast_to(VP.astype(np.float32), P.shape), dvec / dist[:, None],
+                               limit=dist - 5)
+                ok[tuple(cand[hid].T)] = False
+    else:
+        ok, order = sprite_order(ok, fg, x, z)
     grid = np.where(ok, 0, 0x80).astype(np.uint8)
     strip = ok & (z < WARP_STRIP_Z) & (path_dist(x, z) < 160)
     grid[strip] = 110
-    return grid
+    return grid, order
+
+
+# ---- foreground sprites ----------------------------------------------------
+def foreground_pixels(prims, painted):
+    """Pixels that foreground sprites redraw over characters: the scene's foliage and trunks where
+    the painting shows them, grown 6 px into the painter's own foliage round their silhouettes.
+    Each pixel carries its prop's sprite group and the camera depth of its surface."""
+    import cv2
+    d, best, owner, _ = trace(prims, 1)
+    surf = (best * (d @ basis()[2].astype(np.float32))).astype(np.float32)
+    groups = sorted({p["group"] for p in prims if p["mat"] in FG_MATS})
+    gid_of = np.array([groups.index(p["group"]) if p["mat"] in FG_MATS else -1 for p in prims])
+    gid = np.where(owner >= 0, gid_of[np.maximum(owner, 0)], -1)
+    gid[np.isin(painted, GROUND + (1,))] = -1           # the painting shows floor or water there
+    fsurf = np.where(gid >= 0, surf, np.inf).astype(np.float32)
+    shifts = [(dy, dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dy or dx]
+    for _ in range(6):                                  # into adjacent painted foliage: each new pixel takes
+        pad_s = np.pad(fsurf, 1, constant_values=np.inf)   # group and depth from its nearest-surface neighbour
+        pad_g = np.pad(gid, 1, constant_values=-1)
+        ns = np.stack([pad_s[1 + dy:1 + dy + fsurf.shape[0], 1 + dx:1 + dx + fsurf.shape[1]] for dy, dx in shifts])
+        ng = np.stack([pad_g[1 + dy:1 + dy + gid.shape[0], 1 + dx:1 + dx + gid.shape[1]] for dy, dx in shifts])
+        pick = ns.argmin(0)
+        best_s = np.take_along_axis(ns, pick[None], 0)[0]
+        best_g = np.take_along_axis(ng, pick[None], 0)[0]
+        add = (gid < 0) & np.isfinite(best_s) & (painted == 2)
+        gid[add], fsurf[add] = best_g[add], best_s[add]
+    mats = np.array([p["mat"] for p in prims])
+    other = (owner >= 0) & ~np.isin(mats[np.maximum(owner, 0)], FG_MATS) & ~np.isin(painted, GROUND + (1,))
+    return dict(gid=gid, pix=gid >= 0, groups=groups, fsurf=fsurf, surf=surf, other=other)
+
+
+def sprite_order(ok, fg, x, z):
+    """Who is drawn over whom. A sprite has one depth (its anchor); a character is ordered by its
+    own (about its waist). Each candidate cell is sampled over a character's box: a sample hidden
+    by a sprite's surface needs that sprite in front (anchor < character - FG_MARGIN); a visible
+    sample on sprite pixels needs it behind (anchor > character + FG_MARGIN). Each group's anchor
+    is the depth that satisfies the most cells; cells it cannot satisfy, and cells hidden by props
+    that have no sprite, stay blocked."""
+    cells = np.argwhere(ok)
+    cx, cz = x[ok], z[ok]
+    zc = depth(np.stack([cx, np.full_like(cx, -190.0), cz], -1))
+    n, ns = len(cx), len(CHAR_SAMPLES)
+    occ, gid = np.zeros((n, ns), bool), np.full((n, ns), -1)
+    uv = np.zeros((n, ns, 2), int)
+    bad = np.zeros(n, bool)
+    for k, (dx, y, dz) in enumerate(CHAR_SAMPLES):
+        P = np.stack([cx + dx, np.full_like(cx, float(y)), cz + dz], -1)
+        u, v = project(P)
+        ui, vi = np.clip(u.astype(int), 0, BW - 1), np.clip(v.astype(int), 0, BH - 1)
+        zs = depth(P)
+        g = fg["gid"][vi, ui]
+        occ[:, k] = (g >= 0) & (fg["fsurf"][vi, ui] < zs - 5)
+        bad |= (g < 0) & fg["other"][vi, ui] & (fg["surf"][vi, ui] < zs - 5)
+        gid[:, k], uv[:, k] = g, np.stack([ui, vi], -1)
+    anchors = {}
+    for g in range(len(fg["groups"])):
+        on = gid == g
+        rows = on.any(1)
+        if not rows.any():
+            continue
+        front, back = (on & occ).any(1), (on & ~occ).any(1)
+
+        def sat(a):
+            return rows & (~front | (a < zc - FG_MARGIN)) & (~back | (a > zc + FG_MARGIN))
+        cand = np.unique(np.concatenate([zc[rows] - FG_MARGIN - 1, zc[rows] + FG_MARGIN + 1]))
+        a = cand[int(np.argmax([sat(c).sum() for c in cand]))]
+        anchors[g] = float(a)
+        bad |= rows & ~sat(a)
+    ok = ok.copy()
+    ok[tuple(cells[bad].T)] = False
+    return ok, dict(anchors=anchors, cells=cells, keep=~bad, occ=occ, gid=gid, uv=uv)
+
+
+def build_sprites(fg, order, idx, prims):
+    """Cut the sprites: per group, its pixels inside the boxes of the characters it must cover
+    (elsewhere a sprite would only repaint the backdrop's own pixels), split into rects that fit
+    a texture page, shelf-packed into 256x256 8bpp pages. Texels are the backdrop's own palette
+    indices, 0 (transparent) off the sprite, so the live palette and its time of day apply."""
+    need = np.zeros(idx.shape, bool)                    # union of character boxes on walkable cells
+    for c in np.nonzero(order["keep"])[0]:
+        u, v = order["uv"][c, :, 0], order["uv"][c, :, 1]
+        need[max(v.min() - 6, 0):v.max() + 3, max(u.min() - 4, 0):u.max() + 5] = True
+    f = basis()[2]
+    rects = []
+    for g, a in order["anchors"].items():
+        m = (fg["gid"] == g) & need
+        if not m.any():
+            continue
+        members = [p for p in prims if p.get("group") == fg["groups"][g]]
+        ax = float(np.mean([p["c"][0] for p in members]))
+        az = VP[2] + (a - (0 - VP[1]) * f[1] - (ax - VP[0]) * f[0]) / f[2]   # the floor point at that depth
+        ys, xs = np.nonzero(m)
+        for y0 in range(ys.min(), ys.max() + 1, 248):
+            for x0 in range(xs.min(), xs.max() + 1, 248):
+                sub = m[y0:min(y0 + 248, ys.max() + 1), x0:min(x0 + 248, xs.max() + 1)]
+                if not sub.any():
+                    continue
+                sy, sx = np.nonzero(sub)
+                r = (x0 + sx.min(), y0 + sy.min(), sx.max() - sx.min() + 1, sy.max() - sy.min() + 1)
+                rects.append(dict(rect=r, anchor=(int(round(ax)), int(round(az))), group=fg["groups"][g],
+                                  depth=a, mask=m[r[1]:r[1] + r[3], r[0]:r[0] + r[2]]))
+    pages = [np.zeros((256, 256), np.uint8)]
+    shelf = dict(y=0, h=0, x=0)
+    for s in sorted(rects, key=lambda s: -s["rect"][3]):
+        u, v, w, h = s["rect"]
+        if shelf["x"] + w > 255:                        # stay inside the page: UVs of 256 would wrap
+            shelf.update(y=shelf["y"] + shelf["h"], h=0, x=0)
+        if shelf["y"] + h > 255:
+            pages.append(np.zeros((256, 256), np.uint8))
+            shelf.update(y=0, h=0, x=0)
+        assert len(pages) <= 3, "foreground sprites need more than three texture pages"
+        x0, y0 = shelf["x"], shelf["y"]
+        pages[-1][y0:y0 + h, x0:x0 + w] = np.where(s["mask"], idx[v:v + h, u:u + w], 0)
+        s["tex"] = ((len(pages) - 1) * 256 + x0, y0)
+        shelf.update(x=x0 + w, h=max(shelf["h"], h))
+    if not rects:                                       # no sprites: no images, and n8 stays 0
+        return [], []
+    used = [int(np.nonzero(pg.any(1))[0].max()) + 1 if pg.any() else 1 for pg in pages]
+    return rects, [pg[:hh] for pg, hh in zip(pages, used)]
+
+
+def order_errors(grid, fg, order, rects):
+    """Cells where the finished sprites would draw wrong over or under a character, checked densely
+    (a 5 x 10 unit pitch over the character's box, finer than a pixel): a point a sprite group's
+    surface hides must be under a sprite drawn in front of the character, and a visible point
+    must not be under one. sprite_order samples coarser; this catches the thin edges it misses."""
+    drawn = np.full(fg["gid"].shape, -1)
+    for s in rects:
+        u, v, w, h = s["rect"]
+        drawn[v:v + h, u:u + w][s["mask"]] = fg["groups"].index(s["group"])
+    anchor = np.full(len(fg["groups"]) + 1, np.nan)
+    for g, a in order["anchors"].items():
+        anchor[g] = a
+    x, z = cell_grid()
+    walk = grid != 0x80
+    cx, cz = x[walk], z[walk]
+    zc = depth(np.stack([cx, np.full_like(cx, -190.0), cz], -1))
+    bad = np.zeros(len(cx), bool)
+    for dx in np.arange(-50, 51, 5):
+        for y in np.arange(-10, -350, -10):
+            for dz in (-40, 0, 40):
+                P = np.stack([cx + dx, np.full_like(cx, float(y)), cz + dz], -1)
+                u, v = project(P)
+                ui, vi = np.clip(u.astype(int), 0, BW - 1), np.clip(v.astype(int), 0, BH - 1)
+                hidden = (fg["gid"][vi, ui] >= 0) & (fg["fsurf"][vi, ui] < depth(P) - 5)
+                g = drawn[vi, ui]
+                front = (g >= 0) & (anchor[g] < zc)
+                bad |= (hidden & ~front) | (~hidden & front)
+    out = np.zeros(grid.shape, bool)
+    out[walk] = bad
+    return out
+
+
+def build_tim(pixels, page, clut):
+    """8bpp TIM for texture page `page` (VRAM x 384 + 128*page, y 0). Its CLUT rect is row 480, so
+    loadMapImage1 skips uploading it and the sprites sample the live, time-of-day palette."""
+    h = pixels.shape[0]
+    return (struct.pack("<II", 0x10, 0x09) + struct.pack("<I4H", 12 + 512, 0, 480, 256, 1)
+            + clut.astype("<u2").tobytes() + struct.pack("<I4H", 12 + 256 * h, 384 + 128 * page, 0, 128, h)
+            + pixels.tobytes())
+
+
+def build_objects(rects):
+    """The MAP object block: sprite definitions, then one still instance per sprite."""
+    assert len(rects) <= 180, "the engine keeps 180 sprite definitions (LOCAL_MAP_OBJECTS) and 188 instances"
+    out = struct.pack("<h", len(rects))
+    for s in rects:
+        (u, v, w, h), (tx, ty), (ax, az) = s["rect"], s["tex"], s["anchor"]
+        out += struct.pack("<9h", tx, ty, w, h, ax, 0, az, -1, 4)       # clut -1: row 480; 4: opaque
+    out += struct.pack("<h", len(rects))
+    for k, s in enumerate(rects):
+        u, v = s["rect"][:2]
+        out += struct.pack("<19h", *([k] + [-1] * 7 + [1] + [0] * 7 + [u, v, 0]))
+    return out
 
 
 def deep_floor(grid, want):
@@ -551,23 +772,31 @@ def build_tfs(idx, cluts):
         for gx in range(GW):
             out += struct.pack("<HH", gx * 64, gy * 128)
             out += idx[gy * 128:(gy + 1) * 128, gx * 128:(gx + 1) * 128].tobytes()
-    assert len(out) == 8 + 512 * len(cluts) + 16388 * GW * GH <= TFS_SECTORS * 2048
-    return bytes(out).ljust(TFS_SECTORS * 2048, b"\0")
+    assert len(out) == 8 + 512 * len(cluts) + 16388 * GW * GH <= MAX_FILE
+    return bytes(out)
 
 
-def build_map(grid, host_row, host_exit):
+def build_map(grid, host_row, host_exit, tims=(), objects=b""):
+    """Header (offsets: setup, the 8bpp images, the object block, entities, collision; the images
+    and objects only when MAP_ENTRIES says n8 > 0), then the blocks in that order."""
     setup = (list((VP / 2).astype(int)) + list((VR / 2).astype(int)) + [v for l in LIGHTS for v in l]
              + [0, 0, 0, H_PROJ] + [-1] * 8 + [GW, GH] + list(range(GW * GH)))
-    setup_b = struct.pack("<%di" % len(setup), *setup)
     warps = np.zeros((6, 10), np.int16)
     warps[4:, :] = -1                                            # unused targets, as stock
     warps[:, 0] = (SPAWN[0], SPAWN[1], SPAWN[2], SPAWN_ROT, host_row, host_exit)
-    entity = warps.astype("<i2").tobytes() + struct.pack("<h", 0)  # no map Digimon
-    ent_off = 12 + len(setup_b)
-    coll_off = ent_off + len(entity)
-    out = struct.pack("<3i", 12, ent_off, coll_off) + setup_b + entity + grid.tobytes()
-    assert len(out) <= MAP_SECTORS * 2048
-    return out.ljust(MAP_SECTORS * 2048, b"\0")
+    blocks = ([struct.pack("<%di" % len(setup), *setup)] + list(tims) + ([objects] if tims else [])
+              + [warps.astype("<i2").tobytes() + struct.pack("<h", 0), grid.tobytes()])   # no map Digimon
+    offs, at = [], 4 * len(blocks)
+    for b in blocks:
+        offs.append(at)
+        at += len(b)
+    out = struct.pack("<%di" % len(blocks), *offs) + b"".join(blocks)
+    assert len(out) <= MAX_FILE
+    return out
+
+
+def sectors(blob):
+    return -(-len(blob) // 2048)
 
 
 # ---- package ---------------------------------------------------------------
@@ -577,7 +806,7 @@ def main():
     ap.add_argument("--bin", default=os.path.join(root, "disc", "Digimon World (USA).bin"))
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
     ap.add_argument("--art", default=os.path.join(root, "art", "newmaps", "glade.png"),
-                    help="painted backdrop (paint_newmap.py); the flat guide is used if it does not exist")
+                    help="painted art (paint_newmap.py); the flat guide is used if it does not exist")
     ap.add_argument("--preview", action="store_true", help="render previews only")
     a = ap.parse_args()
     prev = os.path.join(a.build, "newmap")
@@ -585,14 +814,13 @@ def main():
     pal = lambda c: np.stack([(c & 31) << 3, ((c >> 5) & 31) << 3, ((c >> 10) & 31) << 3], -1).astype(np.uint8)
 
     prims = scene()
-    rgb = guide(prims)
+    Image.fromarray(guide(prims, frame=PAINT).astype(np.uint8)).save(os.path.join(prev, "guide.png"))
     lab_map = labels(prims)
-    Image.fromarray(rgb.astype(np.uint8)).save(os.path.join(prev, "guide.png"))
-    painted = None
+    painted = fg = None
     if os.path.exists(a.art):
         art = Image.open(a.art).convert("RGB")
-        assert art.size == (BW, BH), "painted art must be %dx%d" % (BW, BH)
-        rgb = np.asarray(art, np.float32)
+        assert art.size == (PBW, PBH), "painted art must be %dx%d (the paint frame)" % (PBW, PBH)
+        rgb = np.asarray(art, np.float32)[CROP:CROP + BH]
         painted = classify(rgb, lab_map)
         gl, pg = np.isin(lab_map, GROUND), np.isin(painted, GROUND)
         iou = (gl & pg).sum() / (gl | pg).sum()
@@ -600,18 +828,34 @@ def main():
         if iou < MIN_GROUND_IOU:
             raise SystemExit("the painted art does not match the scene (ground IoU %.3f < %.2f): repaint it"
                              % (iou, MIN_GROUND_IOU))
+        fg = foreground_pixels(prims, painted)
     else:
-        print("no painted art at %s: using the flat guide" % a.art)
-    grid = collision(prims, painted)
+        print("no painted art at %s: using the flat guide, without foreground sprites" % a.art)
+        rgb = guide(prims)
+    grid, order = collision(prims, painted, fg)
     sx, sz = SPAWN[0], SPAWN[2]                  # tile maths as getTileTrigger (C truncation)
     assert grid[50 - int(sz / 100) - (sz > 0), int(sx / 100) + 50 - (sx < 0)] == 0, "spawn must be floor"
     assert (grid == 110).any(), "the warp strip back to the host must be reachable floor"
     idx, day = quantise(rgb, painted)
     cluts = [day, tint(day, (1.0, 0.78, 0.62)), tint(day, (0.42, 0.5, 0.78))]
     assert not (day[idx] == 0).any()
+    rects, pages = build_sprites(fg, order, idx, prims) if fg is not None else ([], [])
+    if rects:
+        bad = order_errors(grid, fg, order, rects)
+        grid[bad] = 0x80
+        print("dense order check: %d cells blocked" % bad.sum())
+        assert grid[50 - int(sz / 100) - (sz > 0), int(sx / 100) + 50 - (sx < 0)] == 0 and (grid == 110).any()
+    tims = [build_tim(pg, k, day) for k, pg in enumerate(pages)]
+    objects = build_objects(rects) if rects else b""
     for name, c in zip(("day", "dusk", "night"), cluts):
         Image.fromarray(pal(c)[idx]).save(os.path.join(prev, "backdrop_%s.png" % name))
     ov = pal(day)[idx].astype(float)
+    fgmask = np.zeros(idx.shape, bool)
+    for s in rects:
+        u, v, w, h = s["rect"]
+        fgmask[v:v + h, u:u + w] |= s["mask"]
+    Image.fromarray((fgmask * 255).astype(np.uint8)).save(os.path.join(prev, "fg_mask.png"))
+    ov[fgmask] = ov[fgmask] * 0.5 + np.array([255, 0, 255]) * 0.5
     tz, tx = np.nonzero(grid != 0x80)
     for cx, cz, g in zip(tx, tz, grid[tz, tx]):
         x, z = cell_centre(cx, cz)
@@ -621,15 +865,30 @@ def main():
     u, v = project(SPAWN)
     ov[int(v) - 3:int(v) + 4, int(u) - 3:int(u) + 4] = (255, 255, 0)
     Image.fromarray(ov.astype(np.uint8)).save(os.path.join(prev, "collision_overlay.png"))
-    print("walkable cells %d, warp cells %d, colours %d" % ((grid == 0).sum(), (grid == 110).sum(), len(np.unique(idx))))
-    # in-game test targets: three meadow spots, and a shore spot due south of the pond
+    print("walkable cells %d, warp cells %d, colours %d, foreground sprites %d (%d groups, %d texture pages)"
+          % ((grid == 0).sum(), (grid == 110).sum(), len(np.unique(idx)), len(rects),
+             len({s["group"] for s in rects}), len(pages)))
+    # in-game test targets: three meadow spots, a shore spot due south of the pond, and the floor
+    # cell behind the bush island that its sprite hides most of a character on
     meadow = [deep_floor(grid, w) for w in ((-1900, -1000), (300, 300), (1500, -2000))]
     shore, _ = shore_spot(grid)
     spec = dict(row=ROW, host_row=HOST_ROW, host_exit=HOST_WARP, spawn=SPAWN, strip_z=WARP_STRIP_Z,
                 camera=dict(vp=VP.tolist(), vr=VR.tolist(), h=H_PROJ, gw=GW, gh=GH),
                 path=PATH.tolist(), meadow=meadow, pond=dict(shore=shore, lobes=POND),
                 backdrop=os.path.join(prev, "backdrop_day.png"))
+    if rects:
+        gi = fg["groups"].index("island")
+        hidden = ((order["gid"] == gi) & order["occ"]).sum(1) * order["keep"]
+        hx, hz = cell_centre(order["cells"][int(np.argmax(hidden)), 1], order["cells"][int(np.argmax(hidden)), 0])
+        spec["fg"] = dict(count=len(rects), behind=(int(hx), int(hz)), via=deep_floor(grid, (hx, hz + 700)),
+                          mask=os.path.join(prev, "fg_mask.png"), samples=int(hidden.max()))
     json.dump(spec, open(os.path.join(prev, "spec.json"), "w"), indent=1)
+    mapb, tfsb = build_map(grid, HOST_ROW, HOST_WARP, tims, objects), build_tfs(idx, cluts)
+    assert sectors(mapb) + sectors(tfsb) <= MAP_SECTORS + TFS_SECTORS, \
+        "MAP %d + TFS %d sectors do not fit MGEN17's %d" % (sectors(mapb), sectors(tfsb), MAP_SECTORS + TFS_SECTORS)
+    print("MAP %d B (%d sectors), TFS %d B (%d sectors), %d of %d sectors"
+          % (len(mapb), sectors(mapb), len(tfsb), sectors(tfsb), sectors(mapb) + sectors(tfsb),
+             MAP_SECTORS + TFS_SECTORS))
     if a.preview:
         return 0
 
@@ -640,8 +899,18 @@ def main():
     files = {os.path.basename(n): (lba, size) for n, lba, size in listing}
     rd = lambda n: read_extent(f, *files[n])
     hexs = lambda b: " ".join("%02x" % x for x in b)
-    for name, sectors in ((FILE + ".MAP", MAP_SECTORS), (FILE + ".TFS", TFS_SECTORS)):
-        assert -(-files[name][1] // 2048) == sectors, name
+    slot = files[FILE + ".MAP"][0]
+    assert files[FILE + ".TFS"][0] == slot + MAP_SECTORS, "MGEN17's MAP and TFS must be adjacent"
+    for name, n in ((FILE + ".MAP", MAP_SECTORS), (FILE + ".TFS", TFS_SECTORS)):
+        assert sectors(bytes(files[name][1])) == n, name
+    exe = rd("SLUS_010.32")
+    ram = lambda addr: addr - struct.unpack_from("<I", exe, 0x18)[0] + 0x800      # PS-X EXE: text at 0x800
+    k = 0
+    while struct.unpack_from("<2i", exe, ram(FILE_OFFSET_TABLE) + 12 * k) != (slot, files[FILE + ".MAP"][1]):
+        k += 1
+        assert k < 1000, "MGEN17.MAP not found in FILE_OFFSET_TABLE"
+    fte = FILE_OFFSET_TABLE + 12 * k
+    assert struct.unpack_from("<2i", exe, ram(fte) + 12) == (slot + MAP_SECTORS, files[FILE + ".TFS"][1])
     dg = rd("DG.SCN")
     so = struct.unpack_from("<I", dg, 4 * SCRIPT)[0]
     assert dg[so + 2:so + 8] == bytes.fromhex("fe000800ffff") and dg[so + 8:so + 10] == b"\xfe\x00"
@@ -664,12 +933,14 @@ def main():
 
     pkg = os.path.join(a.build, "mods", "installed", "dw.newmaps", "1.0.0")
     os.makedirs(os.path.join(pkg, "assets"), exist_ok=True)
-    mapb, tfsb = build_map(grid, HOST_ROW, HOST_WARP), build_tfs(idx, cluts)
-    for name, blob in (("glade.map", mapb), ("glade.tfs", tfsb)):
+    ms = sectors(mapb)                          # our MAP, then our TFS, across MGEN17's 247 sectors
+    blobs = [("glade.map", slot, mapb.ljust(ms * 2048, b"\0")),
+             ("glade.tfs", slot + ms, tfsb.ljust((MAP_SECTORS + TFS_SECTORS - ms) * 2048, b"\0"))]
+    for name, _, blob in blobs:
         open(os.path.join(pkg, "assets", name), "wb").write(blob)
     section = (bytes([0xFB, 0]) + struct.pack("<HH", SCRIPT, ROW) + bytes([0x1E, 0, 0xF5, BGM_PSTAT])
                + bytes([0x5D, BGM]) + b"\xfe\x00")
-    row = FILE.encode().ljust(10, b"\0") + bytes([0, 0, FLAGS, 0, 0, LOADING_NAME])
+    row = FILE.encode().ljust(10, b"\0") + bytes([len(tims), 0, FLAGS, 0, 0, LOADING_NAME])
     mh_base = files["MAPHEAD.SCN"][0] * 2048
     out = ["# LOCAL ONLY (dev entrance, no save isolation). Generated by tools/gen_newmap.py.",
            "format_version = 12", 'id = "dw.newmaps"', 'version = "1.0.0"', 'name = "New Maps (dev)"',
@@ -680,23 +951,30 @@ def main():
            "[[feature]]", 'id = "glade"', 'name = "Hidden Glade"', 'description = "Dev build of the first authored map."',
            'group = "Dev"', "default_enabled = false",
            'conflicts = ["dw.1_5/dw15", "dw.newmaps.spike/spike"]', ""]
-    for name, lba, blob in (("glade.map", files[FILE + ".MAP"][0], mapb), ("glade.tfs", files[FILE + ".TFS"][0], tfsb)):
-        out += ["# our %s over %s's own sectors" % (name, FILE), "[[overlay]]", 'feature = "glade"',
+    for name, lba, blob in blobs:
+        out += ["# our %s in %s's sectors" % (name, FILE), "[[overlay]]", 'feature = "glade"',
                 'target = "disc_user"', "offset = %d" % (lba * 2048), 'file = "assets/%s"' % name,
                 'sha256 = "%s"' % hashlib.sha256(blob).hexdigest(), ""]
-    patches = [("MAP_ENTRIES[%d] = %s" % (ROW, FILE), 'target = "main_exe"\naddress = 0x%08X\nexpected = "%s"\nreplace = "%s"'
-                % (MAP_ENTRIES + ROW * 16, hexs(bytes(16)), hexs(row))),
-               ("MAPHEAD section %d body" % ROW, 'target = "disc_user"\noffset = %d\nexpected = "%s"\nreplace = "%s"'
-                % (mh_base + MH_NEW, hexs(bytes(len(section))), hexs(section))),
-               ("MAPHEAD section %d -> 0x%x" % (ROW, MH_NEW), 'target = "disc_user"\noffset = %d\nexpected = "%s"\nreplace = "%s"'
-                % (mh_base + p + 2, hexs(mh[p + 2:p + 4]), hexs(struct.pack("<H", MH_NEW)))),
-               ("dev entrance: %s warp %d -> map %d" % (HOST, HOST_WARP, ROW), 'target = "disc_user"\noffset = %d\nexpected = "%s"\nreplace = "%s"'
-                % (files[HOST + ".MAP"][0] * 2048 + host_map_off, hexs(stock_target), hexs(struct.pack("<h", ROW))))]
+    patch = lambda target, where, old, new: ('target = "%s"\n%s = %s\nexpected = "%s"\nreplace = "%s"'
+                                             % (target, "address" if target == "main_exe" else "offset",
+                                                ("0x%08X" if target == "main_exe" else "%d") % where,
+                                                hexs(old), hexs(new)))
+    patches = [("MAP_ENTRIES[%d] = %s, %d 8bpp images" % (ROW, FILE, len(tims)),
+                patch("main_exe", MAP_ENTRIES + ROW * 16, bytes(16), row)),
+               ("file table: %s.MAP at sector %d, %d bytes" % (FILE, slot, len(mapb)),
+                patch("main_exe", fte, exe[ram(fte):ram(fte) + 8], struct.pack("<2i", slot, len(mapb)))),
+               ("file table: %s.TFS at sector %d, %d bytes" % (FILE, slot + ms, len(tfsb)),
+                patch("main_exe", fte + 12, exe[ram(fte) + 12:ram(fte) + 20], struct.pack("<2i", slot + ms, len(tfsb)))),
+               ("MAPHEAD section %d body" % ROW, patch("disc_user", mh_base + MH_NEW, bytes(len(section)), section)),
+               ("MAPHEAD section %d -> 0x%x" % (ROW, MH_NEW),
+                patch("disc_user", mh_base + p + 2, mh[p + 2:p + 4], struct.pack("<H", MH_NEW))),
+               ("dev entrance: %s warp %d -> map %d" % (HOST, HOST_WARP, ROW),
+                patch("disc_user", files[HOST + ".MAP"][0] * 2048 + host_map_off, stock_target, struct.pack("<h", ROW)))]
     for why, body in patches:
         out += ["# " + why, "[[patch]]", 'feature = "glade"', body, ""]
     with open(os.path.join(pkg, "manifest.toml"), "w", newline="\n") as fh:
         fh.write("\n".join(out))
-    print("wrote %s (MAP %d B, TFS %d B before padding)" % (pkg, len(mapb.rstrip(b"\0")), 8 + 3 * 512 + 16388 * GW * GH))
+    print("wrote %s" % pkg)
     return 0
 
 

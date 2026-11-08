@@ -41,6 +41,7 @@ TRI_STATE, MENU_CURSOR, CURRENT_MENU, YES_NO = 0x80134D30, 0x80123E8C, 0x8013504
 GENERAL_BUFFER, MAP_TILE_DATA, MAP_COLLISION = 0x80010000, 0x8014F084, 0x801AF398
 GS_VIEWPOINT, VIEWPORT_DISTANCE, HOUR, CURRENT_FRAME = 0x80185BA8, 0x80134ED4, 0x80134EBC, 0x80134F08
 CAMERA = MAP_TILE_DATA + 7092                     # cameraX, cameraY (i16), width, height (i8)
+MAP_OBJECT_INSTANCE_COUNT = 0x80134D1C            # map objects (foreground sprites) loadMapObjects set up
 HOST_EXIT = (1858, -1142)                         # Coela Point's east-exit spawn
 STATE = ('format_version = 2\n\n[[package]]\nid = "%s"\nversion = "1.0.0"\n\n'
          '[[package]]\nid = "dw.vanilla.qol"\nversion = "1.0.0"\n\n'
@@ -68,7 +69,8 @@ def main():
     if a.map == "glade":
         spec = json.load(open(os.path.join(a.build, "newmap", "spec.json")))
         mp["spawn"] = (spec["spawn"][0], spec["spawn"][2])
-        mp["out"] = [mp["spawn"], (spec["path"][1][0], spec["strip_z"] - 400)]
+        # via the middle of the meadow: from the east side a straight line to the spawn snags on the log
+        mp["out"] = [tuple(spec["meadow"][1]), mp["spawn"], (spec["path"][1][0], spec["strip_z"] - 400)]
     out = os.path.join(a.build, "newmap_%s" % a.map)
     cards = os.path.join(out, "cards")
     os.makedirs(out, exist_ok=True)
@@ -210,8 +212,20 @@ def main():
         used = 8 + 512 * struct.unpack_from("<i", tfs, 4)[0] + 16388 * spec["camera"]["gw"] * spec["camera"]["gh"]
         ram = b"".join(g.d.read(GENERAL_BUFFER + o, min(0x4000, used - o)) for o in range(0, used, 0x4000))
         check(ram == tfs[:used], "our TFS is the one resident in GENERAL_BUFFER (%d bytes)" % used)
-        coll = struct.unpack_from("<i", mapf, 8)[0]
+        nw = struct.unpack_from("<i", mapf, 0)[0] // 4
+        coll = struct.unpack_from("<i", mapf, 4 * (nw - 1))[0]        # the last header word
         check(g.d.read(MAP_COLLISION, 10000) == mapf[coll:coll + 10000], "our collision grid is live")
+        if "fg" in spec:                                       # foreground sprites: objects and their image
+            n = struct.unpack("<h", g.d.read(MAP_OBJECT_INSTANCE_COUNT, 2))[0]
+            check(n == spec["fg"]["count"], "%d foreground sprites loaded as map objects" % n)
+            tim = struct.unpack_from("<i", mapf, 4)[0]          # first image: TIM, clut block, pixel block
+            pix = tim + 8 + struct.unpack_from("<I", mapf, tim + 8)[0]
+            px, py, pw, ph = struct.unpack_from("<4H", mapf, pix + 4)
+            row = max(range(ph), key=lambda r: sum(mapf[pix + 12 + 256 * r:pix + 12 + 256 * (r + 1)]))
+            hexrow = g.d.cmd("vram_peek", x=px, y=py + row, w=pw, h=1)["hex"]      # one halfword per 4 digits
+            live = b"".join(bytes.fromhex(hexrow[i:i + 4])[::-1] for i in range(0, len(hexrow), 4))
+            check(live == mapf[pix + 12 + 256 * row:pix + 12 + 256 * (row + 1)],
+                  "our sprite texels are in VRAM at (%d,%d)" % (px, py + row))
         vp = struct.unpack("<6i", g.d.read(GS_VIEWPOINT, 24))
         cam = spec["camera"]
         check(list(vp) == [int(v) // 2 * 2 for v in cam["vp"] + cam["vr"]]
@@ -251,8 +265,12 @@ def main():
         loaded_files()
         measure("arrival")
         vec = calibrate()
-        for i, t in enumerate(spec["meadow"]):                 # deep floor cells the generator picked
-            t = tuple(t)
+        meadow = [tuple(t) for t in spec["meadow"]]           # deep floor cells the generator picked
+        for i, t in enumerate(meadow):
+            # from the middle of the meadow: straight lines from elsewhere brush the rock or the stump,
+            # and the greedy walker can slide off them
+            if i != 1:
+                go(meadow[1], lambda: near(*meadow[1]), limit=60, vec=vec)
             ok = go(t, lambda: near(*t), limit=60, vec=vec)
             p = pos(TAMER)
             check(ok and screen() == 239, "walked the meadow to %s (at %s)" % (t, p))
@@ -276,6 +294,62 @@ def main():
               "pushing into the pond for 3 s stops %d units short of the water "
               "(%s -> %s, %d samples in the water)" % (gap, start, p, len(wet)))
         shot("pond")
+        if "fg" in spec:
+            behind_bush(vec)
+
+    def to_backdrop(p):
+        """World point -> backdrop pixel, with the engine's projection (INTERNALS.md 3.2)."""
+        cam = spec["camera"]
+        vp, vr = np.array(cam["vp"], float), np.array(cam["vr"], float)
+        f = (vr - vp) / np.linalg.norm(vr - vp)
+        r = np.array([f[2], 0, -f[0]]) / np.hypot(f[0], f[2])
+        d = np.cross(f, r)
+        q = np.array(p, float) - vp
+        return 64 * cam["gw"] + cam["h"] * (q @ r) / (q @ f), 64 * cam["gh"] + cam["h"] * (q @ d) / (q @ f)
+
+    def behind_bush(vec):
+        """Stand where the bush island's sprite should hide most of the tamer, and read the screen:
+        under the sprite the screen must show the backdrop (the bush is drawn over the tamer), and
+        just above it the tamer must still show."""
+        from PIL import Image
+        via, spot = tuple(spec["fg"]["via"]), tuple(spec["fg"]["behind"])
+        check(go(via, lambda: near(*via), limit=60, vec=vec), "north of the bush island %s" % (pos(TAMER),))
+        above = (spot[0], via[1])                              # then straight south: no sliding along the bush
+        go(above, lambda: near(*above, r=80), limit=30, vec=vec)
+        check(go(spot, lambda: near(*spot, r=100), limit=60, vec=vec), "behind the bush island %s" % (pos(TAMER),))
+        time.sleep(1.5)                                        # let the camera settle
+        cam0 = struct.unpack("<2h", g.d.read(CAMERA, 4))
+        p = pos(TAMER)
+        img = np.asarray(Image.open(shot("behind")).convert("RGB"), int)
+        cam1 = struct.unpack("<2h", g.d.read(CAMERA, 4))
+        check(cam0 == cam1 and img.shape == (240, 320, 3), "steady camera for the screenshot %s" % (cam0,))
+        # the backdrop as indices (from our TFS), recoloured with the live palette: right at any hour
+        cam = spec["camera"]
+        tfs = open(os.path.join(a.build, "mods", "installed", mp["package"], "1.0.0", "assets", "glade.tfs"), "rb").read()
+        at = 8 + 512 * struct.unpack_from("<i", tfs, 4)[0]
+        idx = np.zeros((cam["gh"] * 128, cam["gw"] * 128), np.uint8)
+        for k in range(cam["gw"] * cam["gh"]):
+            ty, tx = divmod(k, cam["gw"])
+            tile = np.frombuffer(tfs, np.uint8, 16384, at + 4 + 16388 * k).reshape(128, 128)
+            idx[ty * 128:(ty + 1) * 128, tx * 128:(tx + 1) * 128] = tile
+        hexrow = "".join(g.d.cmd("vram_peek", x=x, y=480, w=128, h=1)["hex"] for x in (0, 128))
+        clut = np.array([int(hexrow[i:i + 4], 16) for i in range(0, 1024, 4)])
+        rgb = np.stack([(clut & 31) << 3, ((clut >> 5) & 31) << 3, ((clut >> 10) & 31) << 3], -1)
+        ref = rgb[idx].astype(int)
+        mask = np.asarray(Image.open(spec["fg"]["mask"])) > 0
+        cx, cy = cam1
+        u, v = to_backdrop((p[0], 0, p[2]))
+        box = (slice(int(v) - 48, int(v) + 4), slice(int(u) - 16, int(u) + 17))   # the tamer, feet to head
+        scr = np.zeros(ref.shape, int)
+        scr[cy:cy + 240, cx:cx + 320] = img
+        diff = np.min([np.abs(np.roll(scr, dy, 0) - ref).max(-1) for dy in (-1, 0, 1)], 0)[box] > 24
+        under, over = mask[box], ~mask[box]
+        hidden = diff[under].mean() if under.any() else 1.0
+        check(under.sum() >= 80 and hidden < 0.05,
+              "the bush is drawn over the tamer: %d px of sprite in the tamer's box, %.1f%% of them show the tamer"
+              % (under.sum(), 100 * hidden))
+        check(diff[over].sum() >= 30, "the tamer still shows above the bush (%d px differ from the backdrop)"
+              % diff[over].sum())
 
     def time_of_day():
         """Our dusk and night palettes: renderMap starts the fade when HOUR reads 16,
