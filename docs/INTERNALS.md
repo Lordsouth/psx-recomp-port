@@ -28,7 +28,7 @@ player's own disc, or a map file built from our own scene and art (§3.2).
    decompilation.** Guessing an address produces a cheat that silently does
    nothing, or corrupts a save. Several inherited codes were wrong exactly this
    way (§6.3).
-2. **Overlay RAM is shared.** The game loads sixteen overlays into eight reused
+2. **Overlay RAM is shared.** The game loads sixteen overlays into nine reused
    memory slots, so a per-frame write into an overlay's address range will
    corrupt whichever overlay happens to be resident. Overlay changes must be
    **disc patches**, never RAM pokes.
@@ -114,7 +114,7 @@ did, and the only symptom was a table in guest RAM still reading its stock
 value in a live battle. If a callback appears not to exist, check the manifest
 before the code.
 
-Eight plugins live here:
+Eleven plugins live here:
 
 | File | What it does |
 |---|---|
@@ -124,8 +124,11 @@ Eight plugins live here:
 | `dw_ws_backdrop.c` | fade plate, parked HUD, the clock and field gauges as single widgets, the battle bars' slide table (§5) |
 | `dw_ws_camera.c` | both camera clamps, the tile-ladder shift, the load-time nudge (§5) |
 | `dw_ws_sliver.c` | the fifth backdrop tile column, as a VRAM sliver (§5) |
+| `dw_ws_world.c` | keeps a field frame wide through a synchronous tile reload (§5.0c) |
+| `dw_ws_weather.c` | copies snow and mist into the reveals (§5.0d) |
+| `dw_cheats.c` | the cheat list as launcher toggles; the codes stay in `cheats.txt` (§6) |
 | `dw_dw15.c` | moves the memory cards to `saves/dw15/` while Digimon World 1.5 is on (§4.4) |
-| `dw_newmaps.c` | keeps a new map off every memory card: a save made there names its host map (§3.2) |
+| `dw_newmaps.c` | keeps a new map out of a memory card's screen bytes: a save made there names its host map (§3.2) |
 
 `codegen_setup.c` is glue for the launcher build, not a plugin.
 
@@ -133,23 +136,27 @@ Eight plugins live here:
 
 ## 3. Map of the game
 
+[GAME.md](GAME.md) is the reference for how the game works. This document is about
+the port.
+
 Addresses verified against `dw_decomp` symbols and recomputed from the struct
 definitions. The EXE loads at `0x80090800`; `file_offset = vaddr - 0x80090800 + 0x800`.
+Citations like `map.c:4265` in this document are `dw_decomp` commit `aaf69a4`.
 
 ### Core tables
 
 | Symbol | Address | Shape |
 |---|---|---|
 | `DIGIMON_DATA` | `0x8012CEB4` | 180 × 0x34 — name, bones, radius/height, attribute, level, drop item/chance, 16 moves |
-| `EVO_REQ_DATA` | `0x8012ABEC` | 63 × 0x1C — evolution requirements, **indexed by target type** |
+| `EVOLUTION_REQS` (`EVO_REQ_DATA` in the port's tools and below) | `0x8012ABEC` | 63 × 0x1C — evolution requirements, **indexed by target type** |
 | `RAISE_DATA` | `0x801225BC` | 66 × 0x1C — meal times, energy, poop, favourite food, camera |
-| `EVO_GAINS_DATA` | `0x8012B2D0` | 66 × 0x0E — stat gains on evolving |
-| `EVO_PATHS_DATA` | `0x8012B66C` | 62 × 0x0B — `int8 from[5], to[6]`, `-1` terminated |
+| `EVOLUTION_STATS_GAINS` (`EVO_GAINS_DATA`) | `0x8012B2D0` | 66 × 0x0E — stat gains on evolving |
+| `EVOLUTION_PATHS` (`EVO_PATHS_DATA`) | `0x8012B66C` | 62 × 0x0B — `int8 from[5], to[6]`, `-1` terminated |
 | `DIGIMON_SKELETONS` | `0x8011CE60` | 180 pointers |
 | `PTR_DIGIMON_FILE_NAMES` | `0x8011D19C` | 180 pointers into the model-code string pool `0x80133B44` |
-| `ORIGINAL_TYPE` | `0x8012A84C` | 180 × int16 — battle-aura family |
+| `ORIGINAL_DIGIMON_TYPES` (`ORIGINAL_TYPE`) | `0x8012A84C` | 180 × int16 — battle-aura family, and the key every tech's EFE list is searched with: a row must be -1 (the species itself) or a type on the lists of its moves, or those moves abort their effect script |
 | `ITEM_PARA` | `0x801269DC` | 128 × 0x20 |
-| `MOVE_LEARN_CHANCES` | `0x80125FA4` | per **move**, not per type |
+| `MOVE_LEARN_CHANCES` | `0x80125FA4` | 58 × 3 — per **move** and per partner special slot, not per type |
 
 ### Live state
 
@@ -160,7 +167,7 @@ definitions. The EXE loads at `0x80090800`; `file_offset = vaddr - 0x80090800 + 
 | `SCRIPT_STATE` | `0x801BDED8` | `smth[212]`, `cards[33]`, `triggers[100]`, `pstats[256]` |
 | `COMBAT_DATA` | `0x8013D640` | fighter stride 0x168; invuln timer +0x26, cooldown +0x28 |
 | `NPC_ENTITIES` | `0x80155828` | 8 × 0x68; `bits` at +0x60 |
-| `IS_GAMETIME_RUNNING` | `0x80134E20` | one byte; zero freezes hunger, tiredness, ageing and lifespan together |
+| `IS_GAMETIME_RUNNING` | `0x80134E20` | one byte; zero stops the hunger, tiredness, ageing and lifespan ticks. Battles and training apply their own lumps of time, food, poop and lifetime regardless (`tamer.c:885-965`, `trn_reward.c:721-804`) |
 
 Selected `PARTNER_PARA` offsets, each recomputed by walking the struct:
 
@@ -172,7 +179,8 @@ Selected `PARTNER_PARA` offsets, each recomputed by walking the struct:
 +0x5E fishCaught     +0x72 upgradeBrainCounter
 ```
 
-`SCRIPT_STATE` sub-arrays: item-shop stock `0x801BDEDE` (78 bytes), cards
+`SCRIPT_STATE` sub-arrays: recycle-shop stock `0x801BDEDE` (`smth[6..83]`, 78
+bytes, by `RECYCLABLE_ITEMS` index; items lost on defeat land there), cards
 `0x801BDFAC`, triggers `0x801BDFCD` (bit N is byte `base + N/8`, mask
 `1 << (N%8)`), pstats `0x801BE031`. Recruitment uses trigger `0xC8 + digimonId`
 — and two of those flags *are* the gym upgrades (Kabuterimon → HP/Def/Speed,
@@ -182,16 +190,21 @@ Kuwagamon → Off/MP/Brain).
 
 `MAP_ENTRIES` (`0x801292D4`, 255 × 16: `filename[10]`, n8bpp, n4bpp, flags,
 doorsId, toiletId, loadingName) has 11 empty rows: 239–246 and 250–252. A
-screen id is a u8, so these 11 are all the stock engine offers without a hook
-layer. `gen_newmap_spike.py` fills row 239 with the unused Mt. Infinity floor
+screen id is a u8, so these 11 are all the empty rows the stock engine offers
+without a hook layer. Rows 50 and 61 name files not on the disc and row 65 names
+row 232's file. No warp reaches those three, so they may be reusable, though two
+`TELEPORT` ops were not traced. `gen_newmap_spike.py` fills row 239 with the unused Mt. Infinity floor
 MGEN17. `verify_newmap.py --map spike` then walks in through a stock exit, wins
 a battle, saves on 239, walks out, relaunches, and continues onto 239. Both
 runs pass. §3.2 puts an authored map on the same row.
 
 What a new row needs, each verified in that run:
 
-- **The row.** Files resolve by basename only (`lookupFileTable`), so the
-  `\MAP\MAPnn\` folder `buildMapPath` builds never matters. n8/n4 must match the
+- **The row.** The MAP and TFS, like every read through `readFile`, resolve by basename
+  only (`lookupFileTable`), so the `\MAP\MAPnn\` folder `buildMapPath` builds never
+  matters for them. `DG.SCN`, async overlays, `BOSS_EFE.TMD`, EFE files and movies
+  use `CdSearchFile` on the ISO directory instead, and `SHOP_REL` loads both ways.
+  n8/n4 must match the
   MAP header word count (3 words means 0/0). Keep flag `0x40` when the TFS has a
   single CLUT, because the day/night swap reads `MAP_CLUTS[1..2]`. Set `0x80` for
   map Digimon. The low 5 bits are the sound bank (< 22). loadingName must be < 70.
@@ -203,17 +216,23 @@ What a new row needs, each verified in that run:
   battle. Never ship a free row on the filler. The spike moves the section
   into the zero tail of the file's last sector (MAPHEAD ends at `0x606E`, and
   the buffer is `0x61A8`) and repoints its table entry.
-- **Exits.** A MAP's entity block starts with `MapWarps` (10 × spawn xyz,
-  rotation, targetMap, targetExit). Collision is 100×100 bytes. 0 is floor,
-  `0x80` is wall, and 110+n fires warp n. 51–109 run DG sections instead; a
-  missing section makes the script pointer NULL. MGEN17's spawn 2 is inside a
-  wall.
-- **Wild battles** need four parts:
-  - map-Digimon records after the warp count (flag `0x80`; 84 bytes plus 6
-    per waypoint, layout in `loadMapDigimon`)
+- **Exits.** A MAP's entity block starts with `MapWarps`: six parallel `i16[10]`
+  arrays (spawn x, y, z, rotation, targetMap, targetExit), so slot n's fields are
+  10 entries apart. Collision is 100×100 bytes. 0 is floor, any byte with bit 7
+  is wall, and 110+n fires warp n. 51–79 run a DG section on step and 80–109 only
+  on a fresh confirm press; a missing section makes the script pointer NULL. 120
+  runs MAPHEAD section `0x4E2` when the partner needs the toilet, and 1–50 and
+  121–127 do nothing. MGEN17's spawn 2 is inside a wall.
+- **Wild battles** need three parts:
+  - map-Digimon records after the 120 bytes of `MapWarps` and an i16 Digimon
+    count, which is read only with flag `0x80` (84 bytes plus 6 per waypoint,
+    layout in `loadMapDigimon`)
   - `LOAD_DIGIMON` and `SET_DIGIMON type slot autotalk` in the MAPHEAD section
   - a DG section numbered by the record's scriptId that runs `START_BATTLE`
-  - the player inside the record's trackingRange (400 for MGEN11's)
+
+  Contact with autotalk 1 runs that section (autotalk 0 needs a confirm press).
+  trackingRange only drives looking and chasing, and starts no fight: 385 stock
+  records have 0.
 
   The spike borrows MGEN11's script `0xB9` and a weakened copy of its Piddomon
   record. That script spawns MGEN11's chest from its arrival section and sets
@@ -225,12 +244,12 @@ What a new row needs, each verified in that run:
   changes.
 - **Saves** store the screen, the exit and the exact position. Continue reruns
   the MAPHEAD section. A save made on a new row cannot load once the mod is
-  off, so a shipped map must keep the row off the cards (§3.2).
+  off, so a shipped map must keep the row out of the cards' screen bytes (§3.2).
 
 The generated manifest copies stock bytes (MGEN17's warps, MGEN11's record).
 It is written into `build/mods/installed/` and never committed. An authored
-map ships its own MAP/TFS and MAPHEAD section (the glade's binds stock DG script
-118, a bare END, until it has one of its own), and needs none of those bytes.
+map ships its own MAP/TFS, MAPHEAD section and DG script, and needs none of those
+bytes.
 
 ### 3.2 An authored map (M1, verified in game)
 
@@ -291,20 +310,24 @@ is read only when `MAP_ENTRIES` n8 or n4 is nonzero. The header words are then:
 setup, n8 x 8bpp TIM, n4 x 4bpp TIM, objects, entities, collision
 ```
 
-- Each 8bpp TIM is uploaded at its pixel rect. The stock maps use
-  `(384 + 128k, 0)`, 128 halfwords wide (k = 0..2; map tiles stream at x 768
-  and up).
+- Each 8bpp TIM is uploaded at its pixel rect. The stock maps' commonest shape is
+  `(384 + 128k, 0)`, 128 halfwords wide (k = 0..2). Some are 64, 256, 320 or 384
+  wide, all inside x 384-767, y 0-255 (map tiles stream at x 768 and up).
 - A CLUT rect at row 480 (`0x1E0`) is not uploaded. The sprite then samples the
   live palette, so dusk and night apply to it.
 - The object block is `i16 nDefs`, then `nDefs` × 9 `i16` (texX, texY, w, h,
   anchor x, y, z, clut, trans), then `i16 nInst`, then `nInst` × 19 `i16`
-  (8 sprite ids, 8 frame times, x, y, flag; at most 188).
+  (8 sprite ids, 8 frame times, x, y, flag; at most 188). Flag 1 hides an
+  instance and is the cleared default.
 - texX/256 picks the texture page.
-- clut −1 means row 480. trans 4 means opaque.
+- clut −1 means 8bpp on row 480, 0–15 means 4bpp at `(16*clut, 486)`, and 16 and
+  up means 8bpp on row `clut + 468`. trans 4 means opaque.
 - x, y is the backdrop pixel of the sprite's top-left corner.
 - The OT slot is the anchor's GTE screen z >> 2, the same scale
   `GsSortObject4J` uses for models (shift 2). That is what puts a sprite in
-  front of or behind a character.
+  front of or behind a character. Its minimum is `0x23`, `0x1000` and up becomes
+  `0xFF6`, an anchor y of `0x2710` forces `0xFFE`, and instance flag `0x80` forces
+  `0x1E` (`overworld.c:449-462`).
 
 The painter (`paint_newmap.py`, ComfyUI through the studio's `comfy.py`
 client):
@@ -341,8 +364,10 @@ q = P - vp          u = 64W + h*(q.r)/(q.f)    v = 64H + h*(q.d)/(q.f)   (stitch
 Camera follow never changes the view. It scrolls the backdrop and the 3D
 layer together, keeping `cameraX + DRAWING_OFFSET_X = 64W`.
 
-The TFS layout is `u32 W|H<<16`, `u32 nCLUT`, the CLUTs, then for each grid
-slot a `u32` tile header and 128×128 8bpp pixels. Its size must stay within
+The TFS layout is a `u32` the game skips (`W|H<<16` on most stock maps, but not on
+13, MAYO10 and TROP03 among them), `u32 nCLUT`, the CLUTs, then for each grid slot
+that is not -1 a `u32` the game skips and 128×128 8bpp pixels. A -1 slot takes no
+bytes. The file must stay within
 241 sectors (`0x78800`), the window from `GENERAL_BUFFER` up to
 `TEXTURE_BUFFER`, which allows 30 tiles with 3 CLUTs. Flag `0x40` is needed
 when there is only 1 CLUT. Avoid -1 grid slots: `updateTileRow` checks the
@@ -350,17 +375,50 @@ wrong row and can blank real tiles.
 
 **Delivery** needs no runtime change. Two file-backed `disc_user` `[[overlay]]`s
 lay our MAP and TFS across MGEN17's 247 adjacent sectors (MAP, then TFS, then
-zero padding). Two guarded `main_exe` patches move the files'
+zero padding), and a third lays the DG script over the start of slot 118. Two guarded `main_exe` patches move the files'
 `FILE_OFFSET_TABLE` entries (`0x8011FE1C`, 12 bytes each: sector, size, name
 pointer; `lookupFileTable` resolves names there) to match. Overlays need
 `disc_sha256` on the `[[target]]`. Past the end of the disc a `disc_user`
-overlay reads as zeros, and every other sector belongs to a file the game uses
-(no slack between files), so MGEN17's own sectors are all there is: a 30-tile
+overlay reads as zeros. The disc does hold free space: `MMM.DAT` (LBA 148668) is
+13,500 all-zero sectors that nothing reads. But that route has never been run in
+game (`docs/GAME.md` 2.3), so the glade stays on MGEN17's own sectors: a 30-tile
 TFS leaves 2 KB, and the 24-tile backdrop leaves room for 2 texture pages.
-The row, the MAPHEAD section and the entrance are small guarded patches. The
-MAPHEAD section binds DG script 118, whose only section is a bare END. The
-MAPHEAD tail sectors overlap the `dw.1_5` delta, so the feature conflicts with
-1.5.
+The row, the MAPHEAD section and the entrance are small guarded patches. The DG
+script is a file because a patch must repeat the stock bytes it replaces, and those
+are live script bytecode; `disc_sha256` and the generator's asserts guard it. The MAPHEAD tail sectors overlap the `dw.1_5` delta, so the feature
+conflicts with 1.5.
+
+**The secret fight.** The MAP's entity block has one record, H-Kabuterimon, which
+the game places nowhere, at the end of the dirt path: HP 8800, MP 16000, Off 820,
+Def 640, Speed 520, Brains 400 (`BOSS` in `gen_newmap.py`). `tools/fight_sim.py` puts
+it between the game's second-hardest fight and its final boss, and real unassisted
+fights agree that it is hard (`docs/GAME.md` 7.17, 7.18).
+`followMode` 2 turns it to face
+the player without walking, and autotalk 0 means only a confirm press next to it
+starts the fight, so no one walks into it by accident. Its hit radius is wide: the
+tamer stops about 400 units from its centre.
+
+DG script slot 118 has room for its script. Stock, the slot holds one bare END
+section, and the rest of its 2 KB is junk nothing reads. Row 122 (TUNN07_2) binds
+the same slot, but has no map Digimon and no script tiles, so it only ever runs
+the END. `boss_script()` keeps that END as the arrival section and adds section 5:
+pause, the boss's two lines, close the box, wait a frame, `START_BATTLE`. Fleeing
+stays allowed, which no stock press-to-fight battle does, but it shares the code
+path of any other fled battle.
+
+The fight itself sets no triggers. A loss writes what any stock loss writes:
+`MAPHEAD` section 0x4DE sets trigger 0x29 (the next map load clears it), and lives
+and the battle counters change. The boss is back on every visit: winning only
+clears `isOnMap` until the map next loads. The outcomes:
+
+| Outcome | What happens |
+|---|---|
+| Win | It runs off along the bearing to (3400, 0, 1150), read once: east into the foliage, unless the fight ended east of that. It pays 5000 bits, and the map's art and collision are as they were. Happiness +2, tiredness +5 |
+| Flee | `PREVIOUS_SCREEN`/`PREVIOUS_EXIT` send the player to the host's side of the entrance. Happiness -10, discipline -6, tiredness +7 |
+| Lose | Happiness -30, discipline -20, `count*30/100` of the filled item slots and one life, then Jijimon's house, as `MAPHEAD` section 0x4DE decides |
+
+Every outcome also moves the clock 20 minutes and runs down food and the poop timer.
+`docs/GAME.md` 7.14 has the full table.
 
 `verify_newmap.py --map glade` proves the game loaded our files, from memory:
 - our TFS is resident in `GENERAL_BUFFER`
@@ -382,6 +440,15 @@ taken against our own backdrop under the live camera match best at offset (0,0) 
 within 1 px. It tests the bundled package, so rebuild after regenerating: it stops
 if the build's copy differs from `mods/preloaded/packages`.
 
+The `fight` mode plays the secret fight on a fresh card, with a maxed partner so
+the outcome is the one under test: standing next to the boss starts nothing,
+confirm opens its dialogue, the boss uses all four moves in a real battle (the test
+rewrites both sides' HP and MP on every poll, so it is not an unassisted fight), and
+then it is beaten (forced to 1 HP first), fled from and lost to in turn. After the win it repeats the map
+checks above and saves, and it comes back at full strength on the next visit. It
+last visits row 122. `--wide` runs the same at 21:9 with the Expanded Roster on.
+It does not judge the difficulty.
+
 **The entrance** adds an exit and takes none away. On MAYO03 (row 2, Native
 Forest), floor reaches a notch in the north edge under a lit lane between the
 bushes. MapWarps slot 4 (free in stock) gets the return spawn and targets row 239,
@@ -393,11 +460,16 @@ file, so no story variant needs the same edit. The `_2` map files are a trap:
 MAYO01_2 and MAYO02_2 (rows 110/111) are variants of each other, the screen between
 MAYO01 and MAYO00, picked by trigger 106.
 
-**Saves.** `dw_newmaps.c` keeps row 239 off every card, so the cards stay stock:
-with the mod off, every card still loads. Every save goes through `writeSavegame`
+**Saves.** `dw_newmaps.c` keeps row 239 out of every card's screen bytes, so with
+the mod off, every card still loads. A poop pile dropped on the glade would also save
+its map in the card's pile table (`partner_impl.c:1283`, `main_menu.c:5108`), so the
+hook writes a free slot there instead: the pile stays in play and is gone after
+Continue. Every save of a game in play goes through `writeSavegame`
 and is then summed by `createSavegameChecksum` (`0x80112D34`, a function entry
-hook filtered by return address, because the load paths sum too). The hook runs
-between the two and rewrites only the save buffer, so play goes on where it is:
+hook filtered by return address, because the load paths sum too, and so does
+new-file creation, which writes the default payload without `writeSavegame`). The
+hook runs between the two and rewrites only the save buffer, so play goes on where
+it is:
 - A save made on 239 names the host, a stock exit and the spawn just outside the
   entrance, read from slot 1 of the map's own warp table (no cell is 111, so it
   never fires as a warp). The position, partner position and waypoint tiles move
@@ -413,7 +485,7 @@ would hide a player's existing run behind an optional side area.
 239 holds the patched row and file table in RAM, and must not load without the plan
 that serves the overlays.
 
-**The directory records move too.** The game finds files through
+**The directory records move too.** The game finds the MAP and TFS through
 `FILE_OFFSET_TABLE`, but `dw_ws_sliver.c` reads the TFS through the ISO directory
 (`psx_mod_read_disc_file`). With only the table patched it read our MAP as a TFS,
 its bank failed, and 21:9 showed black at the map's edges. So both records are
@@ -421,17 +493,18 @@ patched, as `mod_runtime.cpp` documents for relocating a file. New rows beyond 2
 would hit a second trap there: it builds `\MAP\MAP<id/15+1>\`, and MGEN17 only
 happens to live in MAP16.
 
-**It ships** in `mods/preloaded/packages/dw.newmaps/1.0.0/`, with `glade.map` and
-`glade.tfs` on `verify_setup_package.py`'s allowlist. It is the first package with
+**It ships** in `mods/preloaded/packages/dw.newmaps/1.0.0/`, with `glade.map`,
+`glade.tfs` and `glade.dg` on `verify_setup_package.py`'s allowlist. It is the first package with
 a `disc_sha256` on its `[[target]]`, so on any other image ticking it refuses the
 plan. A stale `build*/mods/installed/dw.newmaps` silently shadows the bundled copy
 on a dev machine: delete it. None of the release gates reads `[[overlay]]`, so an
 overlap with one only surfaces when the runtime resolves the plan.
 
 Still to do:
-- its own DG script for NPCs, battles and items. Anything it sets persists on
-  shared cards and must be inert with the mod off; audit trigger ids with
-  `tools/scan_trigger_ids.py`
+- NPCs and items. Anything the DG script sets persists on shared cards and must
+  be inert with the mod off. Audit trigger ids with `tools/scan_trigger_ids.py`, but
+  it sees only scripts, so it calls the bands C owns free (`docs/GAME.md` 4.8). Ids
+  627-639 and 641-649 are free of scripts, C and plugins
 - foreground sprites for the rocks, stump and log (their collision comes from
   the painting, so a sprite would need the painted footprint)
 
@@ -548,13 +621,14 @@ entry patch.
 **Slot completion.** Guarded data patches: the `DIGIMON_DATA` record (the
 game's own Machinedramon data, attribute set to Virus), the skeleton pointer
 (`NULL → 0x8011CBC0`), the model-code pointer (`tAKA → MUGE`), the battle-aura
-family (`ORIGINAL_TYPE[114] = 115`), evolution branches (below), and the
-raised-flag guard at `0x800FF7FC` widened from 63 types to 180.
+family (`ORIGINAL_TYPE[114] = 115`) and evolution branches (below). The raised-flag
+guard at `0x800FF7FC` is not patched: `dw_roster_flags.c` replaces the function (§9).
 
 #### 4.1.2 Only a Champion can be an evolution source
 
-The evolution dispatch at `0x800A9150` is a level chain — Fresh (age ≥ 6),
-In-Training (≥ 24), Rookie (≥ 72), Champion (≥ 144) — and it **ends there**.
+The evolution dispatch at `0x800A9150` is a level chain on `evoTimer` in hours,
+not `age`, which counts days — Fresh (≥ 6), In-Training (≥ 24), Rookie (≥ 72),
+Champion (≥ 144, plus a mode 3 special roll at exactly 360) — and it **ends there**.
 There is no Ultimate branch, so an Ultimate partner never evolves again.
 
 0.2.0 shipped Machinedramon hung off **Megadramon** and **MetalGreymon**, both
@@ -599,15 +673,19 @@ Only the `rs` field changes (`$at` → `$zero`) — one byte of the four. Items
 below `0x7D` left two instructions earlier and items `0x80`+ take this very
 branch already, so nothing else is affected.
 
-**`HAS_USED_EVOITEM` (`0x80134E52`) had to be fixed too.** The item sets it, and
-`EVL_scaleBaseStats` returns early while it is set (`evl.c:734`), skipping the
-base-stat rescale. It is cleared only when a partner is initialised
-(`partner_impl.c:124`) — so after one item evolution, every *later* natural
-evolution silently skips its rescale for the rest of the playthrough. Vanilla
-never exposed this because the items were unreachable. `dw_roster.c` clears it
+**`HAS_USED_EVOITEM` (`0x80134E52`) had to be fixed too.** Every evolution item
+that passes its level check sets it (`item.c:2205-2211`), stock items 71-114
+included. While it is set, `EVL_scaleBaseStats` returns early (`evl.c:1497`),
+skipping the base-stat rescale, and natural evolutions also get no stat gains,
+Tamer levels or +96 hour Ultimate bonus (`evl.c:1362`, `1415`). The only clear is
+in `initializeStatusObjects` (`partner_impl.c:427`), called once at boot
+(`main.c:3408`) — so after one item evolution, every *later* natural evolution
+silently skips all of that until the game is reset, in the stock game too.
+`dw_roster.c` clears it
 from the per-VBlank callback once the sequence is fully over (partner idle,
 control returned, game time running) — not mid-sequence, which would rescale
-the item evolution itself, the very thing the flag exists to suppress.
+the item evolution itself, the very thing the flag exists to suppress. That fix
+is absent when the roster is off.
 
 Verified end to end by `tools/dwtest.py item`, which drives the real inventory
 UI rather than poking evolution state: all three items fed to a level-5
@@ -625,9 +703,10 @@ control returned and the flag cleared.
 | Tekkamon | 90 | Kokatorimon | 35 |
 | WaruSeadramon | 112 | Seadramon | 40 |
 
-`calculateRequirementScore` (`evolution.c:303`) offers four points and requires
-three: care mistakes, a **hard ±5 weight window**, all six stats at once, and
-one bonus from digimon/discipline/happiness/battles/techs. Weight is therefore
+`calculateRequirementScore` (`evolution.c:928`) offers four points and requires
+three: care mistakes, a **hard ±5 weight window**, all six stats at once (a level
+3 target instead treats its stat fields as flags and tests the partner's highest
+stat), and one bonus from digimon/discipline/happiness/battles/techs. Weight is therefore
 the game's own steering mechanic, and each new species gets a window distinct
 from the ones its source already offers. The four dark variants require care
 mistakes as a *minimum* (flags bit4 clear) — a neglect path no stock Ultimate
@@ -659,7 +738,7 @@ threshold reads zero).
 string `"Give it all you "`, and two disc patches rewrote those bytes. Correct
 for one slot, unworkable for 51 — and it carried a bug. The patch rewrote only
 byte `[0]` of `"e "`, so byte `[1]` silently inherited the string's space
-(`0x20`). That byte is the frame the training impact lands on: `trn_off.c:145`
+(`0x20`). That byte is the frame the training impact lands on: `trn_off.c:137`
 increments a counter per frame and compares it with `==` before firing the hit
 FX. Machinedramon's wind-up therefore ran 32 frames where every other user of
 animation 46 uses 10, and outside the `0x08..0x1E` range of the whole stock
@@ -707,17 +786,20 @@ that actually run the minigame, and a fully exhausted partner still earns almost
 nothing.
 
 **Training Multiplier** (2×/3×/5×/10×). `PARTNER_PARA` carries the game's own
-boost trio — flag, value, timer — that boost foods set; gains scale by
-`value / 10` while the **flag** is set (the timer is not consulted).
+boost trio — flag, value, timer — that boost foods set. The **flag** is a per-stat
+bit mask (1 Off, 2 Def, 4 Speed, 8 Brains, 0x10 HP, 0x20 MP), and a stat's gain
+scales by `value / 10` while its bit is set (the timer is not consulted).
 `tickPartnerNormal`'s expiry block at `0x800A9034` clears flag and timer when
 the timer runs out; four patched instructions make it *write* the boost
-instead. The base register is established four instructions earlier and is not
+instead, with all six bits set. The base register is established four instructions earlier and is not
 clobbered — verified by disassembly. A real boost item still wins while its own
 timer runs.
 
 **Lucky Reels.** Before each spin the machine rolls an assist level from a
-ten-byte table (`00 00 00 00 00 01 01 01 01 02`): half the time no help, and
-only one roll in ten makes it actively scan for a seven. Filling the table with
+ten-byte table (`00 00 00 00 00 01 01 01 01 02`). Half the time (level 0) the third
+reel is pushed off a would-be triple, so no triple lands. Level 1 helps the reels
+match but pushes the third off 7-7-7. Only one roll in ten (level 2) makes it
+actively scan for a seven, and only that can land triple sevens. Filling the table with
 the highest level makes it hunt every spin, so the reels genuinely land on
 jackpots and the player still stops them. A fair-play alternative to Perfect
 Training. Two `disc_user` patches.
@@ -936,9 +1018,10 @@ their item (control: 3 of 18). With Evolution Unbound (1.5) on relaxed,
 Flamedramon's walls of 100 become 75: stats of 75 evolve, 74 do not, both from
 the boot copy and after a reload from disc.
 
-**Saves.** `save_compatibility = "isolated"` is declarative only; the runtime
-does not act on it. `dw_dw15.c`'s activation callback calls
-`psx_mod_set_memcard_subdir("dw15")`, so the cards become
+**Saves.** `save_compatibility = "isolated"` scopes savestate slots to the plan
+(§3.2) and leaves memory cards alone. `dw_dw15.c`'s static constructor calls
+`psx_mod_register_memcard_subdir("dw.dw15", "dw15")`, and activation applies that
+while the plan selects the plugin, so the cards become
 `<memcard_dir>/dw15/card1.mcd` and `card2.mcd` (an explicit card path keeps its
 file name inside a `dw15/` folder next to it). Activation runs after every
 launcher session and before the cards are opened, and the request is cleared
@@ -972,7 +1055,8 @@ which is what W2 below exists to fight — does not arise.
 
 **A player cannot select squash.** It is what shipped through 0.3.1, but the
 mode is fixed at codegen (`game.toml [widescreen] native_wide`), and the mod
-offers only an aspect. Sections 5.1 and 5.2 describe squash and are kept
+offers only an aspect. The untitled text at the end of 5.0g and section 5.2
+describe squash and are kept
 because the code is still there and still gated, not because anyone can turn
 it on.
 
@@ -1254,7 +1338,8 @@ Measured at 16:9, OpenGL headless (`--headless-opengl`) unless stated:
   with no refusal lines, banks drew (5 defined, 5455 frames), reveals on maps
   0, 69 and 204 at 9 stops: median 0 luma from the art. Savestates could not
   be taken under 1.5 in this build with or without widescreen, so the A/B
-  there is not done.
+  there is not done. That was a Windows path-length limit, fixed since in the
+  framework (`fec50795`); the A/B has not been rerun.
 * **After a real flee** the shots are the first three field frames on 204;
   walking on from there took the tamer through a door.
 
@@ -1619,8 +1704,8 @@ The published corpus for this game (36 CMGSCCC codes and everything derived
 from it) contains **no training codes at all** — no perfect training, no
 multiplier, no gym or boost codes. Everything in the training and city sections
 was derived from the decompilation and, as far as we can tell, exists nowhere
-else. Highlights: freeze the game clock (one byte stops hunger, tiredness,
-ageing and lifespan together), perfect condition, always carry the Training
+else. Highlights: freeze the game clock (one byte stops the hunger, tiredness,
+ageing and lifespan ticks; battles and training still apply theirs), perfect condition, always carry the Training
 Manual (+10% to every training result), everyone moves to File City (which also
 grants both gym upgrades), item shop stocks 99 of everything.
 
@@ -1651,10 +1736,10 @@ was still wrong, because nothing had checked what READS it.
 | Code | Was | Now | Why |
 |---|---|---|---|
 | Press Square to lay a pile of poop | `80138460 FFFF` | `30138460 0008` | The write set every condition bit at once — hungry, injured, sick, needs-toilet and nine undefined bits — in a field saved to the memory card. Only 0x08 is "needs the toilet". The pad gate was left alone; see below |
-| Always have Finish available | `8013D65A 0AF1` | goal and progress both `0001` | The gate is an EQUALITY (`battle_main.c:650`) against `finisherGoal = 3000 - Speed` (`battle_setup.c:100`). 2801 matches only at Speed 199; at any other Speed the code made Finish permanently **un**available |
+| Always have Finish available | `8013D65A 0AF1` | goal and progress both `0001` | The gate is an EQUALITY (`battle_tick.c:178`, for enemies `battle_main.c:620`) against `finisherGoal = 3000 - Speed` (`battle_setup.c:116`). 2801 matches only at Speed 199; at any other Speed the code made Finish permanently **un**available |
 | Partner takes no damage | `8013D666 03E8` | `8013D66E 0000` | `+0x26` is `invulnerableTimer`, the post-hit recovery countdown — pinning it meant the first hit still landed and the fighter never recovered. Damage accumulates in `hpDamageBuffer` (+0x2E) and effective HP is `currentHP - hpDamageBuffer` |
-| Best Happiness / Best Discipline | `00AA` (170) | `0064` (100) | `tickConditionBoundaries` clamps both to 100 every frame, and three evolution branches test `== 100` exactly (`evolution.c:260-267`), so 170 silently blocked them |
-| Have all cards | `00FF` ×33 | `0099` ×33 | Cards are packed nibbles, two per byte (`script_ops.c:416`), and the game never counts past 9 (`:374`). `FF` put 15 in both halves |
+| Best Happiness / Best Discipline | `00AA` (170) | `0064` (100) | `tickConditionBoundaries` clamps both to 100 every frame, and three evolution branches test `== 100` exactly (`evolution.c:885-892`), so 170 silently blocked them |
+| Have all cards | `00FF` ×33 | `0099` ×33 | Cards are packed nibbles, two per byte (`script_interp.c:2489`), and the game never counts past 9 (`:1146`). `FF` put 15 in both halves |
 | Smaller aggro radius | (name) | renamed | It writes `DIGIMON_DATA[0].radius`, and record 0 is named "main character" — the player's own radius, which is also the drop-shadow size and half the interaction box |
 
 And three were deleted outright rather than fixed:
@@ -1686,9 +1771,9 @@ game's own code rather than assuming:
 
 | Evidence | Conclusion |
 |---|---|
-| `inventory.c:766-773` `moveMenuCursor`: 0x1000 moves a menu cursor **up**, 0x4000 moves it **down** | those two are the D-pad, not face buttons |
-| `map.c:1272`: newly-pressed 0x40 extends the interaction box along the way the player faces | 0x40 is **Cross** |
-| `script_common.c:404+`: 0x40 confirm, 0x10 cancel, 0x1000/0x4000 up/down, 0x800 Start | the PsyQ PADL/PADR layout throughout |
+| `inventory.c:1026-1033` `tickInventoryOptionSelector`: 0x1000 moves a menu cursor **up**, 0x4000 moves it **down** | those two are the D-pad, not face buttons |
+| `map.c:3764-3778`: newly-pressed 0x40 extends the interaction box along the way the player faces | 0x40 is **Cross** |
+| `script_common.c:830-869`: 0x40 confirm, 0x10 cancel, 0x1000/0x4000 up/down, 0x800 Start | the PsyQ PADL/PADR layout throughout |
 
 So: Triangle 0x10, Circle **0x20**, Cross 0x40, Square **0x80**; Up 0x1000,
 Right 0x2000, Down 0x4000, Left 0x8000. A `D0` gate on the raw word inverts
@@ -1696,7 +1781,7 @@ that, giving `FFDF` for Circle and `FF7F` for Square — the values that were
 already there.
 
 What made the mistake possible is that the wrong reading is *self-consistent*:
-under the hardware mask, `map.c:1998-2001`'s 0x1000/0x2000/0x4000/0x8000 reads
+under the hardware mask, `map.c:4475-4478`'s 0x1000/0x2000/0x4000/0x8000 reads
 as "the camera follows while a face button is held", which is odd but not
 obviously absurd. Under the right one it reads as "while a direction is held",
 which is obviously correct. **A convention that merely fits is not evidence.**
@@ -1724,7 +1809,7 @@ The pad buffer is worth knowing because this sweep got it wrong (§6.3c).
 value uses the PsyQ layout, not the raw hardware mask.** Circle is `0x20`,
 Square `0x80`, Cross `0x40`, Triangle `0x10`; the D-pad is `0x1000`/`0x2000`/
 `0x4000`/`0x8000`. So a `D0` gate on the raw word is the inverse: `0xFFDF`
-for Circle. Derive it from `inventory.c:766-773` and `map.c:1272`, never from
+for Circle. Derive it from `inventory.c:1026-1033` and `map.c:3764-3778`, never from
 the hardware convention.
 
 ---
@@ -1768,7 +1853,10 @@ sandbox memory card seeded from `saves/`; none of them touches your own saves.
 | `verify_model.py` | are a model file's bytes resident in guest RAM? |
 | `scan_trigger_ids.py` | which trigger ids do the disc scripts use? Run before widening any guard that writes one |
 | `extract_disc_file.py` | pull a file off the disc image by its ISO path, so a probe comes from the same disc as the build |
-| `verify_newmap.py` | does a map on row 239 work like a real map? `--map spike` or `glade`; `run1` walks in, runs the map's checks, saves and walks out; `run2` relaunches and continues (the glade: just outside it, then walks in and out and saves next door); `off --map glade --card glade\|host` loads those cards with the mod off (§3.1, §3.2) |
+| `verify_newmap.py` | does a map on row 239 work like a real map? `--map spike` or `glade`; `run1` walks in, runs the map's checks, saves and walks out; `run2` relaunches and continues (the glade: just outside it, then walks in and out and saves next door); `off --map glade --card glade\|host` loads those cards with the mod off; `fight --map glade [--wide] [--brains N]` wins, flees and loses the secret fight, and `--brains` sets up the stock end-box freeze (`GAME.md` 12.1); `measure --map glade --stats ... [--heal N]` plays a real fight, with nothing poked but `--heal`'s stand-in for recovery items, and only prints (§3.1, §3.2, `GAME.md` 7.18) |
+| `dis_script.py` | disassembles a DG script or a MAPHEAD section from your disc; prints only (`GAME.md` 4) |
+| `dw_tables.py` | writes the map records, species and moves as CSV under `build/tables/`. Derived game data, so it refuses a tracked folder |
+| `fight_sim.py` | an estimate of a fight against `BOSS`, from your disc's move data, and how the stock bosses compare (`GAME.md` 7.17) |
 
 The pattern they all follow: **a verdict is a guest-memory read, never a**
 **screenshot**, and a probe that cannot fail is not a probe. Each one takes a
@@ -1823,7 +1911,7 @@ redistributing another work's bytes.
 
 `verify_setup_package.py` adds the positive half: under `mods/preloaded/packages` only
 `manifest.toml` files may ship, plus the Digimon World 1.5 BPS and its font
-licences and the Hidden Glade's MAP and TFS, each at its exact path and SHA-256.
+licences and the Hidden Glade's MAP, TFS and DG script, each at its exact path and SHA-256.
 Any other file there fails the gate.
 
 ### 7.5 `check_dw15_compat.py` — run when a manifest, hook or the BPS changes
@@ -1853,7 +1941,7 @@ py -3.12 tools/check_dw15_compat.py
 
 ## 8. Framework fork
 
-`gitlab.com/ethan4love/psxrecomp`, branch `fix/bss-memfill-overlap`. Upstream
+`github.com/Lordsouth/psxrecomp`, branch `feat/dw15-mod`. Upstream
 cannot build this game at all — it rejects the executable because the header's
 BSS clear overlaps the sector-rounded code tail. On top of that parser fix the
 branch carries: SDL joystick-hint ordering (without which controllers die when
@@ -1905,7 +1993,8 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
   Worth knowing for anyone testing this by hand: **Agumon cannot reach any
   roster species.** Its `to[]` is entirely stock. The twelve stock sources that
   can are types 2, 5, 6, 7, 8, 10, 11, 16, 30, 39, 44 and 50.
-* **`save_compatibility` is declared but not enforced** by the framework, so a
+* **`save_compatibility` does not reach memory cards.** `isolated` scopes
+  savestate slots only (§3.2), so a card
   save made with the roster enabled and loaded with it disabled reads a stale
   table set. Documented in `cheats.txt`; a framework-level fix is the real
   answer.
@@ -1924,7 +2013,7 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
   Because trigger flags are memory-card persistent the aliasing ran both ways:
   raising a new species marked a recruitment announcement as already seen, and
   seeing an announcement made `hasDigimonRaised()` true for a species the
-  player never owned -- which `evolution.c:401` uses to score evolution
+  player never owned -- which `evolution.c:1024` uses to score evolution
   targets, so story progress biased what the partner became.
 
   `dw_roster_flags.c` replaces `setDigimonRaised` and `hasDigimonRaised` and
@@ -1994,8 +2083,7 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
   Beetle-format test pack (every tile flipped): the reveals changed with the
   pack on/off (mean luma diff 30/38) as the centre did (17), banks drew at
   m = 120. DuckStation-format packs share the code path but were not run.
-  Rewind is not built into this product (no rbengine snap ring in the
-  framework checkout), so the bank path's rewind behaviour is unmeasured;
+  Rewind ships since 0.5.0, but the bank path's rewind behaviour is unmeasured;
   save/load and a cold restore are. The ring itself can show a wrong tile in
   a column at some map-25 stops (banks off: 28.9 luma from the art over that
   column, banks on: 1.7); not chased, since the banks paint over it on GL.
@@ -2003,7 +2091,8 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
 * **Widescreen, Birdra Transport (207)** shows 13 columns of black art past
   its cage on the right (12-14 px at 16:10, inside the 33-35 px bar at
   16:9). A repaint failed (§5.0b) and no camera clamp can hide it (§5.0g).
-* **Four inherited cheats remain suspect** (§6.3).
+* ~~Four inherited cheats remain suspect.~~ **Stale**: §6.3 names four defects,
+  and all four are fixed.
 * ~~Prosperity Points ignore new recruits.~~ **Stale — they have counted since
   0.3.0.** The recruit loop's bound WAS widened
   (`tools/gen_roster_mod.py:640`, `0x800EFAD4` `slti 0x3B -> 0x72`), and the
@@ -2066,4 +2155,8 @@ output behind everything above: the reference census of every table reference
 site, the free-RAM analysis, the parallel-table landmines, the widescreen deep
 tier and backdrop path, the training grading and gain math, the cheat surveys,
 and the pre-release audit. Numbers in this document come from those files, with
-the addresses re-verified against the executable before use.
+the addresses re-verified against the executable before use. A search of the
+owner's home directory to depth 6, skipping AppData, for `roster-xref-census*`,
+`widescreen-w2-dossier*`, `rel_flagship*` and `roster-band-authoring*` finds none of
+them, so the citations may be dead for the owner too. Treat a number that rests on
+one as unproven until it is checked against the decomp or the executable.
