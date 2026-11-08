@@ -19,7 +19,8 @@
           depend on the mod
     fight (glade) fresh sandbox card: the secret fight, won, fled and lost for real.
           HP is poked so the outcome is the one under test: the numbers are not
-          judged here. --wide does it at 21:9 with the Expanded Roster on
+          judged here. --wide does it at 21:9 with the Expanded Roster on.
+          --brains N --end-fix checks Battle End Freeze Fix on the win (docs/GAME.md 12.1)
     measure (glade) a real fight: the partner evolved and set to --stats, then nothing
           poked but --heal. Presses only the finisher button. Prints how it went, judges nothing
 
@@ -75,6 +76,11 @@ WIDE = ('\n[[package]]\nid = "psx.enhancement.widescreen"\nversion = "1.0.0"\n\n
         '[[feature]]\npackage_id = "psx.enhancement.widescreen"\nid = "widescreen"\nenabled = true\n'
         '[feature.values]\naspect = "21:9"\n\n'
         '[[feature]]\npackage_id = "dw.vanilla.roster"\nid = "roster"\nenabled = true\n')
+END_FIX = '\n[[feature]]\npackage_id = "dw.vanilla.qol"\nid = "end-box-fix"\nenabled = true\n'
+DROPS = ('\n[[package]]\nid = "dw.vanilla.trainer"\nversion = "1.0.0"\n\n'
+         '[[feature]]\npackage_id = "dw.vanilla.trainer"\nid = "guaranteed-drops"\nenabled = true\n')
+END_BUFFER, END_LINES = 0x80073EA0, 0x801350B0        # the box's text; lines expected, then rows drawn
+MP_BONUS = {700: 5, 800: 10, 900: 15, 999: 20}        # Brains reached: the percent its message names
 MAPS = {
     # spawn 0, then the legs from anywhere inside to the map's warp strip
     "spike": dict(package="dw.newmaps.spike", feature="spike", file="MGEN17",
@@ -90,6 +96,8 @@ def main():
     ap.add_argument("--stats", default="5500,5000,600,600,450,450", help="measure: partner HP, MP, off, def, speed, brains")
     ap.add_argument("--heal", type=int, default=0, help="measure: stand-in for N recovery items, +5000 HP each below 2500")
     ap.add_argument("--brains", type=int, help="fight: the partner's Brains going in, so the win's gain crosses a threshold")
+    ap.add_argument("--end-fix", action="store_true", help="fight: with Battle End Freeze Fix on; --brains then checks its message")
+    ap.add_argument("--drops", action="store_true", help="fight: with Guaranteed Drops on, so the box has a drop message first")
     ap.add_argument("--wide", action="store_true", help="fight: at 21:9, with the Expanded Roster on")
     ap.add_argument("--card", choices=("glade", "host"), default="glade", help="off: which saved card to load")
     ap.add_argument("--map", choices=sorted(MAPS), default="glade")
@@ -119,7 +127,7 @@ def main():
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
         fh.write("format_version = 2\n" if a.mode == "off" else STATE % (mp["package"], mp["package"], mp["feature"])
-                 + (WIDE if a.wide else ""))
+                 + (WIDE if a.wide else "") + (END_FIX if a.end_fix else "") + (DROPS if a.drops else ""))
     if a.mode == "off":                                # a copy of the card that save was left on
         shutil.rmtree(cards, ignore_errors=True)
         shutil.copytree(os.path.join(out, "cards_" + a.card), cards)
@@ -499,16 +507,24 @@ def main():
             time.sleep(0.05)
         seen.pop("menu", None)
         check(moves <= set(seen) and gstate() == 1, "the boss used all four moves %s (move: seconds in)" % seen)
-        bits, hit = i32(MONEY), False
+        bits, hit, box = i32(MONEY), False, None
         end = time.time() + 240
         while time.time() < end and not (hit and gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1):
             if gstate() not in BATTLE:
                 hit = True
             elif struct.unpack("<h", g.d.read(NPC_STATS + 0x14, 2))[0] > 1:
                 g.d.write_bytes(struct.pack("<h", 1), NPC_STATS + 0x14)
+            lines, rows = struct.unpack("<hh", g.d.read(END_LINES, 4))
+            if box is None and lines and rows == lines:  # the last row is up, for 60 frames or the next press
+                box = g.d.read(END_BUFFER, 200).split(b"\0")[0]
+                shot("end_box")
+                print("MEASURE end box, %d rows: %r" % (rows, box), flush=True)
             g.route("4:cross,20:none")
         check(hit and gstate() == 0 and g.tamer_state == 0 and screen() == 239,
               "won: the run-off ended, player in control, still on map 239")
+        if a.end_fix and a.brains and a.brains + 1 in MP_BONUS:
+            text = b"#C1MP Cost Bonus!#Rreduced by %d pct!#W" % MP_BONUS[a.brains + 1]
+            check(box is not None and text in box, "the end box finished on its MP bonus message")
         check(i32(MONEY) - bits == spec["boss"]["record"][19], "the bits were paid: %d -> %d" % (bits, i32(MONEY)))
         check(g.d.read(NPC_ON_MAP, 1)[0] == 0, "the boss has left the map")
         g.advance(30)

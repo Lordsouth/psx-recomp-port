@@ -114,6 +114,8 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 | **Save Anywhere** | Save from the field menu without going to sleep: pick Sleep while your partner is not sleepy and the game's own save prompt opens. No time passes and nothing about your partner changes | Yes |
 | **Text Speed** | Dialogue without the wait. Fast draws each page at once; Instant also opens the box without its zoom-in. The text itself is unchanged | Yes |
 | **Run Speed** | Your tamer runs 1.5x or 2x faster in the field. Walls, doors, exits and talking work as normal; your partner catches up when you stop | Yes |
+| **Battle End Freeze Fix** | Fixes a freeze in the original game: a battle hung on its results when the win lifted Brains past 700, 800, 900 or 999, losing everything since your last save | No; use the 1.5 edition |
+| **Battle End Freeze Fix (1.5)** | The same fix for Digimon World 1.5, which has the same freeze. Ticking it ticks 1.5 | 1.5 only |
 | **Gameplay** | Better odds of learning techniques in battle; lower the stat requirements for evolutions | Tech Mastery yes; Evolution Unbound no, use the 1.5 edition |
 | **Evolution Unbound (1.5)** | Lower the stat requirements for 1.5's evolutions, the new lines included: Relaxed (75%) or Open (50%). Ticking it ticks 1.5 | 1.5 only |
 | **Widescreen** | 16:9, 16:10 or 21:9. The wider view is rendered at full width and shown 1:1, so nothing is stretched — menus, text boxes and the HUD keep their original shapes, and the extra width is real extra view on both sides. Two rough edges remain, listed under Mods below | Yes |
@@ -141,10 +143,10 @@ it in memory each time you play. Your disc file is never changed.
   `saves/` are not touched, and they come back when you untick it.
 * **Some mods cannot run with it**, because 1.5 rewrote the parts of the game
   they edit: Expanded Roster (it uses the same free Digimon slots), Evolution
-  Unbound, Guaranteed Item Drops, the Native Evolution Engine and Hidden Glade.
-  Ticking 1.5 turns them off. Evolution Unbound and Guaranteed Item Drops have 1.5
-  editions, which work on 1.5's own tables. The rest of the Trainer, Quality
-  of Life (Save Anywhere, Text Speed and Run Speed included), Tech Mastery,
+  Unbound, Guaranteed Item Drops, Battle End Freeze Fix, the Native Evolution
+  Engine and Hidden Glade. Ticking 1.5 turns them off. Evolution Unbound, Guaranteed
+  Item Drops and Battle End Freeze Fix have 1.5 editions. The rest of the Trainer,
+  Quality of Life (Save Anywhere, Text Speed and Run Speed included), Tech Mastery,
   the cheats and Widescreen work with it. The "With 1.5" column above says
   which is which.
 * It is a test build. Report 1.5's own bugs to its author on the

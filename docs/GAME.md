@@ -650,7 +650,7 @@ opens the dialogue, it plays all four move animations, a win pays the bits and i
 loss ends on row 205 or 218, and row 122 still works [run]. It pokes HP and MP, so it cannot see the MP wall, real finisher timing or which tech
 dealt the damage; `measure` fights unpoked and only prints. `BOSS`'s "between second-hardest and final" comes from a model without the auto-hit
 rules. Never run on row 239: last-life and lifetime 0 losses, natural death, evolution. No test covers audio. A win crossing a Brains threshold
-freezes the result box, a stock bug unpatched here, see 12.1 [run]; `fight --brains` sets that up.
+freezes the result box unless Battle End Freeze Fix is on, see 12.1 [run]; `fight --brains` sets that up.
 
 ### 6.1 Fleeable or not: trigger 1 and predefined fights
 | Trigger 1, read at battle start (`src/main/btl.c:231`) | Clear (the glade) | Set (47 stock sites) |
@@ -893,7 +893,7 @@ That last chance is HP lost % for HP; hits*10 % for MP and Off; big hits*10 % fo
 
 **Injury:** if the partner is not injured and any hit landed in the fight, on either side, since `HAS_TAKEN_DAMAGE` is set for every defender, chance tiredness minus HP % (`src/main/battle_ui.c:209-221,323-331`, `src/btl/battle_main.c:2143`).
 
-**End box stall:** when a gain carries Brains to 800 or 999, the box text gains "10" or "20", the US reader returns without advancing on the character '0', and the box never reports finished, so the game hangs on the win (`src/btl/battle_hud.c:337-348,463-466,523-530`, `src/main/battle_ui.c:392-398`). Crossing 700 or 900 adds 4 to the line count for text with one row break (`src/btl/battle_hud.c:378`), so the reader runs on past the text until a stray '0' stalls it or stale row breaks make up the count: a freeze is likely, not certain. [inferred] Stock bug, unpatched here. [not run] The freeze symptom is reported by Vicen [Vice], and Horizon patches a soft lock from this message [Horizon].
+**End box stall:** when a gain carries Brains to 800 or 999, the box text gains "10" or "20", the US reader returns without advancing on the character '0', and the box never reports finished, so the game hangs on the win (`src/btl/battle_hud.c:337-348,463-466,523-530`, `src/main/battle_ui.c:392-398`). Crossing 700 or 900 adds 4 to the line count for text with one row break (`src/btl/battle_hud.c:378`), so the reader runs on past the text until a stray '0' stalls it or stale row breaks make up the count: and it froze in the game at both [run]. A stock bug, with an optional fix in 12.1. The freeze symptom is reported by Vicen [Vice], and Horizon patches a soft lock from this message [Horizon].
 
 ### 7.14 What each outcome costs
 
@@ -1297,15 +1297,40 @@ All four were run in the game, once each, with `fight --brains 699`, `799`, `899
 
 Only a battle gain fires it. That call is the only one, and battle-start Brains is captured before the injury penalty (`src/btl/battle_setup.c:184-201`), so passing a threshold by training or items skips the message, which a player can use as a workaround [inferred].
 
-It is unhandled in the port: a grep of its `.c`, `.py`, `.md` and `.toml` outside the build folders finds no fix. `tools/verify_newmap.py fight --brains N` sets up a crossing. Battle Stat Gain makes it likelier, and so does the repeatable glade boss: with Brains 400 against a partner at 699, the first +1 roll is (400*10*100)/(699*10) = 57 % per win (`src/main/battle_ui.c:158-161`), and a miss gets a second roll from combat counters (:183-190).
+`tools/verify_newmap.py fight --brains N` sets up a crossing. Battle Stat Gain makes it likelier, and so does the repeatable glade boss: with Brains 400 against a partner at 699, the first +1 roll is (400*10*100)/(699*10) = 57 % per win (`src/main/battle_ui.c:158-161`), and a miss gets a second roll from combat counters (:183-190).
 
-Fix shape, data only: add a row break in the padding after the first string if the line needs it, make the immediate from `src/btl/battle_hud.c:378` match the real row count, and change the compare at 0x80062EC8 so digits no longer stop the reader. All of it is `disc_user` patches on `BTL_REL.BIN` [inferred] [not run]. Test all four thresholds in the game. Horizon lists this as fixed by its patch 0094 [Horizon].
+**The fix** is Battle End Freeze Fix: `end-box-fix` in `dw.vanilla.qol`, built in `tools/gen_qol_mods.py`, and its 1.5 edition `dw15-end-box-fix`. It is off by default, like every mod. Five writes:
+
+| Where | Stock | Now | Why |
+|---|---|---|---|
+| `BTL_REL.BIN` 0x80062D58 | `addi v0,v0,4` | `addi v0,v0,2` | The message has 2 rows |
+| `BTL_REL.BIN` 0x80062EC8 | `addiu at,zero,0x30` | `addiu at,zero,0` | The reader stops at the end of the text, and digits draw |
+| `BTL_REL.BIN` 0x80072FC2 | `Consumption Bonus!` | `Cost Bonus!#R` | The stock line runs past the box's 156 pixels, so it shows `MP Consumption Bonu`, and it has no row break |
+| `BTL_REL.BIN` 0x80072FE2 | NUL | space | `reduced by10` needs its space |
+| EXE 0x8013475C | `%!#W` | ` pct!#W` | The USA font has no `%` |
+
+The box now reads `MP Cost Bonus!` and `reduced by 10 pct!`. Stopping on NUL cannot strand another message: on the disc, the drop, injury, command and move messages all have exactly the row breaks they count.
+
+The USA font has 79 glyphs (`CHAR_TO_GLYPH_TABLE` 0x801307E0). `drawGlyph` draws any code it does not find with the last one, a triangle, which is what the garbage rows above are. In ASCII it can draw only letters, digits, space and `! + , - . : ; = ? \` [disc].
+
+Tested in the game [run], with the win's text read from memory:
+
+| Disc | Brains going in | Other messages | Result |
+|---|---|---|---|
+| Stock | 699, 998 | Drop message first | Finished, control back |
+| Stock | 799, 899 | None | Finished, control back |
+| Stock | Not near a threshold | None, and a drop alone | Finished, control back |
+| 1.5, fix off | 799 | None | Froze on `MP Consumption Bonu`: the control |
+| 1.5 | 699, 998 | None | Finished, control back |
+| 1.5 | 799 | A learned move after it | Finished, control back |
+
+Stock runs are `fight --brains N --end-fix [--drops]` in `tools/verify_newmap.py`. The 1.5 runs came from a one-off script that fought a wild Digimon on DGHA01, and it is not in this repo. 900 on 1.5 was not run. Horizon lists this bug as fixed by its patch 0094 [Horizon].
 
 ### 12.2 Confirmed in code
 
 | Bug | How it works | Status | Matters to the port's mods |
 |---|---|---|---|
-| **End-box freeze** | See 12.1: one row break against an expected 4, and a reader that halts on the digit `0`. | code, disc, [run] | Yes. No mod handles it. |
+| **End-box freeze** | See 12.1: one row break against an expected 4, and a reader that halts on the digit `0`. | code, disc, [run] | Yes. Battle End Freeze Fix handles it when ticked. |
 | **Jukebox title overflow** | `padWithSpaces` loops until its count is exactly 0 (`src/main/script_common.c:2919-2940`). At width 12 a title over 25 bytes makes the count negative, so it writes spaces until the counter wraps. Disc: 10 of 63 titles are over 25 bytes (tracks 0, 1, 14, 21, 22, 23, 24, 41, 51, 53). The freeze needs such a row to scroll into view [inferred]. | code, disc; freeze itself [Vice] | Yes: any player in that menu. A `used > 0` guard is cleaner than the EU guard at `src/main/script_common.c:2922-2925`, which skips unwritten bytes. Titles 22 and 24 (55 and 56 bytes) would still overrun the 64-byte row by about 4 bytes [inferred]. |
 | **Tech wipe on losing all lives** | `unlearnMove` builds a uint16 mask, so the AND clears bits 16-31 of the 32-bit word on every call (`src/main/utils2.c:519-540`). Forgetting a move in word 0 wipes ids 16-31; one in word 1 wipes ids 48-57. Only the chosen move's equipped slot is cleared. Disc: EXE 0x800E67A0-0x800E67D8 agrees, and script 212's section 0x49 calls the routine (`64 2F`). | code, disc; [not run] | Yes: a rebirth after all lives are lost, on every species, when `lostAllLives` picks a move at all. It picks (10 - Tamer level)*2 % of the known moves, rounded, so none at Tamer level 10 (`src/main/script_common.c:2485-2494`). No Death is no guard: it patches only `tickDeathCondition`, and a last-life battle loss jumps to 0x4DE without it (`src/main/script_interp.c:1919-1926`). Moves 44/48 and 55/57 are learned in pairs, so a fix must clear both bits. |
 | **Sleep heal wraps HP negative** | Sleeping at the wake hour counts 24 hours, 25 if MINUTE > 0 (`src/main/partner_impl.c:1341-1347`). The int16 sum can wrap past the `>= maxHP` clamp (:1362-1378). Level 3+ with no multiplier cannot wrap: at 9999 max HP the heal tops out at 21880. Rest pillow (item 0x22) or a liked area (`partnerAreaResponse` 1) multiply by 1.2 each (:1351-1355): one wraps from full HP at about 9046 max HP, both at about 7908. MP has the same sum. | code, computed; [not run] | Yes for partners with max HP near those values [inferred]. Save Anywhere does not remove sleep. |
@@ -1413,7 +1438,6 @@ The port translates the stock EXE ahead of time. It can change data, apply guard
 ### 13.5 Ideas worth borrowing
 
 - **A small stock-fixes package, written from scratch:** jukebox guard, `rotateEntity` equal case, move-to zero delta, `unlearnMove` with a 32-bit mask that keeps the slot clear, sleep clamp. `mod_function_replace_funcs` suits these. Mechanisms: https://github.com/Vicen04/Dw1DataAndPatches/wiki/Bugs,-glitches,-exploits-and-improvements.
-- **The end-box fix** from 12.1, tested at all four thresholds.
 - **Clear `HAS_USED_EVOITEM` outside the roster,** so stock items are covered. Vicen's store in EVL's last delay slot at 0x80063AF0 shows a VBlank callback is not the only place [Vice].
 - **A generator assert on EFE lists,** finishers included, against raw `DIGIMON_DATA.moves` and `ORIGINAL_DIGIMON_TYPES` (`src/btl/battle_effect.c:4660-4678`). A species' row must be -1 or a type on every list of its moves, and the type must be 176 or lower, because `getOriginalType` returns -1 above 0xB0.
 - **A test matrix from Vicen's reports:** Machinedramon evolving out and virus bar to Sukamon, four-Digimon rooms, All Range Beam with three Digimon, a new-species partner in a cup. Issues 22 and 3.

@@ -27,6 +27,13 @@ you press confirm next to it, you can run, and it is back on your next visit.
 * It needs the exact disc image in `DISC.md` and cannot run with Digimon World 1.5.
 * It has no other Digimon, and no items of its own yet.
 
+**A fix for a freeze in the original game.** A battle hung on its results when the
+win lifted your partner's Brains past 700, 800, 900 or 999, and you lost everything
+since your last save. Tick **Battle End Freeze Fix** under **Mods → Quality of Life**,
+or its 1.5 edition if you play Digimon World 1.5. The game then shows its MP bonus
+message and carries on. The message now reads "MP Cost Bonus! reduced by 10 pct!",
+because the original line ran off the box and the game's font has no % sign.
+
 ## 0.5.0
 
 **Rewind is in.** Press **F8** (or **Select + R3** on a pad) and a strip of

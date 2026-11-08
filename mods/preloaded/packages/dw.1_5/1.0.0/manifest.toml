@@ -36,6 +36,7 @@ conflicts = [
   "dw.vanilla.gameplay/evolution-unbound",
   "dw.vanilla.trainer/guaranteed-drops",
   "dw.newmaps/glade",
+  "dw.vanilla.qol/end-box-fix",
 ]
 
 # The author's patch, unchanged. Applied to the player's verified stock disc.
@@ -6762,4 +6763,57 @@ offset = 345055292
 expected = "64 00"
 replace = "32 00"
 when = { walls = "open" }
+
+[[feature]]
+id = "dw15-end-box-fix"
+name = "Battle End Freeze Fix (1.5)"
+description = "Fixes a bug in the original game. A battle freezes on its results when the win lifts your partner's Brains past 700, 800, 900 or 999, and everything since your last save is lost. With this on, the game shows its MP bonus message and carries on. The 1.5 edition. Needs Digimon World 1.5 and turns it on."
+group = "Fixes"
+default_enabled = false
+
+# 1.5's delta owns these sectors: only a feature that requires dw15 may write there.
+[[constraint]]
+feature = "dw15-end-box-fix"
+kind = "requires_feature"
+requires_feature = "dw15"
+
+# BTL_REL.BIN 0x80062D58: the MP bonus text has 2 rows, not 4: addi $v0,$v0,2
+[[patch]]
+feature = "dw15-end-box-fix"
+target = "disc_user"
+offset = 302561912
+expected = "04 00 42 20"
+replace = "02 00 42 20"
+
+# BTL_REL.BIN 0x80062EC8: the reader stops at the end of the text, not on the digit 0: addiu $at,$zero,0
+[[patch]]
+feature = "dw15-end-box-fix"
+target = "disc_user"
+offset = 302562280
+expected = "30 00 01 24"
+replace = "00 00 01 24"
+
+# BTL_REL.BIN 0x80072FC2: a first line that fits the box, and a row break
+[[patch]]
+feature = "dw15-end-box-fix"
+target = "disc_user"
+offset = 302628066
+expected = "43 6f 6e 73 75 6d 70 74 69 6f 6e 20 42 6f 6e 75 73 21 00"
+replace = "43 6f 73 74 20 42 6f 6e 75 73 21 23 52 00 00 00 00 00 00"
+
+# BTL_REL.BIN 0x80072FE2: a space before the number
+[[patch]]
+feature = "dw15-end-box-fix"
+target = "disc_user"
+offset = 302628098
+expected = "00"
+replace = "20"
+
+# BTL_STR_MP_BONUS_PERCENT: the font has no %, so spell it
+[[patch]]
+feature = "dw15-end-box-fix"
+target = "main_exe"
+address = 0x8013475C
+expected = "25 21 23 57 00 00 00 00"
+replace = "20 70 63 74 21 23 57 00"
 
