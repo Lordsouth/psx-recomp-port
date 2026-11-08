@@ -2,8 +2,9 @@
 """Build an authored field map (our own art, collision and camera) for the free map row 239.
 
 Everything the game loads for the new screen comes from the scene described in
-scene() below and the backdrop painted over it: no byte of the game disc is
-copied. The scene drives all outputs, so they cannot drift apart:
+scene() below and the backdrop painted over it: no game art or data is copied,
+only numeric constants such as the character lights, set as the MAYO maps set
+them. The scene drives all outputs, so they cannot drift apart:
 
   * a guide render: the scene ray-traced from the map's own game camera with the
     projection the engine uses (INTERNALS.md 3.1: u = 64W + h*Xc/Zc,
@@ -15,28 +16,34 @@ copied. The scene drives all outputs, so they cannot drift apart:
     palette and tinted into the three time-of-day palettes the engine swaps
     between. Without painted art the flat guide is used (playable, plain);
   * the 100x100 collision grid: floor where the scene says ground, blocked under
-    props, the pond and anything outside the painted frame, blocked wherever a
-    prop would cover a character standing there (backdrops always draw behind
-    characters, so nothing may be walked behind), and blocked wherever the
-    painting shows something other than ground under a character's feet;
+    props, the pond and anything outside the painted frame, and blocked wherever
+    the painting shows something other than ground under a character's feet;
+  * foreground sprites, cut from the art, so characters can walk behind foliage
+    and trunks (backdrops always draw behind characters: anything without a
+    sprite may not be walked behind);
   * the MAP setup block (camera, lights, tile grid) and its warp table.
 
 The files replace the unused MGEN17.MAP/TFS sectors through two file-backed
-[[overlay]]s, both zero-padded to the stock sector counts so no stock byte of
-those files reaches RAM. The remaining writes are small guarded patches: the
-row itself, the row's MAPHEAD section (the stock filler binds the sewer
-script), and, for now, Coela Point's east exit as a dev entrance.
+[[overlay]]s, zero-padded so no stock byte of those files reaches RAM. The
+remaining writes are small guarded patches: the row itself, the two files'
+FILE_OFFSET_TABLE entries and ISO directory records, the row's MAPHEAD section
+(the stock filler binds the sewer script), and the entrance: a new exit on
+Native Forest's north edge (MAYO03), which takes no stock route away.
+dw_newmaps.c keeps the row off every memory card.
 
     py -3.12 tools/gen_newmap.py [--bin disc.bin] [--build build-debug] [--art PNG] [--preview]
 
-Writes build/mods/installed/dw.newmaps/1.0.0/ (local only: entrance is a dev
-redirect, no save isolation yet) and build/newmap/ previews (guide.png is the
-painter's input). verify_newmap.py checks it in the game.
+Writes the shipped package mods/preloaded/packages/dw.newmaps/1.0.0/ (commit it,
+then update the MOD_PAYLOADS hashes in verify_setup_package.py) and build/newmap/
+previews (guide.png is the painter's input). It reads your disc only to check
+every guard; no game art or data goes into the assets. Rebuild to stage it into
+build/mods/bundled, then verify_newmap.py checks the result in the game.
 """
 import argparse
 import hashlib
 import json
 import os
+import re
 import struct
 import sys
 
@@ -57,7 +64,12 @@ LOADING_NAME = 0                     # "Native Forest" on the arrival card
 SCRIPT = 118                         # DG script whose only section is a bare END: no arrival side effects
 BGM, BGM_PSTAT = 0x01, 0             # the Native Forest theme, day/night variants as MAYO01/02
 MH_NEW, MH_BUFFER = 0x6070, 0x61A8   # MAPHEAD.SCN ends at 0x606E; MAPHEAD_SCRIPT_BUFFER size
-HOST, HOST_ROW, HOST_WARP = "MAYO02", 1, 2   # dev entrance: Coela Point's east exit (stock -> map 4)
+# The entrance: on Native Forest's north edge a lit lane runs on between the bushes, over a notch of floor.
+HOST, HOST_ROW, HOST_WARP = "MAYO03", 2, 4   # the host map and the free MapWarps slot the new exit takes
+HOST_CELLS = ((22, 23), range(62, 68))       # collision rows and columns that become warp 4. Row 22 is stock wall:
+                                             # the wall test runs a radius ahead, so row 23 alone would never fire
+HOST_SPAWN = (1350, 0, 2350, 0)              # coming back: x, y, z, rotation (0 faces south, away from the exit)
+HOST_SAVE_EXIT = 0                           # the stock exit a card names instead of slot 4 (dw_newmaps.c)
 
 PAINT = (6, 5)                       # the frame the art is painted in (768 x 640) ...
 GW, GH = 6, 4                        # ... and the backdrop, its centre crop: 768 x 512, 24 tiles. Six fewer
@@ -784,6 +796,8 @@ def build_map(grid, host_row, host_exit, tims=(), objects=b""):
     warps = np.zeros((6, 10), np.int16)
     warps[4:, :] = -1                                            # unused targets, as stock
     warps[:, 0] = (SPAWN[0], SPAWN[1], SPAWN[2], SPAWN_ROT, host_row, host_exit)
+    warps[:, 1] = HOST_SPAWN + (host_row, HOST_SAVE_EXIT)        # where a save resumes: dw_newmaps.c reads this.
+                                                                 # No cell is 111, so it never fires as a warp
     blocks = ([struct.pack("<%di" % len(setup), *setup)] + list(tims) + ([objects] if tims else [])
               + [warps.astype("<i2").tobytes() + struct.pack("<h", 0), grid.tobytes()])   # no map Digimon
     offs, at = [], 4 * len(blocks)
@@ -797,6 +811,26 @@ def build_map(grid, host_row, host_exit, tims=(), objects=b""):
 
 def sectors(blob):
     return -(-len(blob) // 2048)
+
+
+def iso_record(f, rr, path):
+    """(disc_user offset, record bytes) of a file's ISO directory record. The game finds files through
+    FILE_OFFSET_TABLE, but dw_ws_sliver.c finds the TFS through the directory, so both must agree."""
+    lba, size = rr["lba"], rr["size"]
+    for part in path:
+        data = read_extent(f, lba, size)
+        i = 0
+        while True:
+            rec = parse_record(data[i:])
+            if rec is None:
+                i = (i // 2048 + 1) * 2048                    # records never span sectors
+                assert i < len(data), path
+            elif rec["name"].split(b";")[0] == part.encode():
+                break
+            else:
+                i += rec["len"]
+        where, lba, size = lba * 2048 + i, rec["lba"], rec["size"]
+    return where, data[i:i + rec["len"]]
 
 
 # ---- package ---------------------------------------------------------------
@@ -872,8 +906,9 @@ def main():
     # cell behind the bush island that its sprite hides most of a character on
     meadow = [deep_floor(grid, w) for w in ((-1900, -1000), (300, 300), (1500, -2000))]
     shore, _ = shore_spot(grid)
-    spec = dict(row=ROW, host_row=HOST_ROW, host_exit=HOST_WARP, spawn=SPAWN, strip_z=WARP_STRIP_Z,
-                camera=dict(vp=VP.tolist(), vr=VR.tolist(), h=H_PROJ, gw=GW, gh=GH),
+    spec = dict(row=ROW, host=dict(row=HOST_ROW, exit=HOST_WARP, spawn=HOST_SPAWN[:3], save_exit=HOST_SAVE_EXIT,
+                                   strip=(HOST_SPAWN[0], (50 - HOST_CELLS[0][0]) * 100 - 50)),
+                spawn=SPAWN, strip_z=WARP_STRIP_Z, camera=dict(vp=VP.tolist(), vr=VR.tolist(), h=H_PROJ, gw=GW, gh=GH),
                 path=PATH.tolist(), meadow=meadow, pond=dict(shore=shore, lobes=POND),
                 backdrop=os.path.join(prev, "backdrop_day.png"))
     if rects:
@@ -921,17 +956,28 @@ def main():
     assert mh[struct.unpack_from("<H", mh, p + 2)[0]:][:6] == bytes.fromhex("fb00b400ef00"), "stock filler"
     assert len(mh) <= MH_NEW and not any(sector(f, files["MAPHEAD.SCN"][0] + MH_NEW // 2048)[MH_NEW % 2048:][:32])
     hd = rd(HOST + ".MAP")
-    hent = struct.unpack_from("<i", hd, 4 * (struct.unpack_from("<i", hd)[0] // 4 - 2))[0]
-    host_map_off = hent + 80 + HOST_WARP * 2
-    stock_target = hd[host_map_off:host_map_off + 2]
-    assert struct.unpack_from("<h", hd, hent + 100 + HOST_WARP * 2)[0] == 0      # arrives at our spawn 0
+    hent, hcol = struct.unpack_from("<2i", hd, 4 * (struct.unpack_from("<i", hd)[0] // 4 - 2))
+    hbase = files[HOST + ".MAP"][0] * 2048
+    field = lambda table, slot_: hent + 2 * (10 * table + slot_)
+    assert [struct.unpack_from("<h", hd, field(t, HOST_WARP))[0] for t in range(6)] == [0, 0, 0, 0, -1, -1], \
+        "the host's warp slot must be free"
+    assert struct.unpack_from("<h", hd, field(0, HOST_SAVE_EXIT))[0] != 0, "the exit a save names must be a stock one"
+    (wall_row, floor_row), cols = HOST_CELLS
+    assert set(hd[hcol + wall_row * 100 + cols[0]:hcol + wall_row * 100 + cols[-1] + 1]) == {0x80}
+    assert set(hd[hcol + floor_row * 100 + cols[0]:hcol + floor_row * 100 + cols[-1] + 1]) == {0}
+    for x, z in ((HOST_SPAWN[0], HOST_SPAWN[2]), (HOST_SPAWN[0], HOST_SPAWN[2] + 200)):   # tamer, then partner
+        assert hd[hcol + (50 - int(z / 100) - (z > 0)) * 100 + int(x / 100) + 50 - (x < 0)] == 0, "spawn must be floor"
+    src = open(os.path.join(root, "dw_newmaps.c"), encoding="utf-8").read()
+    for name, value in (("DW_ROW", ROW), ("DW_HOST_ROW", HOST_ROW), ("DW_HOST_EXIT", HOST_WARP),
+                        ("DW_STOCK_EXIT", HOST_SAVE_EXIT)):
+        assert re.search(r"#define %s\s+%d\b" % (name, value), src), "dw_newmaps.c disagrees on " + name
     h = hashlib.sha256()
     f.seek(0)
     for block in iter(lambda: f.read(1 << 22), b""):
         h.update(block)
     disc_sha = h.hexdigest()
 
-    pkg = os.path.join(a.build, "mods", "installed", "dw.newmaps", "1.0.0")
+    pkg = os.path.join(root, "mods", "preloaded", "packages", "dw.newmaps", "1.0.0")
     os.makedirs(os.path.join(pkg, "assets"), exist_ok=True)
     ms = sectors(mapb)                          # our MAP, then our TFS, across MGEN17's 247 sectors
     blobs = [("glade.map", slot, mapb.ljust(ms * 2048, b"\0")),
@@ -942,15 +988,25 @@ def main():
                + bytes([0x5D, BGM]) + b"\xfe\x00")
     row = FILE.encode().ljust(10, b"\0") + bytes([len(tims), 0, FLAGS, 0, 0, LOADING_NAME])
     mh_base = files["MAPHEAD.SCN"][0] * 2048
-    out = ["# LOCAL ONLY (dev entrance, no save isolation). Generated by tools/gen_newmap.py.",
-           "format_version = 12", 'id = "dw.newmaps"', 'version = "1.0.0"', 'name = "New Maps (dev)"',
+    out = ["# New maps. Generated by tools/gen_newmap.py: regenerate rather than hand-editing, so every guard stays",
+           "# byte-exact. assets/ is this port's own map and art (no game art or data); regenerating means updating",
+           "# MOD_PAYLOADS in tools/verify_setup_package.py. Isolated keeps savestates from crossing into a plan",
+           "# without the map; memory cards stay shared, because dw_newmaps.c keeps the new row off them.",
+           "format_version = 12", 'id = "dw.newmaps"', 'version = "1.0.0"', 'name = "New Maps"',
            'author = "DigimonWorldRecomp"',
-           'description = "An authored glade on the free map row 239, reached from Coela Point\'s east exit."',
-           'resolver = "declarative"', 'save_compatibility = "shared"', "",
+           'description = "Maps the original game never had, built from this port\'s own art and collision. '
+           'No game data is in this package."',
+           'resolver = "declarative"', 'save_compatibility = "isolated"', "",
            "[[target]]", 'game_id = "SLUS-01032"', 'disc_sha256 = "%s"' % disc_sha, "",
-           "[[feature]]", 'id = "glade"', 'name = "Hidden Glade"', 'description = "Dev build of the first authored map."',
-           'group = "Dev"', "default_enabled = false",
-           'conflicts = ["dw.1_5/dw15", "dw.newmaps.spike/spike"]', ""]
+           "[[feature]]", 'id = "glade"', 'name = "Hidden Glade"',
+           'description = "A new map to explore: a quiet forest glade with a pond, painted for this port. Find it '
+           'in Native Forest, on the screen where Palmon waits: walk north through the gap in the bushes at the top '
+           'right. A save made inside resumes just outside it, so your cards stay safe with this off. Needs the '
+           'exact disc image listed in DISC.md. Turns off Digimon World 1.5, which rewrites the same files."',
+           'group = "New maps"', "default_enabled = false",
+           'conflicts = ["dw.1_5/dw15", "dw.newmaps.spike/spike"]', "",
+           "# dw_newmaps.c: a save made on the new map names its host instead.",
+           "[[plugin]]", 'feature = "glade"', 'id = "dw.newmaps"', ""]
     for name, lba, blob in blobs:
         out += ["# our %s in %s's sectors" % (name, FILE), "[[overlay]]", 'feature = "glade"',
                 'target = "disc_user"', "offset = %d" % (lba * 2048), 'file = "assets/%s"' % name,
@@ -967,9 +1023,22 @@ def main():
                 patch("main_exe", fte + 12, exe[ram(fte) + 12:ram(fte) + 20], struct.pack("<2i", slot + ms, len(tfsb)))),
                ("MAPHEAD section %d body" % ROW, patch("disc_user", mh_base + MH_NEW, bytes(len(section)), section)),
                ("MAPHEAD section %d -> 0x%x" % (ROW, MH_NEW),
-                patch("disc_user", mh_base + p + 2, mh[p + 2:p + 4], struct.pack("<H", MH_NEW))),
-               ("dev entrance: %s warp %d -> map %d" % (HOST, HOST_WARP, ROW),
-                patch("disc_user", files[HOST + ".MAP"][0] * 2048 + host_map_off, stock_target, struct.pack("<h", ROW)))]
+                patch("disc_user", mh_base + p + 2, mh[p + 2:p + 4], struct.pack("<H", MH_NEW)))]
+    for name, lba_new, data in ((".MAP", slot, mapb), (".TFS", slot + ms, tfsb)):
+        off, old = iso_record(f, rr, ("MAP", "MAP16", FILE + name))
+        patches.append(("ISO directory: %s%s at sector %d, %d bytes" % (FILE, name, lba_new, len(data)),
+                        patch("disc_user", off + 2, old[2:18], struct.pack("<I", lba_new) + struct.pack(">I", lba_new)
+                              + struct.pack("<I", len(data)) + struct.pack(">I", len(data)))))
+    new_slot = HOST_SPAWN + (ROW, 0)                     # arrives at the map's spawn 0
+    for t, value in enumerate(new_slot):
+        if value != struct.unpack_from("<h", hd, field(t, HOST_WARP))[0]:
+            patches.append(("entrance: %s warp %d field %d = %d" % (HOST, HOST_WARP, t, value),
+                            patch("disc_user", hbase + field(t, HOST_WARP), hd[field(t, HOST_WARP):field(t, HOST_WARP) + 2],
+                                  struct.pack("<h", value))))
+    for r in HOST_CELLS[0]:
+        at = hcol + r * 100 + cols[0]
+        patches.append(("entrance: %s collision row %d, columns %d-%d" % (HOST, r, cols[0], cols[-1]),
+                        patch("disc_user", hbase + at, hd[at:at + len(cols)], bytes([0x6E + HOST_WARP]) * len(cols))))
     for why, body in patches:
         out += ["# " + why, "[[patch]]", 'feature = "glade"', body, ""]
     with open(os.path.join(pkg, "manifest.toml"), "w", newline="\n") as fh:

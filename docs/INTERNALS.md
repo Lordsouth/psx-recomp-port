@@ -18,9 +18,9 @@ patch on an emulator cannot: we can hook a guest function by address, allocate
 memory the console never had, and change data the game reads, all while the
 rest of the game runs natively.
 
-The project ships **no game content**. Every enhancement is either a guarded
-byte patch expressed in a text manifest, or native C in this repository that
-runs against the player's own disc.
+The project ships **no game content**. Every enhancement is a guarded byte patch
+expressed in a text manifest, native C in this repository that runs against the
+player's own disc, or a map file built from our own scene and art (§3.2).
 
 **Two golden rules, learned the hard way:**
 
@@ -114,7 +114,7 @@ did, and the only symptom was a table in guest RAM still reading its stock
 value in a live battle. If a callback appears not to exist, check the manifest
 before the code.
 
-Seven plugins live here:
+Eight plugins live here:
 
 | File | What it does |
 |---|---|
@@ -125,6 +125,7 @@ Seven plugins live here:
 | `dw_ws_camera.c` | both camera clamps, the tile-ladder shift, the load-time nudge (§5) |
 | `dw_ws_sliver.c` | the fifth backdrop tile column, as a VRAM sliver (§5) |
 | `dw_dw15.c` | moves the memory cards to `saves/dw15/` while Digimon World 1.5 is on (§4.4) |
+| `dw_newmaps.c` | keeps a new map off every memory card: a save made there names its host map (§3.2) |
 
 `codegen_setup.c` is glue for the launcher build, not a plugin.
 
@@ -224,12 +225,12 @@ What a new row needs, each verified in that run:
   changes.
 - **Saves** store the screen, the exit and the exact position. Continue reruns
   the MAPHEAD section. A save made on a new row cannot load once the mod is
-  off, so a shipped map needs save isolation like `dw_dw15.c`.
+  off, so a shipped map must keep the row off the cards (§3.2).
 
 The generated manifest copies stock bytes (MGEN17's warps, MGEN11's record).
 It is written into `build/mods/installed/` and never committed. An authored
-map ships its own MAP/TFS, DG script and MAPHEAD section, and needs none of
-those bytes.
+map ships its own MAP/TFS and MAPHEAD section (the glade's binds stock DG script
+118, a bare END, until it has one of its own), and needs none of those bytes.
 
 ### 3.2 An authored map (M1, verified in game)
 
@@ -255,15 +256,15 @@ all in world units. The scene drives every output, so they cannot drift apart:
   tiles leave room for the foreground sprites' image (below). Without painted
   art the flat guide is used.
 - **The collision grid.** Floor follows the scene: the clearing and the path,
-  minus the pond, foliage and tree footprints, anything outside the painted
-  frame, and anything a prop would cover (backdrops always draw behind
-  characters, so nothing may be walked behind). Then the painting decides: a
-  cell stays floor only if the art shows ground at 7 of 9 points of a
-  character's footprint. Painted non-ground unprojected onto the floor covers
-  a prop's base and the floor hidden behind it, so this also keeps characters
-  from walking behind anything the painter drew. The small props (rocks,
-  stump, log) take their collision from the painting alone, because the
-  painter may nudge them.
+  minus the pond, foliage and tree footprints and anything outside the painted
+  frame. Then the painting decides: a cell stays floor only if the art shows
+  ground at 7 of 9 points of a character's footprint. Painted non-ground
+  unprojected onto the floor covers a prop's base and the floor hidden behind
+  it, so this keeps characters from walking behind anything without a sprite,
+  because backdrops always draw behind characters. Foliage and trunks have
+  sprites: the next bullet lets characters behind them. The small props (rocks,
+  stump, log) have none, and take their collision from the painting alone,
+  because the painter may nudge them.
 - **Foreground sprites** let characters walk behind the foliage, as on the
   stock maps. Scene foliage and trunks that the painting shows (grown 6 px into
   the painter's leaves) are cut into sprites per clump, but only where they
@@ -372,17 +373,65 @@ MAPHEAD tail sectors overlap the `dw.1_5` delta, so the feature conflicts with
 - standing behind the bush island, the screenshot shows the bush, not the
   tamer, under the sprite, and the tamer above it
 
-It also walks the meadow (targets the generator picks from the fitted grid, in
-`spec.json`), pushes into the pond (the tamer stays ashore), saves
-on the map, continues onto it after a relaunch, and walks out. Screenshots
-taken against our own backdrop under the live camera match best at offset
-(0,0) or within 1 px.
+It also enters through the new exit, walks the meadow (targets the generator
+picks from the fitted grid, in `spec.json`), pushes into the pond (the tamer stays
+ashore), saves on the map, and walks out. Run 2 continues from that save, which
+lands just outside the entrance, walks back in and out, and saves next door. The
+`off` mode then loads both cards with the mod off, on the stock game. Screenshots
+taken against our own backdrop under the live camera match best at offset (0,0) or
+within 1 px. It tests the bundled package, so rebuild after regenerating: it stops
+if the build's copy differs from `mods/preloaded/packages`.
 
-Still to do before players see it:
-- a real entrance instead of the Coela Point redirect
-- save isolation (a `dw_newmaps.c` memory-card plugin, like `dw_dw15.c`)
-- the release allowlist for the two payloads in `verify_setup_package.py`
-- its own DG script for NPCs and battles
+**The entrance** adds an exit and takes none away. On MAYO03 (row 2, Native
+Forest), floor reaches a notch in the north edge under a lit lane between the
+bushes. MapWarps slot 4 (free in stock) gets the return spawn and targets row 239,
+and collision rows 22-23, columns 62-67 become warp 4 (`0x72`). Row 22 is stock
+wall and must change too: the wall test runs a radius (100) ahead of the tamer, so
+his centre never stands in a row touching a wall, and row 23 alone would not fire.
+That is why stock warp strips are two rows deep. MAYO03 is the only row using its
+file, so no story variant needs the same edit. The `_2` map files are a trap:
+MAYO01_2 and MAYO02_2 (rows 110/111) are variants of each other, the screen between
+MAYO01 and MAYO00, picked by trigger 106.
+
+**Saves.** `dw_newmaps.c` keeps row 239 off every card, so the cards stay stock:
+with the mod off, every card still loads. Every save goes through `writeSavegame`
+and is then summed by `createSavegameChecksum` (`0x80112D34`, a function entry
+hook filtered by return address, because the load paths sum too). The hook runs
+between the two and rewrites only the save buffer, so play goes on where it is:
+- A save made on 239 names the host, a stock exit and the spawn just outside the
+  entrance, read from slot 1 of the map's own warp table (no cell is 111, so it
+  never fires as a warp). The position, partner position and waypoint tiles move
+  with it, because Continue takes the position from the save, not from the exit.
+- `previousScreen` is the second way to brick a card: fleeing a battle goes there,
+  so walking out of the glade and saving next door would store 239. It gets the
+  current screen instead.
+- Exit 4 on the host becomes stock exit 0: slot 4's spawn is empty on the stock map.
+
+A separate card folder (`dw_dw15.c`) was the simpler choice and the wrong one: it
+would hide a player's existing run behind an optional side area.
+`save_compatibility = "isolated"` is still set, for savestates: a state taken on
+239 holds the patched row and file table in RAM, and must not load without the plan
+that serves the overlays.
+
+**The directory records move too.** The game finds files through
+`FILE_OFFSET_TABLE`, but `dw_ws_sliver.c` reads the TFS through the ISO directory
+(`psx_mod_read_disc_file`). With only the table patched it read our MAP as a TFS,
+its bank failed, and 21:9 showed black at the map's edges. So both records are
+patched, as `mod_runtime.cpp` documents for relocating a file. New rows beyond 239
+would hit a second trap there: it builds `\MAP\MAP<id/15+1>\`, and MGEN17 only
+happens to live in MAP16.
+
+**It ships** in `mods/preloaded/packages/dw.newmaps/1.0.0/`, with `glade.map` and
+`glade.tfs` on `verify_setup_package.py`'s allowlist. It is the first package with
+a `disc_sha256` on its `[[target]]`, so on any other image ticking it refuses the
+plan. A stale `build*/mods/installed/dw.newmaps` silently shadows the bundled copy
+on a dev machine: delete it. None of the release gates reads `[[overlay]]`, so an
+overlap with one only surfaces when the runtime resolves the plan.
+
+Still to do:
+- its own DG script for NPCs, battles and items. Anything it sets persists on
+  shared cards and must be inert with the mod off; audit trigger ids with
+  `tools/scan_trigger_ids.py`
 - foreground sprites for the rocks, stump and log (their collision comes from
   the painting, so a sprite would need the painted footprint)
 
@@ -813,7 +862,7 @@ during the BIOS load that byte is part of the block copied to `0x801F0204`.
 
 **Conflicts.** `tools/check_dw15_compat.py` (§7.5) compares every guarded
 write, every `game.toml` hook and the ranges the widescreen plugins depend on
-against the 1.5 disc. Four features cannot run with it:
+against the 1.5 disc. Five features cannot run with it:
 
 | Feature | Why |
 |---|---|
@@ -821,6 +870,7 @@ against the 1.5 disc. Four features cannot run with it:
 | `dw.vanilla.gameplay/evolution-unbound` | 1.5 rewrote `EVO_REQ_DATA`; Evolution Unbound (1.5) replaces it |
 | `dw.vanilla.trainer/guaranteed-drops` | 1.5 changed 138 of the `DIGIMON_DATA` drop bytes it guards; Guaranteed Item Drops (1.5) replaces it |
 | `dw.vanilla.evolution/native-evolution` | 1.5 changed `getFreshEvolutionTarget`, the replaced function |
+| `dw.newmaps/glade` | 1.5 rewrites the same disc files (§3.2), and its hook's function |
 
 Everything else passed, widescreen included: none of its seven hooked
 functions, three matched call sites, two bracketed functions or the BTL bar
@@ -830,7 +880,7 @@ slide table changed. Save Anywhere, Text Speed and Run Speed touch no byte
 game's own `DIGIMON_DATA[0].radius` behind a gate on which executable is
 running (§6.1).
 
-The `dw15` feature's `conflicts` list names all four (package format 12, see
+The `dw15` feature's `conflicts` list names all five (package format 12, see
 "Feature conflicts" in `psxrecomp/docs/MOD_PACKAGES.md`): ticking 1.5 unticks
 them, ticking one of them unticks 1.5. `check_dw15_compat.py` fails when that
 list and its own result disagree.
@@ -1699,7 +1749,7 @@ different executables.
 | `gen_cheats_mod.py` | `dw.vanilla.cheats` and `dw_cheats_data.inc` from `cheats.txt` (`--check`) |
 | `gen_vice_mod.py` | a local-only package that must never be redistributed |
 | `gen_newmap_spike.py` | the local-only `dw.newmaps.spike` dev package (§3.1) in `build/mods/installed/`; never commit its output |
-| `gen_newmap.py` | the authored glade (§3.2): renders the guide, checks `art/newmaps/glade.png` against the scene, fits collision to it, and writes MAP, TFS and the `dw.newmaps` dev package into `build/mods/installed/`, plus previews and a collision overlay in `build/newmap/` (`--preview` renders only) |
+| `gen_newmap.py` | the authored glade (§3.2): renders the guide, checks `art/newmaps/glade.png` against the scene, fits collision to it, and writes the shipped `dw.newmaps` package (MAP, TFS, manifest) into `mods/preloaded/packages/`, plus previews and a collision overlay in `build/newmap/` (`--preview` renders only) |
 | `paint_newmap.py` | paints the glade's guide into `art/newmaps/glade.png` with local ComfyUI models (§3.2); `--sweep-foliage` writes candidates to `build/newmap/paint/` |
 
 ### 7.1b Verification tools
@@ -1718,7 +1768,7 @@ sandbox memory card seeded from `saves/`; none of them touches your own saves.
 | `verify_model.py` | are a model file's bytes resident in guest RAM? |
 | `scan_trigger_ids.py` | which trigger ids do the disc scripts use? Run before widening any guard that writes one |
 | `extract_disc_file.py` | pull a file off the disc image by its ISO path, so a probe comes from the same disc as the build |
-| `verify_newmap.py` | does a map on row 239 work like a real map? `--map spike` or `glade`; `run1` walks in, runs the map's checks, saves and walks out; `run2` relaunches and continues onto it (§3.1, §3.2) |
+| `verify_newmap.py` | does a map on row 239 work like a real map? `--map spike` or `glade`; `run1` walks in, runs the map's checks, saves and walks out; `run2` relaunches and continues (the glade: just outside it, then walks in and out and saves next door); `off --map glade --card glade\|host` loads those cards with the mod off (§3.1, §3.2) |
 
 The pattern they all follow: **a verdict is a guest-memory read, never a**
 **screenshot**, and a probe that cannot fail is not a probe. Each one takes a
@@ -1772,8 +1822,9 @@ never-ship package survived — failing the build rather than silently
 redistributing another work's bytes.
 
 `verify_setup_package.py` adds the positive half: under `mods/preloaded/packages` only
-`manifest.toml` files may ship, plus the Digimon World 1.5 BPS at its exact
-path and SHA-256. Any other file there fails the gate.
+`manifest.toml` files may ship, plus the Digimon World 1.5 BPS and its font
+licences and the Hidden Glade's MAP and TFS, each at its exact path and SHA-256.
+Any other file there fails the gate.
 
 ### 7.5 `check_dw15_compat.py` — run when a manifest, hook or the BPS changes
 

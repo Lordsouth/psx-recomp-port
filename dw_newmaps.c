@@ -1,0 +1,94 @@
+/* dw.newmaps -- no memory card ever names a new map.
+ *
+ * A save is a screen, an exit and a position. With this mod off, row 239 is empty
+ * and a card naming it does not load, and a save made next door can name it too:
+ * previousScreen is where fleeing a battle goes. So a save made on the new map
+ * resumes just outside its entrance, with the mod on or off, and the player keeps
+ * one set of cards. (A separate card folder, as dw_dw15.c has, would hide their
+ * existing run behind an optional side area.)
+ *
+ * Every save reaches the card through writeSavegame (two callers, both in
+ * tickMainMenu) and is summed right after by createSavegameChecksum. This hook runs
+ * on that call, so the rewritten bytes are what get summed, copied to saves[1] and
+ * written. The live CURRENT_SCREEN and position are not touched: play goes on where
+ * it is. The load paths also sum, hence the return-address filter.
+ *
+ * Entry hooks are selected by the plan ([[plugin]] in the manifest), so this is inert
+ * with the feature off. It holds no state, so savestates and rewind have nothing to do.
+ */
+#include <stdint.h>
+
+#include "cpu_state.h"
+#include "mod_plugins.h"
+
+#define DW_CHECKSUM   0x80112D34u   /* createSavegameChecksum */
+#define DW_RA_SLEEP   0x801114A4u   /* its call in menu 0x2B: the sleep save */
+#define DW_RA_MACHINE 0x80112060u   /* its call in menu 0x41: save machine, Save Anywhere, game clear */
+#define S0            0x80131B2Cu   /* SAVE_FILE.saves[0] */
+#define DW_MAP_WARPS  0x80138730u   /* i16 spawnX[10], Y, Z, rotation, targetMap, targetExit */
+
+#define DW_ROW        239           /* the new map */
+#define DW_HOST_ROW   2             /* its host, and the exit added there: gen_newmap.py asserts these */
+#define DW_HOST_EXIT  4
+#define DW_STOCK_EXIT 0             /* what a card names instead: slot 4's spawn is empty on the stock map */
+
+#define SCREEN      (S0 + 0x49A)    /* currentScreen */
+#define PREV_SCREEN (S0 + 0x49B)
+#define EXIT        (S0 + 0x49C)    /* currentExit */
+#define PREV_EXIT   (S0 + 0x49D)
+
+/* Slot 1 of the new map's own warp table says where a save resumes. No collision
+ * cell is 111, so it never fires as a warp. gen_newmap.py writes it. */
+static int32_t resume(uint32_t table) { return (int16_t)psx_mod_read_half(DW_MAP_WARPS + table * 20 + 2); }
+
+static int8_t tile_x(int32_t x) { return (int8_t)(x / 100 + 50 - (x < 0)); }   /* getModelTile */
+static int8_t tile_y(int32_t z) { return (int8_t)(50 - z / 100 - (z > 0)); }
+
+static void move_save_to_host(void) {
+    int32_t x = resume(0), y = resume(1), z = resume(2), rot = resume(3), px = x, pz = z;
+
+    psx_mod_write_byte(SCREEN, (uint8_t)resume(4));
+    psx_mod_write_byte(EXIT, (uint8_t)resume(5));
+
+    /* The partner lands where a warp would put it (tamer.c loadMapEntities). */
+    if (rot <= 0x200 || rot > 0xE00) pz += 200;
+    else if (rot <= 0x600) px += 200;
+    else if (rot <= 0xA00) pz -= 200;
+    else px -= 200;
+    psx_mod_write_word(S0 + 0x04, (uint32_t)x);     /* tamerPosition */
+    psx_mod_write_word(S0 + 0x08, (uint32_t)y);
+    psx_mod_write_word(S0 + 0x0C, (uint32_t)z);
+    psx_mod_write_word(S0 + 0x14, (uint32_t)px);    /* partnerPosition */
+    psx_mod_write_word(S0 + 0x18, (uint32_t)y);
+    psx_mod_write_word(S0 + 0x1C, (uint32_t)pz);
+
+    /* The waypoint bytes are tiles of the map the save names, and Continue restores them. */
+    psx_mod_write_byte(S0 + 0x4DA, (uint8_t)tile_x(x));   /* tamerPreviousTileX, Y */
+    psx_mod_write_byte(S0 + 0x4DB, (uint8_t)tile_y(z));
+    psx_mod_write_byte(S0 + 0x4DC, 0);                    /* tamerWaypointCurrent, Count */
+    psx_mod_write_byte(S0 + 0x4DD, 0);
+    psx_mod_write_byte(S0 + 0x4DE, (uint8_t)tile_x(x));   /* tamerStartTileX, Y */
+    psx_mod_write_byte(S0 + 0x4DF, (uint8_t)tile_y(z));
+    psx_mod_write_byte(S0 + 0x4E0, 0);                    /* tamerWaypointActive */
+}
+
+static void dw_newmaps_pre_checksum(struct CPUState* cpu, uint32_t address) {
+    (void)address;
+    if (cpu->gpr[31] != DW_RA_SLEEP && cpu->gpr[31] != DW_RA_MACHINE)
+        return;
+
+    if (psx_mod_read_byte(SCREEN) == DW_ROW)
+        move_save_to_host();
+    if (psx_mod_read_byte(PREV_SCREEN) == DW_ROW) {     /* walked out, then saved next door */
+        psx_mod_write_byte(PREV_SCREEN, psx_mod_read_byte(SCREEN));
+        psx_mod_write_byte(PREV_EXIT, psx_mod_read_byte(EXIT));
+    }
+    if (psx_mod_read_byte(SCREEN) == DW_HOST_ROW && psx_mod_read_byte(EXIT) == DW_HOST_EXIT)
+        psx_mod_write_byte(EXIT, DW_STOCK_EXIT);
+    if (psx_mod_read_byte(PREV_SCREEN) == DW_HOST_ROW && psx_mod_read_byte(PREV_EXIT) == DW_HOST_EXIT)
+        psx_mod_write_byte(PREV_EXIT, DW_STOCK_EXIT);
+}
+
+PSX_MOD_CONSTRUCTOR(dw_newmaps_register) {
+    psx_mod_register_function_entry_plugin("dw.newmaps", DW_CHECKSUM, dw_newmaps_pre_checksum);
+}

@@ -9,6 +9,20 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ---
 
+## Unreleased
+
+**A new map: the Hidden Glade.** Tick it under **Mods → New maps**, go to the
+Native Forest screen where Palmon waits, and walk north through the gap in the
+bushes at the top right. It is a small forest glade with a pond and a dirt path,
+and you can walk behind its bushes. It is the first map in this port that the
+original game never had: the art, the walkable ground and the sprites are all
+this project's own, and no game data is in the mod.
+
+* A save made inside resumes just outside it, in Native Forest. No memory card
+  depends on the mod, so turning it off is always safe.
+* It needs the exact disc image in `DISC.md` and cannot run with Digimon World 1.5.
+* It has no Digimon or items of its own yet.
+
 ## 0.5.0
 
 **Rewind is in.** Press **F8** (or **Select + R3** on a pad) and a strip of

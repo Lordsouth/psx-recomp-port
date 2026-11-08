@@ -1,19 +1,29 @@
 #!/usr/bin/env python3
 """Does a new map on free row 239 behave like a real map?
 
-    --map spike   gen_newmap_spike.py: the unused Mt. Infinity floor MGEN17 + a Piddomon
-    --map glade   gen_newmap.py: the authored glade (our own MAP/TFS via disc overlays)
+    --map spike   gen_newmap_spike.py: the unused Mt. Infinity floor MGEN17 + a Piddomon,
+                  through Coela Point's east exit (dev only: it takes that route away)
+    --map glade   gen_newmap.py: the shipped glade (bundled package), through its own
+                  new exit in Native Forest
 
-    run1  fresh sandbox card: walk through Coela Point's east exit onto 239, run
-          the map's own checks (spike: win the Piddomon battle; glade: prove our
-          files are what the game loaded, walk the meadow, try to wade into the
-          pond), save on 239 with Save Anywhere, walk back out
-    run2  relaunch on run1's card: Continue lands on 239 at the saved spot, and
-          the exit still works
+    run1  fresh sandbox card: walk through the entrance onto 239, run the map's own
+          checks (spike: win the Piddomon battle; glade: prove our files are what the
+          game loaded, walk the meadow, try to wade into the pond, stand behind a
+          bush), save with Save Anywhere, walk back out
+    run2  relaunch on run1's card. Spike: Continue lands on 239 at the saved spot.
+          Glade: a save made inside resumes just outside, so Continue lands on the
+          host; walk back in and out, then save next door, where previousScreen and
+          the exit would name the new map
+    off   (glade) the mod OFF, on the stock game: Continue from run1's card
+          (--card glade) or run2's (--card host) loads and plays. No card may ever
+          depend on the mod
 
     py -3.12 tools/gen_newmap.py            (or gen_newmap_spike.py)
+    cmake --build build-debug --target psx-runtime     (glade: stages the bundled package)
     py -3.12 tools/verify_newmap.py run1 --map glade --seed <card dir>
     py -3.12 tools/verify_newmap.py run2 --map glade
+    py -3.12 tools/verify_newmap.py off --map glade --card glade
+    py -3.12 tools/verify_newmap.py off --map glade --card host
 
 The seed is any card dir whose slot 1 holds a Digimon World file; a never-saved
 New Game file plays Jijimon's intro first, which this drives through. It writes
@@ -42,6 +52,7 @@ GENERAL_BUFFER, MAP_TILE_DATA, MAP_COLLISION = 0x80010000, 0x8014F084, 0x801AF39
 GS_VIEWPOINT, VIEWPORT_DISTANCE, HOUR, CURRENT_FRAME = 0x80185BA8, 0x80134ED4, 0x80134EBC, 0x80134F08
 CAMERA = MAP_TILE_DATA + 7092                     # cameraX, cameraY (i16), width, height (i8)
 MAP_OBJECT_INSTANCE_COUNT = 0x80134D1C            # map objects (foreground sprites) loadMapObjects set up
+PREVIOUS_SCREEN, CURRENT_EXIT = 0x80134DA9, 0x80134DAA
 HOST_EXIT = (1858, -1142)                         # Coela Point's east-exit spawn
 STATE = ('format_version = 2\n\n[[package]]\nid = "%s"\nversion = "1.0.0"\n\n'
          '[[package]]\nid = "dw.vanilla.qol"\nversion = "1.0.0"\n\n'
@@ -58,7 +69,8 @@ MAPS = {
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=("run1", "run2"))
+    ap.add_argument("mode", choices=("run1", "run2", "off"))
+    ap.add_argument("--card", choices=("glade", "host"), default="glade", help="off: which saved card to load")
     ap.add_argument("--map", choices=sorted(MAPS), default="glade")
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
     ap.add_argument("--port", type=int, default=4430)
@@ -71,11 +83,24 @@ def main():
         mp["spawn"] = (spec["spawn"][0], spec["spawn"][2])
         # via the middle of the meadow: from the east side a straight line to the spawn snags on the log
         mp["out"] = [tuple(spec["meadow"][1]), mp["spawn"], (spec["path"][1][0], spec["strip_z"] - 400)]
+        mp["host_row"], mp["host_at"] = spec["host"]["row"], (spec["host"]["spawn"][0], spec["host"]["spawn"][2])
+    else:
+        mp["host_row"], mp["host_at"] = 1, HOST_EXIT
+    pkg_dir = os.path.join(a.build, "mods", "bundled" if a.map == "glade" else "installed", mp["package"], "1.0.0")
+    if a.map == "glade":                               # the exe serves the staged copy: test what was generated
+        src = os.path.join(root, "mods", "preloaded", "packages", mp["package"], "1.0.0", "assets")
+        for name in os.listdir(src):
+            if open(os.path.join(src, name), "rb").read() != open(os.path.join(pkg_dir, "assets", name), "rb").read():
+                print("%s in %s is stale: rebuild to stage what gen_newmap.py wrote" % (name, pkg_dir), file=sys.stderr)
+                return 2
     out = os.path.join(a.build, "newmap_%s" % a.map)
     cards = os.path.join(out, "cards")
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
-        fh.write(STATE % (mp["package"], mp["package"], mp["feature"]))
+        fh.write("format_version = 2\n" if a.mode == "off" else STATE % (mp["package"], mp["package"], mp["feature"]))
+    if a.mode == "off":                                # a copy of the card that save was left on
+        shutil.rmtree(cards, ignore_errors=True)
+        shutil.copytree(os.path.join(out, "cards_" + a.card), cards)
     if a.mode == "run1":
         shutil.rmtree(cards, ignore_errors=True)
         os.makedirs(cards)
@@ -176,14 +201,25 @@ def main():
 
     def walk_out():
         for leg in mp["out"][:-1]:
-            go(leg, lambda: near(*leg) or screen() == 1, limit=60)
-        ok = go(mp["out"][-1], lambda: screen() == 1 or g.tamer_state == 5)
-        check(ok and wait_for(lambda: screen() == 1 and g.tamer_state == 0),
-              "walked onto the warp strip back to Coela Point")
+            go(leg, lambda: near(*leg) or screen() == mp["host_row"], limit=60)
+        ok = go(mp["out"][-1], lambda: screen() == mp["host_row"] or g.tamer_state == 5)
+        check(ok and wait_for(lambda: screen() == mp["host_row"] and g.tamer_state == 0),
+              "walked onto the warp strip back to map %d" % mp["host_row"])
         p = pos(TAMER)
         shot("out")
-        check(p is not None and abs(p[0] - HOST_EXIT[0]) < 400 and abs(p[2] - HOST_EXIT[1]) < 400,
-              "arrived at Coela Point's east exit spawn %s" % (p,))
+        check(p is not None and abs(p[0] - mp["host_at"][0]) < 400 and abs(p[2] - mp["host_at"][1]) < 400,
+              "arrived at the entrance's spawn %s" % (p,))
+
+    def walk_in():
+        """From the host's side of the entrance, north through the new exit."""
+        pad(UP)                                        # straight on: the walker's calibration steps
+        ok = wait_for(lambda: screen() == 239 or g.tamer_state == 5, 10)   # would leave this narrow notch
+        pad(0)
+        check(ok and wait_for(lambda: screen() == 239 and g.tamer_state == 0),
+              "walked north through the new exit onto map 239 (no cutscene took over)")
+        g.advance(20)
+        p = pos(TAMER)
+        check(p is not None and (p[0], p[2]) == tuple(mp["spawn"]), "arrived at spawn 0 %s" % (p,))
 
     def battle():
         npc = struct.unpack("<I", g.d.read(NPC0, 4))[0]
@@ -206,7 +242,7 @@ def main():
 
     def loaded_files():
         """Memory and VRAM say the game runs on OUR map and tile files."""
-        pkg = os.path.join(a.build, "mods", "installed", mp["package"], "1.0.0", "assets")
+        pkg = os.path.join(pkg_dir, "assets")
         tfs = open(os.path.join(pkg, "glade.tfs"), "rb").read()
         mapf = open(os.path.join(pkg, "glade.map"), "rb").read()
         used = 8 + 512 * struct.unpack_from("<i", tfs, 4)[0] + 16388 * spec["camera"]["gw"] * spec["camera"]["gh"]
@@ -278,7 +314,7 @@ def main():
         # the pond is solid: stand on its south shore, walk straight at it, stay ashore
         lobes, south = spec["pond"]["lobes"], tuple(spec["pond"]["shore"])
         wet_at = lambda x, z: min(((x - cx) / rx) ** 2 + ((z - cz) / rz) ** 2 for cx, cz, rx, rz in lobes) < 1
-        check(go(south, lambda: near(*south, r=60), limit=60, vec=vec), "on the pond's south shore %s" % (pos(TAMER),))
+        check(go(south, lambda: near(*south, r=100), limit=60, vec=vec), "on the pond's south shore %s" % (pos(TAMER),))
         north = max(vec, key=lambda d: vec[d][1])              # the pad direction for +z
         start, wet = pos(TAMER), []
         pad(north)
@@ -325,7 +361,7 @@ def main():
         check(cam0 == cam1 and img.shape == (240, 320, 3), "steady camera for the screenshot %s" % (cam0,))
         # the backdrop as indices (from our TFS), recoloured with the live palette: right at any hour
         cam = spec["camera"]
-        tfs = open(os.path.join(a.build, "mods", "installed", mp["package"], "1.0.0", "assets", "glade.tfs"), "rb").read()
+        tfs = open(os.path.join(pkg_dir, "assets", "glade.tfs"), "rb").read()
         at = 8 + 512 * struct.unpack_from("<i", tfs, 4)[0]
         idx = np.zeros((cam["gh"] * 128, cam["gw"] * 128), np.uint8)
         for k in range(cam["gw"] * cam["gh"]):
@@ -355,7 +391,7 @@ def main():
         """Our dusk and night palettes: renderMap starts the fade when HOUR reads 16,
         20 or 6 on a frame divisible by 1200, and the fade ends by loading the
         target CLUT whole (tickDaytimeTransition), so VRAM row 480 must equal it."""
-        tfs = open(os.path.join(a.build, "mods", "installed", mp["package"], "1.0.0", "assets", "glade.tfs"), "rb").read()
+        tfs = open(os.path.join(pkg_dir, "assets", "glade.tfs"), "rb").read()
         live = lambda: [int(h[i:i + 4], 16) for h in ["".join(g.d.cmd("vram_peek", x=x, y=480, w=128, h=1)["hex"]
                                                               for x in (0, 128))] for i in range(0, 1024, 4)]
         for hour, k, name in ((16, 1, "dusk"), (20, 2, "night"), (6, 0, "day")):
@@ -366,7 +402,13 @@ def main():
             check(wait_for(lambda: live() == want, 45), "%s palette goes live at %02d:00" % (name, hour))
             shot(name)
 
-    def save_here():
+    def keep_card(name):
+        """A copy of the card as this save left it, for the mod-off runs."""
+        shutil.rmtree(os.path.join(out, "cards_" + name), ignore_errors=True)
+        shutil.copytree(cards, os.path.join(out, "cards_" + name))
+        shutil.copy(os.path.join(out, "saved_pos.json"), os.path.join(out, "saved_pos_%s.json" % name))
+
+    def save_here(on_new_map=True):
         check((g.para_condition & 1) == 0, "partner not sleepy, so Save Anywhere is offered")
         g.route("6:triangle,40:none")
         check(wait_for(lambda: i32(TRI_STATE) == -1, 10), "field menu open")
@@ -386,28 +428,82 @@ def main():
         blk = next(i for i in range(1, 16) if card[i * 128 + 10:i * 128 + 26] == b"BASLUS-01032DMR0")
         s0 = card[blk * 0x2000 + 0x200:]
         main_state, px, py, pz = struct.unpack_from("<4i", s0)
-        check(main_state == 1 and s0[0x49A] == 239 and s0[0x49C] == 0,
-              "card save: map %d exit %d at %s" % (s0[0x49A], s0[0x49C], (px, py, pz)))
+        if a.map == "glade":                           # no card names the new map, or the new exit
+            host = spec["host"]
+            check(main_state == 1 and s0[0x49A] == host["row"] and s0[0x49C] == host["save_exit"]
+                  and s0[0x49B] != 239 and not (s0[0x49B] == host["row"] and s0[0x49D] == host["exit"]),
+                  "card save: map %d exit %d (before: map %d exit %d) at %s"
+                  % (s0[0x49A], s0[0x49C], s0[0x49B], s0[0x49D], (px, py, pz)))
+            if on_new_map:
+                check((px, py, pz) == tuple(host["spawn"]) and screen() == 239,
+                      "a save made on 239 resumes at the entrance, and play stays on 239")
+        else:
+            check(main_state == 1 and s0[0x49A] == 239 and s0[0x49C] == 0,
+                  "card save: map %d exit %d at %s" % (s0[0x49A], s0[0x49C], (px, py, pz)))
         with open(os.path.join(out, "saved_pos.json"), "w") as fh:
             json.dump([px, py, pz], fh)
 
     try:
         enter()
         g.settle(timeout_frames=1800)
+        if a.mode == "off":
+            saved = json.load(open(os.path.join(out, "saved_pos_%s.json" % a.card)))
+            p = pos(TAMER)
+            shot("off_" + a.card)
+            check(g.map_record(239)["file"] == "", "the mod is off: row 239 is empty")
+            check(screen() == spec["host"]["row"], "Continue lands on the stock map %d" % spec["host"]["row"])
+            check(p is not None and abs(p[0] - saved[0]) < 60 and abs(p[2] - saved[2]) < 60,
+                  "at the saved position %s (now %s)" % (saved, p))
+            walk(UP, 3)                                # the same walk that enters the glade with the mod on
+            check(screen() == spec["host"]["row"] and gstate() == 0, "the stock map has no exit there, and plays on")
+            f0 = g.d.frame()
+            time.sleep(2)
+            check(g.d.frame() > f0 + 60, "game running")
+            print("RESULT newmap off %s: %s" % (a.card, "FAIL %s" % fails if fails else "PASS"))
+            return 1 if fails else 0
         check(g.map_record(239)["file"] == mp["file"], "row 239 holds %s (is %s enabled?)" % (mp["file"], mp["package"]))
         if a.mode == "run1":
-            g.warp(1, 2)
-            check(screen() == 1, "standing at Coela Point's east exit")
-            go((2150, -1150), lambda: screen() == 239 or g.tamer_state == 5)
-            check(wait_for(lambda: screen() == 239 and g.tamer_state == 0),
-                  "walked through the east exit onto map 239 (no cutscene took over)")
-            g.advance(20)
-            p = pos(TAMER)
-            check(p is not None and (p[0], p[2]) == tuple(mp["spawn"]), "arrived at spawn 0 %s" % (p,))
+            if a.map == "glade":
+                g.warp(mp["host_row"], spec["host"]["exit"])
+                check(screen() == mp["host_row"], "standing in the host's notch %s" % (pos(TAMER),))
+                walk_in()
+            else:
+                g.warp(1, 2)
+                check(screen() == 1, "standing at Coela Point's east exit")
+                go((2150, -1150), lambda: screen() == 239 or g.tamer_state == 5)
+                check(wait_for(lambda: screen() == 239 and g.tamer_state == 0),
+                      "walked through the east exit onto map 239 (no cutscene took over)")
+                g.advance(20)
+                p = pos(TAMER)
+                check(p is not None and (p[0], p[2]) == tuple(mp["spawn"]), "arrived at spawn 0 %s" % (p,))
             shot("in")
             battle() if a.map == "spike" else glade()
             save_here()
+            if a.map == "glade":
+                keep_card("glade")
             walk_out()
+        elif a.map == "glade":
+            saved = json.load(open(os.path.join(out, "saved_pos.json")))
+            p = pos(TAMER)
+            shot("continued")
+            check(screen() == mp["host_row"], "Continue from a save made on the glade lands on the host")
+            check(p is not None and abs(p[0] - saved[0]) < 60 and abs(p[2] - saved[2]) < 60,
+                  "just outside the entrance %s (now %s)" % (saved, p))
+            f0 = g.d.frame()
+            time.sleep(2)
+            check(g.d.frame() > f0 + 60, "game running on the host after the load")
+            walk_in()
+            loaded_files()
+            walk_out()
+            wait_for(lambda: i32(IS_SCRIPT_PAUSED) == 1, 20)
+            g.advance(120)                 # the field menu takes input once the arrival has settled
+            live = g.d.read(PREVIOUS_SCREEN, 1)[0], g.d.read(CURRENT_EXIT, 1)[0]
+            check(live == (239, spec["host"]["exit"]),
+                  "next door, the live game names the new map: previous screen %d, exit %d" % live)
+            save_here(on_new_map=False)
+            keep_card("host")
+            g.warp(239, 0)                 # last: the clock jumps wake the partner's needs
+            time_of_day()
         else:
             saved = json.load(open(os.path.join(out, "saved_pos.json")))
             p = pos(TAMER)
@@ -415,15 +511,10 @@ def main():
             check(screen() == 239, "Continue lands on map 239")
             check(p is not None and abs(p[0] - saved[0]) < 60 and abs(p[2] - saved[2]) < 60,
                   "at the saved position %s (now %s)" % (saved, p))
-            if a.map == "glade":
-                loaded_files()
             f0 = g.d.frame()
             time.sleep(2)
             check(g.d.frame() > f0 + 60, "game running on 239 after the load")
             walk_out()
-            if a.map == "glade":           # last: the clock jumps wake the partner's needs
-                g.warp(239, 0)
-                time_of_day()
     finally:
         g.shutdown()
     print("RESULT newmap %s %s: %s" % (a.map, a.mode, "FAIL %s" % fails if fails else "PASS"))

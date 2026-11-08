@@ -50,6 +50,9 @@ Get-FileHash "Digimon World (USA).bin" -Algorithm SHA1
 A different size or hash usually means a different regional release or a
 re-dump. It may still work, but it has not been tested.
 
+**Hidden Glade** and **Digimon World 1.5** run only on exactly this `.bin`: on any
+other image the game will not start with them ticked. Untick them to get back in.
+
 ## Other versions
 
 **PAL (Europe) and NTSC-J (Japan) are not supported.** Every mod and patch in

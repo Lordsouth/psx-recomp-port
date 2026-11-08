@@ -25,7 +25,7 @@ game_id = "SLUS-01032"
 [[feature]]
 id = "dw15"
 name = "Digimon World 1.5 (Test Build 1.3.1)"
-description = "Plays Capablemite's Digimon World 1.5 test build on your own disc. Start a new game: old saves may not work, so 1.5 keeps its own memory cards (saves/dw15) and your normal saves are untouched. Turns off Expanded Roster (same Digimon slots), Evolution Unbound, Guaranteed Item Drops and the Native Evolution Engine, which edit parts of the game 1.5 rewrote; Evolution Unbound (1.5) and Guaranteed Item Drops (1.5) are the 1.5 editions. Other mods and widescreen still work."
+description = "Plays Capablemite's Digimon World 1.5 test build on your own disc. Start a new game: old saves may not work, so 1.5 keeps its own memory cards (saves/dw15) and your normal saves are untouched. Turns off Expanded Roster (same Digimon slots), Evolution Unbound, Guaranteed Item Drops, the Native Evolution Engine and Hidden Glade, which edit parts of the game 1.5 rewrote; Evolution Unbound (1.5) and Guaranteed Item Drops (1.5) are the 1.5 editions. Other mods and widescreen still work."
 group = "Total conversion"
 default_enabled = false
 # Every feature tools/check_dw15_compat.py reports. Ticking 1.5 turns these
@@ -35,6 +35,7 @@ conflicts = [
   "dw.vanilla.evolution/native-evolution",
   "dw.vanilla.gameplay/evolution-unbound",
   "dw.vanilla.trainer/guaranteed-drops",
+  "dw.newmaps/glade",
 ]
 
 # The author's patch, unchanged. Applied to the player's verified stock disc.
