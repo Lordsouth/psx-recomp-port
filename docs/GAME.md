@@ -1321,10 +1321,10 @@ Tested in the game [run], with the win's text read from memory:
 | Stock | 799, 899 | None | Finished, control back |
 | Stock | Not near a threshold | None, and a drop alone | Finished, control back |
 | 1.5, before the fix was built in | 799 | None | Froze on `MP Consumption Bonu`: the control |
-| 1.5 | 699, 899, 998 | None | Finished, control back |
+| 1.5 | 699, 799, 899, 998 | None | Finished, control back |
 | 1.5 | 799 | A learned move after it | Finished, control back |
 
-Stock runs are `fight --brains N [--drops]` in `tools/verify_newmap.py`; `--no-end-fix` brings the freeze back. The 1.5 runs came from a one-off script that fought a wild Digimon on DGHA01, and it is not in this repo. Horizon lists this bug as fixed by its patch 0094 [Horizon].
+Stock runs are `fight --brains N [--drops]` in `tools/verify_newmap.py`; `--no-end-fix` brings the freeze back. 1.5 runs are `tools/verify_endfix15.py N`, a win against a wild Digimon on DGHA01. Horizon lists this bug as fixed by its patch 0094 [Horizon].
 
 ### 12.2 Confirmed in code
 
