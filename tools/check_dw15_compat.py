@@ -105,6 +105,7 @@ HOOK_OWNER = {
     0x800FF7F8: ROSTER,  # dw_roster_flags.c setDigimonRaised
     0x800FF824: ROSTER,  # dw_roster_flags.c hasDigimonRaised
     0x800E2544: "dw.vanilla.evolution/native-evolution",  # dw_evolution.c
+    0x80112D34: "dw.newmaps/glade",  # dw_newmaps.c  createSavegameChecksum
 }
 
 # Code and data the widescreen plugins read or write besides their hooks

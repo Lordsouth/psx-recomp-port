@@ -82,7 +82,7 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file dw_roster.c --project-file dw_roster_data.inc \
   --project-file dw_evolution.c \
   --project-file dw_cheats.c --project-file dw_cheats_data.inc \
-  --project-file dw_dw15.c \
+  --project-file dw_dw15.c --project-file dw_newmaps.c \
   --project-file README.md --project-file DISC.md --project-file cheats.txt \
   --project-file DEVELOPING.md \
   --project-file CHANGELOG.md \
@@ -106,14 +106,18 @@ cards holding real saves. Both were present the first time this was packaged.
 
 Before archiving, confirm the staged tree has no game executable, no disc image,
 no `generated/*.c` and no BIOS dump. The only `.bin` should be
-`psxrecomp/bios/openbios.bin`, which is open source.
+`psxrecomp/bios/openbios.bin`, which is open source. Delete `tools/__pycache__`
+first, or the packager carries your local bytecode along.
 
 `--project-dir mods` also carries
 `mods/preloaded/packages/dw.1_5/1.0.0/assets/digimon_world_1_5_test1.bps`, the Digimon
 World 1.5 patch. It ships on purpose: it is the mod author's own file, holds
 only 1.5's changes, and is applied to the player's disc at run time. Beside it,
 `licenses/` carries the SIL OFL texts for the Ark Pixel and Cubic 11 glyphs the
-patch contains, which the OFL requires to travel with them. Those three are the
+patch contains, which the OFL requires to travel with them. It also carries
+`mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.map`, `glade.tfs` and `glade.dg`, the
+Hidden Glade: this project's own map and art (`tools/gen_newmap.py`, from
+`art/newmaps/glade.png`), with no game art or data in them. Those six are the
 only non-manifest files allowed under `mods/preloaded/packages`; the third gate
 below fails on anything else there, on a changed hash, or on one missing.
 
@@ -189,7 +193,10 @@ still runs correctly — overlay code just stays in the interpreter.
 `tools/gen_*.py` regenerate the manifests under `mods/preloaded/packages/`, reading every
 guard byte from **this project's own extracted executable**. Regenerate rather
 than hand-editing, and never copy a manifest between builds of different
-executables — the tables are not interchangeable.
+executables — the tables are not interchangeable. `gen_newmap.py` also reads the
+disc image for its guards, and writes the Hidden Glade's two payloads: when they
+change, update their hashes in `MOD_PAYLOADS` in `tools/verify_setup_package.py`,
+and rebuild before testing: the game runs the copy staged into `mods/bundled`.
 
 Two failure modes worth knowing, both of which cost hours here:
 
@@ -292,4 +299,4 @@ only `--build` is slow.
 ## Licence
 
 The psxrecomp framework is PolyForm Noncommercial. This project ships no game
-content — only configuration, tools and mod manifests.
+content — only configuration, tools, mod manifests and our own map files.

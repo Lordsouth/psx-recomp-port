@@ -39,6 +39,15 @@ player-facing descriptions. All three run on Digimon World 1.5 too
   Run Speed      gen_walk_speed.py -- extra whole frames of tamer movement
                  while running (1.5x / 2x).
 
+One more is a plain bug fix, built here:
+
+  Battle End Freeze Fix
+    A win whose Brains gain crosses 700, 800, 900 or 999 adds the MP bonus message
+    to the end-of-battle box, and the box never finishes (docs/GAME.md 12.1). Four
+    small writes to BTL_REL.BIN and one to the executable. The only feature that is
+    on by default. 1.5 owns those sectors but keeps these bytes, so
+    gen_dw15_extras.py gives the dw15 feature the same writes.
+
 Guards are read from our own extracted executable, never copied from
 dw_decomp -- Vice patches the binary and constants do move.
 
@@ -108,6 +117,72 @@ RUN_DESC = (
     "you stop. A map exit puts it back beside you.")
 
 
+# BTL_REL.BIN. A disc patch may not cross a sector, which end_box_lines asserts.
+BTL_LBA, BTL_BASE = 147703, 0x80052AE0
+END_BOX = [
+    (0x80062D58, "the MP bonus text has 2 rows, not 4: addi $v0,$v0,2",
+     bytes.fromhex("04004220"), bytes.fromhex("02004220")),
+    (0x80062EC8, "the reader stops at the end of the text, not on the digit 0: addiu $at,$zero,0",
+     bytes.fromhex("30000124"), bytes.fromhex("00000124")),
+    # The stock line runs past the box's 156 pixels, and the number follows it with no break.
+    (0x80072FC2, "a first line that fits the box, and a row break",
+     b"Consumption Bonus!\0", b"Cost Bonus!#R".ljust(19, b"\0")),
+    (0x80072FE2, "a space before the number", b"\0", b" "),
+]
+# The USA font has 79 glyphs and no %: it draws a triangle. The string has room to spell it.
+END_BOX_EXE = (0x8013475C, b"%!#W\0\0\0\0", b" pct!#W\0")
+END_BOX_DESC = (
+    "Fixes a bug in the original game. A battle freezes on its results when the win "
+    "lifts your partner's Brains past 700, 800, 900 or 999, and everything since "
+    "your last save is lost. With this on, the game shows its MP bonus message and "
+    "carries on.")
+
+
+def end_box_lines():
+    return [
+        "[[feature]]",
+        'id = "end-box-fix"',
+        'name = "Battle End Freeze Fix"',
+        'description = "%s"' % END_BOX_DESC,
+        'group = "Fixes"',
+        "default_enabled = true",
+        "",
+    ] + end_box_patches("end-box-fix")
+
+
+def end_box_offset(vaddr):
+    return BTL_LBA * 2048 + vaddr - BTL_BASE
+
+
+def end_box_patches(feature):
+    out = []
+    for vaddr, note, stock, new in END_BOX:
+        assert len(stock) == len(new)
+        offset = end_box_offset(vaddr)
+        assert offset % 2048 + len(stock) <= 2048, hex(vaddr)
+        out += [
+            "# BTL_REL.BIN 0x%08X: %s" % (vaddr, note),
+            "[[patch]]",
+            'feature = "%s"' % feature,
+            'target = "disc_user"',
+            "offset = %d" % offset,
+            'expected = "%s"' % hexs(stock),
+            'replace = "%s"' % hexs(new),
+            "",
+        ]
+    addr, stock, new = END_BOX_EXE
+    return out + [
+        "# BTL_STR_MP_BONUS_PERCENT: the font has no %, so spell it",
+        "[[patch]]",
+        'feature = "%s"' % feature,
+        'target = "main_exe"',
+        "address = 0x%08X" % addr,
+        'expected = "%s"' % hexs(stock),
+        'replace = "%s"' % hexs(new),
+        "",
+    ]
+
+
 def describe(lines, text):
     """Replace the [[feature]] description (the first one) in a sub-generator's lines."""
     i = next(i for i, l in enumerate(lines) if l.startswith("description = "))
@@ -149,6 +224,10 @@ def main():
                         % (CLOCK_SITE, struct.unpack("<I", clock_cur)[0],
                            CLOCK_STOCK_WORD))
 
+    addr, stock, _ = END_BOX_EXE
+    if data[file_off(addr):file_off(addr) + len(stock)] != stock:
+        problems.append("end box string 0x%08X differs" % addr)
+
     print("Longer Life      : %d/%d sites verified (stock %d hours)"
           % (len(life), len(LIFESPAN_SITES), LIFESPAN_STOCK))
     for addr, cur in life:
@@ -182,8 +261,8 @@ def main():
         'author = "DigimonWorldRecomp"',
         'description = "Comfort and pacing: how long your partner lives, how '
         'fast the world clock runs, saving from the field menu, faster '
-        'dialogue and faster running. All are off by default and none turns '
-        'a mechanic off."',
+        'dialogue and faster running, and a fix for a freeze in the original '
+        'game. Only the fix is on by default, and none turns a mechanic off."',
         'resolver = "declarative"',
         'save_compatibility = "shared"',
         "",
@@ -270,6 +349,7 @@ def main():
         ]
 
     out += extra
+    out += end_box_lines()
 
     dest_dir = os.path.normpath(os.path.join(
         HERE, "..", "mods", "preloaded", "packages", PKG_ID, PKG_VER))

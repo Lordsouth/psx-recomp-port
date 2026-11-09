@@ -6,7 +6,7 @@ id = "dw.vanilla.qol"
 version = "1.0.0"
 name = "Quality of Life"
 author = "DigimonWorldRecomp"
-description = "Comfort and pacing: how long your partner lives, how fast the world clock runs, saving from the field menu, faster dialogue and faster running. All are off by default and none turns a mechanic off."
+description = "Comfort and pacing: how long your partner lives, how fast the world clock runs, saving from the field menu, faster dialogue and faster running, and a fix for a freeze in the original game. Only the fix is on by default, and none turns a mechanic off."
 resolver = "declarative"
 save_compatibility = "shared"
 
@@ -258,4 +258,51 @@ address = 0x800A9CAC
 expected = "65 91 82 83 e8 ff bd 27 10 00 bf af 15 00 41 2c 47 00 20 10 21 28 40 00 11 80 03 3c 34 43 63 24 80 10 02 00 21 10 43 00 00 00 42 8c 00 00 00 00 08 00 40 00 00 00 00 00 7e a7 02 0c 00 00 00 00 3b 00 00 10 00 00 00 00 62 a8 02 0c 06 00 04 24 37 00 00 10 00 00 00 00 65 a8 02 0c 00 00 00 00 33 00 00 10 00 00 00 00 bd a8 02 0c 00 00 00 00 2f 00 00 10 00 00 00 00 95 a9 02 0c 00 00 00 00 2b 00 00 10 00 00 00 00 99 aa 02 0c 00 00 00 00 27 00 00 10 00 00 00 00 a8 aa 02 0c 00 00 00 00 23 00 00 10 00 00 00 00 c0 aa 02 0c 21 20 a0 00 1f 00 00 10 00 00 00 00 86 93 03 0c 00 00 00 00 1b 00 00 10 00 00 00 00 72 51 01 0c 00 00 00 00 17 00 00 10 00 00 00 00 1a ab 02 0c 00 00 00 00 13 00 00 10 00 00 00 00 2c ab 02 0c 00 00 00 00"
 replace = "65 91 82 83 e8 ff bd 27 10 00 bf af 15 00 41 2c 09 00 20 10 21 28 40 00 11 80 03 3c 34 43 63 24 80 10 02 00 21 10 43 00 00 00 42 8c 00 00 00 00 09 f8 40 00 00 00 00 00 15 80 04 3c 19 07 03 0c 6c 57 84 24 10 00 bf 8f 00 00 00 00 08 00 e0 03 18 00 bd 27 62 a8 02 08 06 00 04 24 c0 aa 02 08 21 20 a0 00 08 00 e0 03 00 00 00 00 e0 ff bd 27 18 00 bf af 14 00 b0 af 01 00 10 24 7e a7 02 0c 00 00 00 00 16 00 00 12 ff ff 10 26 65 91 82 83 c8 94 83 8f 12 00 40 14 ff ff 63 24 10 00 60 14 15 80 01 3c 9a 57 22 90 03 00 03 24 0c 00 43 14 11 80 01 3c 30 6b 22 8c 00 00 00 00 01 00 02 34 07 00 40 10 15 80 04 3c 19 07 03 0c 6c 57 84 24 d9 5b 03 0c 00 00 00 00 e8 ff 00 10 00 00 00 00 18 00 bf 8f 14 00 b0 8f 08 00 e0 03 20 00 bd 27"
 when = { speed = "2x" }
+
+[[feature]]
+id = "end-box-fix"
+name = "Battle End Freeze Fix"
+description = "Fixes a bug in the original game. A battle freezes on its results when the win lifts your partner's Brains past 700, 800, 900 or 999, and everything since your last save is lost. With this on, the game shows its MP bonus message and carries on."
+group = "Fixes"
+default_enabled = true
+
+# BTL_REL.BIN 0x80062D58: the MP bonus text has 2 rows, not 4: addi $v0,$v0,2
+[[patch]]
+feature = "end-box-fix"
+target = "disc_user"
+offset = 302561912
+expected = "04 00 42 20"
+replace = "02 00 42 20"
+
+# BTL_REL.BIN 0x80062EC8: the reader stops at the end of the text, not on the digit 0: addiu $at,$zero,0
+[[patch]]
+feature = "end-box-fix"
+target = "disc_user"
+offset = 302562280
+expected = "30 00 01 24"
+replace = "00 00 01 24"
+
+# BTL_REL.BIN 0x80072FC2: a first line that fits the box, and a row break
+[[patch]]
+feature = "end-box-fix"
+target = "disc_user"
+offset = 302628066
+expected = "43 6f 6e 73 75 6d 70 74 69 6f 6e 20 42 6f 6e 75 73 21 00"
+replace = "43 6f 73 74 20 42 6f 6e 75 73 21 23 52 00 00 00 00 00 00"
+
+# BTL_REL.BIN 0x80072FE2: a space before the number
+[[patch]]
+feature = "end-box-fix"
+target = "disc_user"
+offset = 302628098
+expected = "00"
+replace = "20"
+
+# BTL_STR_MP_BONUS_PERCENT: the font has no %, so spell it
+[[patch]]
+feature = "end-box-fix"
+target = "main_exe"
+address = 0x8013475C
+expected = "25 21 23 57 00 00 00 00"
+replace = "20 70 63 74 21 23 57 00"
 

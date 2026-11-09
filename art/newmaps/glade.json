@@ -1,0 +1,93 @@
+{
+ "seeds": {
+  "qwen": 2,
+  "z": 13,
+  "foliage": 55
+ },
+ "models": {
+  "qwen": "qwen-image-edit-2511-Q4_K_S.gguf",
+  "lora": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+  "z_image": "z_image_turbo_int8_convrot.safetensors"
+ },
+ "passes": {
+  "qwen": {
+   "size": [
+    1152,
+    960
+   ],
+   "steps": 4,
+   "prompt": "This is a rough colour blockout of a video game screen seen from above at an angle. Render it as a finished, detailed 3D scene. The dark green masses are dense leafy shrubs and tree canopies; the light green area is a grass clearing; the tan patches are worn bare earth; the tan line is a dirt footpath; the blue shape is a small pond with muddy banks; the grey shapes are mossy boulders; the brown ring is an old cut tree stump; the brown row is a fallen mossy log. Keep the outline, size and position of every shape exactly; only replace the flat colours with detailed realistic materials. No characters, no text."
+  },
+  "z": {
+   "size": [
+    1152,
+    960
+   ],
+   "start_step": 4,
+   "steps": 8,
+   "prompt": "Photorealistic pre-rendered 3D background from a 1999 PlayStation RPG, seen from a high fixed camera: a grass clearing walled in by a dense forest. Realistic photographic lawn texture with irregular worn patches of bare brown earth. The forest is dense rounded broadleaf shrubs and tree canopies like boxwood, laurel and oak, made of thousands of small oval leaves with deep dark shadows between them. A muddy-banked pond, mossy grey boulders, an old tree stump, a fallen mossy log, a worn dirt footpath. Soft overcast daylight, natural muted olive greens, fine film grain. Same layout and shapes as the input picture."
+  },
+  "foliage": {
+   "size": [
+    1920,
+    1600
+   ],
+   "start_step": 2,
+   "steps": 8,
+   "prompt": "High aerial photograph taken from far above, looking down at an angle at a small lawn clearing in a dense forest. The forest around it is a continuous canopy of thick, rounded, leafy bushes and hedges, all seen from the same height: dense masses of tiny matte green leaves with darker gaps between the masses, evenly lit, no bare branches, no twigs, no flowers. Overcast daylight, natural muted olive greens, sharp focus."
+  },
+  "textures": {
+   "grass": {
+    "seed": 4,
+    "prompt": "Top-down photograph of a lawn texture filling the whole frame: short dense olive-green grass with small brown dry patches and specks of bare soil, flat overcast light, no shadows, no flowers, no objects, uniform pattern, seamless tileable texture.",
+    "texel": 1.2,
+    "detail": 0.9
+   },
+   "dirt": {
+    "seed": 4,
+    "prompt": "Top-down photograph of a soil texture filling the whole frame: dry packed brown dirt with fine grit, a few tiny pebbles and sparse dry grass bits, flat overcast light, no shadows, no objects, uniform pattern, seamless tileable texture.",
+    "texel": 1.2,
+    "detail": 0.7
+   }
+  }
+ },
+ "grade": {
+  "strength": 0.5,
+  "lab_mean": [
+   97.1,
+   112.6,
+   148.9
+  ],
+  "lab_std": [
+   37.2,
+   8.1,
+   9.5
+  ]
+ },
+ "tone": {
+  "turf": [
+   100,
+   122,
+   66
+  ],
+  "earth": [
+   122,
+   102,
+   72
+  ],
+  "flecks": {
+   "density": 0.34,
+   "brown": [
+    100,
+    72,
+    48
+   ],
+   "green": [
+    52,
+    74,
+    38
+   ]
+  }
+ },
+ "ground_iou": 0.794
+}

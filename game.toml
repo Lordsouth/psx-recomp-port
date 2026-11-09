@@ -37,7 +37,7 @@ known_sha1 = [
 # Deep widescreen: emit a plugin entry hook in setPosDataPolyFT4 (the shared
 # FT4 positioner). dw_ws_backdrop.c filters by return address to the two
 # world-anchored callers and squashes backdrop X like the GTE squashes 3D.
-mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC", "0x80096F90", "0x800D5608", "0x800D6F64", "0x800D6308", "0x80098808"]
+mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC", "0x80096F90", "0x800D5608", "0x800D6F64", "0x800D6308", "0x80098808", "0x80112D34"]
 # Native function replacement (dw_evolution.c). A listed function opens with
 #   if (psx_mod_function_replace(cpu, ADDR)) return;
 # so a plugin can compute the result, write $v0, publish $ra into cpu->pc and

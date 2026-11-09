@@ -25,7 +25,7 @@ game_id = "SLUS-01032"
 [[feature]]
 id = "dw15"
 name = "Digimon World 1.5 (Test Build 1.3.1)"
-description = "Plays Capablemite's Digimon World 1.5 test build on your own disc. Start a new game: old saves may not work, so 1.5 keeps its own memory cards (saves/dw15) and your normal saves are untouched. Turns off Expanded Roster (same Digimon slots), Evolution Unbound, Guaranteed Item Drops and the Native Evolution Engine, which edit parts of the game 1.5 rewrote; Evolution Unbound (1.5) and Guaranteed Item Drops (1.5) are the 1.5 editions. Other mods and widescreen still work."
+description = "Plays Capablemite's Digimon World 1.5 test build on your own disc. Start a new game: old saves may not work, so 1.5 keeps its own memory cards (saves/dw15) and your normal saves are untouched. Turns off Expanded Roster (same Digimon slots), Evolution Unbound, Guaranteed Item Drops, the Native Evolution Engine and Hidden Glade, which edit parts of the game 1.5 rewrote; Evolution Unbound (1.5) and Guaranteed Item Drops (1.5) are the 1.5 editions. Other mods and widescreen still work."
 group = "Total conversion"
 default_enabled = false
 # Every feature tools/check_dw15_compat.py reports. Ticking 1.5 turns these
@@ -35,6 +35,8 @@ conflicts = [
   "dw.vanilla.evolution/native-evolution",
   "dw.vanilla.gameplay/evolution-unbound",
   "dw.vanilla.trainer/guaranteed-drops",
+  "dw.newmaps/glade",
+  "dw.vanilla.qol/end-box-fix",
 ]
 
 # The author's patch, unchanged. Applied to the player's verified stock disc.
@@ -6761,4 +6763,46 @@ offset = 345055292
 expected = "64 00"
 replace = "32 00"
 when = { walls = "open" }
+
+# Battle End Freeze Fix, part of 1.5 here: docs/GAME.md 12.1
+
+# BTL_REL.BIN 0x80062D58: the MP bonus text has 2 rows, not 4: addi $v0,$v0,2
+[[patch]]
+feature = "dw15"
+target = "disc_user"
+offset = 302561912
+expected = "04 00 42 20"
+replace = "02 00 42 20"
+
+# BTL_REL.BIN 0x80062EC8: the reader stops at the end of the text, not on the digit 0: addiu $at,$zero,0
+[[patch]]
+feature = "dw15"
+target = "disc_user"
+offset = 302562280
+expected = "30 00 01 24"
+replace = "00 00 01 24"
+
+# BTL_REL.BIN 0x80072FC2: a first line that fits the box, and a row break
+[[patch]]
+feature = "dw15"
+target = "disc_user"
+offset = 302628066
+expected = "43 6f 6e 73 75 6d 70 74 69 6f 6e 20 42 6f 6e 75 73 21 00"
+replace = "43 6f 73 74 20 42 6f 6e 75 73 21 23 52 00 00 00 00 00 00"
+
+# BTL_REL.BIN 0x80072FE2: a space before the number
+[[patch]]
+feature = "dw15"
+target = "disc_user"
+offset = 302628098
+expected = "00"
+replace = "20"
+
+# BTL_STR_MP_BONUS_PERCENT: the font has no %, so spell it
+[[patch]]
+feature = "dw15"
+target = "main_exe"
+address = 0x8013475C
+expected = "25 21 23 57 00 00 00 00"
+replace = "20 70 63 74 21 23 57 00"
 

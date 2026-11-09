@@ -15,8 +15,8 @@ the release process looked at the package as a compiler sees it, so three
 releases went out before a player reported it.
 
 Checks, cheap first (plus a mod-payload check: under mods/preloaded/packages only
-manifests ship, and the one allowed binary, the Digimon World 1.5 BPS, must
-match its hash):
+manifests ship, and the few allowed binaries, the Digimon World 1.5 BPS and the
+Hidden Glade's map files, must match their hashes):
 
   headers  Every quoted #include in the staged framework's C/C++ resolves to a
            file that is actually in the package. This is the check that would
@@ -188,9 +188,12 @@ def check_canaries(present):
 
 
 # The only non-manifest files allowed under mods/preloaded/packages, by exact path and
-# SHA-256: the Digimon World 1.5 author's own BPS, and the SIL OFL texts its
-# Chinese glyphs (Ark Pixel, Cubic 11) require alongside them. Anything else
-# there is a payload nobody reviewed for redistribution, so it fails the gate.
+# SHA-256: the Digimon World 1.5 author's own BPS, the SIL OFL texts its Chinese
+# glyphs (Ark Pixel, Cubic 11) require alongside them, and the Hidden Glade's MAP
+# and TFS, this port's own map and art (tools/gen_newmap.py writes them and
+# copies no byte of the game: refresh these hashes when it regenerates them).
+# Anything else there is a payload nobody reviewed for redistribution, so it
+# fails the gate.
 MOD_PAYLOADS = {
     "mods/preloaded/packages/dw.1_5/1.0.0/assets/digimon_world_1_5_test1.bps":
         "be45b36408f473da7200bcf0b120b634521d43ad1fe51e885439db0bc2cd0efe",
@@ -198,6 +201,12 @@ MOD_PAYLOADS = {
         "3ab41567e68e3988ba1ef16dd2644eca95ca5648ea12e7d46e6287fc0bbe5aee",
     "mods/preloaded/packages/dw.1_5/1.0.0/licenses/LICENSE-OFL-Cubic11.txt":
         "2b6e5938e5cffa0b9e183bd05f8c363e174e7ebed1a0556e2855fd1707fa2188",
+    "mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.map":
+        "858369ce8d5e3def667db4306889673d0e40a48a1b31a7af1c0b51a302519b74",
+    "mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.dg":
+        "19115e350ac326fe4426e67628e178719be00d505364114ab53d2a6dde0f8b0b",
+    "mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.tfs":
+        "11a3c9fbf3743f9452f9808266dbe524477924b120ec23f4008bf15288a130d8",
 }
 
 
@@ -291,7 +300,8 @@ def main():
             for p in payloads:
                 print("   " + p)
         else:
-            print("OK: only manifests, plus the allowed Digimon World 1.5 BPS and its font licences.")
+            print("OK: only manifests, plus the allowed Digimon World 1.5 BPS and font licences and the "
+                  "Hidden Glade's map files.")
 
         rc = 1 if (gone or missing or payloads) else 0
 

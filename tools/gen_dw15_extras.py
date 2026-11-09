@@ -57,6 +57,12 @@ have no chooser). Rows no species targets are never read: 63-65 hold
 non-requirement data, 66-179 and most of 223+ are 32767 placeholders, 216-219
 are unused copies of Angemon's and Leomon's rows.
 
+Battle End Freeze Fix -- dw15 itself makes the same writes as
+dw.vanilla.qol/end-box-fix. 1.5 leaves those bytes alone but changes other bytes
+in their sectors, so the runtime takes the BTL_REL.BIN ones only from dw15 or a
+feature that requires it. A separate edition could not be on by default: turning
+it on would turn on 1.5.
+
 The generated block replaces everything after MARKER in the dw.1_5 manifest;
 the hand-written dw15 feature above it is never touched.
 
@@ -75,6 +81,7 @@ ROOT = os.path.normpath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 from check_dw15_compat import RELOCATED, Disc, Exe, sha256  # noqa: E402
 from gen_gameplay_mods import EVO_CHOICES, STAT_FIELDS  # noqa: E402  same option
+from gen_qol_mods import END_BOX, END_BOX_EXE, end_box_offset, end_box_patches  # noqa: E402  same writes
 
 MANIFEST = os.path.join(ROOT, "mods", "preloaded", "packages", "dw.1_5",
                         "1.0.0", "manifest.toml")
@@ -258,6 +265,10 @@ def render_evo(skipped, rows, bases):
     return "\n".join(out)
 
 
+def render_end_box():
+    return "\n".join(["# Battle End Freeze Fix, part of 1.5 here: docs/GAME.md 12.1", ""] + end_box_patches("dw15"))
+
+
 def render(named, drops):
     out = [
         MARKER,
@@ -320,6 +331,10 @@ def main():
     problems, named, drops = collect(exe)
     evo_problems, skipped, rows, bases = collect_evo(disc, exe)
     problems += evo_problems
+    problems += ["BTL_REL.BIN 0x%08X differs on 1.5" % v for v, _, stock, _ in END_BOX
+                 if disc.user(end_box_offset(v), len(stock)) != stock]
+    if exe.at(END_BOX_EXE[0], len(END_BOX_EXE[1])) != END_BOX_EXE[1]:
+        problems.append("end box string 0x%08X differs on 1.5" % END_BOX_EXE[0])
     if problems:
         print("PROBLEMS:")
         for p in problems:
@@ -329,7 +344,7 @@ def main():
           % (named, SLOTS, len(drops)))
     print("1.5 EVOLUTION_REQS: %d chooser targets have stat walls; placeholder "
           "targets skipped: %s" % (len(rows), skipped))
-    new = head + render(named, drops) + "\n" + render_evo(skipped, rows, bases) + "\n"
+    new = head + render(named, drops) + "\n" + render_evo(skipped, rows, bases) + "\n" + render_end_box() + "\n"
     tomllib.loads(new)                     # never write a manifest that does not parse
     if a.check:
         print("--check: manifest is %s" % ("current" if new == text else "STALE"))

@@ -97,11 +97,12 @@ to keep for the long term.
 
 ## Mods
 
-Click **Mods** in the launcher. Everything is off by default — including widescreen from 0.1.7 on; tick what you want.
+Click **Mods** in the launcher. Everything is off by default — including widescreen from 0.1.7 on — except Battle End Freeze Fix, which only stops a crash-like freeze; tick what you want.
 
 | Mod | What it does | With 1.5 |
 |---|---|---|
 | **Digimon World 1.5** | Capablemite's fan mod (Test Build 1.3.1) on your own disc: Veemon, Wormmon, Renamon and Guilmon lines, new eggs and special attacks. Has its own memory cards — see below | — |
+| **Hidden Glade** | A new map to explore: a quiet forest glade with a pond, painted for this port, and a secret fight, with a new exit in Native Forest — see below | No |
 | **Expanded Roster** | **Adds 52 Digimon.** Machinedramon fills the game's one unused slot; the other 51 — Tentomon, Myotismon, Guardromon, Gigadramon, Panjyamon, BlueMeramon, Otamamon, Gotsumon and more — are finished Digimon that were on the disc all along as enemies only. All of them become partners you can genuinely raise and evolve into — see below | No |
 | **Trainer** | Fifteen independent toggles: never hungry, tired, sick or dead; no lifespan loss; plus the Training group below | Yes |
 | **Perfect Training** | Every training session pays the jackpot rate. The slot minigame secretly grades your reels into a reward multiplier, from 0.5x for a miss up to 10x for triple sevens — this makes every spin pay the top rate | Yes |
@@ -113,6 +114,7 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 | **Save Anywhere** | Save from the field menu without going to sleep: pick Sleep while your partner is not sleepy and the game's own save prompt opens. No time passes and nothing about your partner changes | Yes |
 | **Text Speed** | Dialogue without the wait. Fast draws each page at once; Instant also opens the box without its zoom-in. The text itself is unchanged | Yes |
 | **Run Speed** | Your tamer runs 1.5x or 2x faster in the field. Walls, doors, exits and talking work as normal; your partner catches up when you stop | Yes |
+| **Battle End Freeze Fix** | **On by default.** Fixes a freeze in the original game: a battle hung on its results when the win lifted Brains past 700, 800, 900 or 999, losing everything since your last save | Built into 1.5 here |
 | **Gameplay** | Better odds of learning techniques in battle; lower the stat requirements for evolutions | Tech Mastery yes; Evolution Unbound no, use the 1.5 edition |
 | **Evolution Unbound (1.5)** | Lower the stat requirements for 1.5's evolutions, the new lines included: Relaxed (75%) or Open (50%). Ticking it ticks 1.5 | 1.5 only |
 | **Widescreen** | 16:9, 16:10 or 21:9. The wider view is rendered at full width and shown 1:1, so nothing is stretched — menus, text boxes and the HUD keep their original shapes, and the extra width is real extra view on both sides. Two rough edges remain, listed under Mods below | Yes |
@@ -140,15 +142,37 @@ it in memory each time you play. Your disc file is never changed.
   `saves/` are not touched, and they come back when you untick it.
 * **Some mods cannot run with it**, because 1.5 rewrote the parts of the game
   they edit: Expanded Roster (it uses the same free Digimon slots), Evolution
-  Unbound, Guaranteed Item Drops and the Native Evolution Engine. Ticking 1.5
-  turns them off. Evolution Unbound and Guaranteed Item Drops have 1.5
-  editions, which work on 1.5's own tables. The rest of the Trainer, Quality
-  of Life (Save Anywhere, Text Speed and Run Speed included), Tech Mastery,
+  Unbound, Guaranteed Item Drops, the Native Evolution Engine and Hidden Glade.
+  Ticking 1.5 turns them off. Evolution Unbound and Guaranteed Item Drops have 1.5
+  editions, which work on 1.5's own tables, and Battle End Freeze Fix is built in.
+  The rest of the Trainer, Quality of Life (Save Anywhere, Text Speed and Run Speed included), Tech Mastery,
   the cheats and Widescreen work with it. The "With 1.5" column above says
   which is which.
 * It is a test build. Report 1.5's own bugs to its author on the
   [Digimon World 1.5 Discord](https://discord.gg/kPwvkk6dV); report anything
   that only happens in this port here.
+
+### Hidden Glade
+
+A map the original game never had, with a secret fight at the end of its dirt
+path. Its art, walkable ground and bushes you can walk behind are all this port's
+own; no game data is in the mod.
+
+* **How to get there:** go to the Native Forest screen where Palmon waits, and
+  walk north through the gap in the bushes at the top right. The path at the
+  bottom of the glade brings you back.
+* **The secret fight** is hard: bring a fully grown, well-trained partner and
+  strong healing items. It starts only when you press confirm next to it, you can
+  run, and losing costs what any lost battle costs. Win or lose, it is back on your
+  next visit.
+* **Your saves are safe.** Saving works as usual, but a save made inside the
+  glade resumes just outside it, in Native Forest. No memory card ever depends
+  on the mod, so you can turn it off at any time. Savestates stay with the mod
+  settings they were made under, as they do for Expanded Roster.
+* **It needs the exact disc image** listed in [DISC.md](DISC.md). With any other
+  image the game will not start while it is ticked: untick it to get back in.
+* **It cannot run with Digimon World 1.5**, which rewrites the same files.
+* It is small for now: it has no other Digimon, and no items of its own yet.
 
 ### What is still rough in Widescreen
 
@@ -364,6 +388,10 @@ Digimon World 1.5 is by Capablemite
 own patch file, unchanged. Its Chinese text uses Ark Pixel Font (TakWolf) and
 Cubic 11 (ACh-K), SIL Open Font License 1.1; the licence texts are in
 `mods/preloaded/packages/dw.1_5/1.0.0/licenses/`.
+
+Hidden Glade's art is this project's own, painted with local models
+(Qwen-Image-Edit 2511 and Z-Image-Turbo) over its own 3D scene; the seeds and
+prompts are in the source repository, in `art/newmaps/glade.json`.
 
 Digimon World is © Bandai. This project ships no game content and is not
 affiliated with or endorsed by Bandai.

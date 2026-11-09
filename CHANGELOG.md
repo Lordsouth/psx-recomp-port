@@ -9,6 +9,33 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ---
 
+## Unreleased
+
+**A new map: the Hidden Glade.** Tick it under **Mods → New maps**, go to the
+Native Forest screen where Palmon waits, and walk north through the gap in the
+bushes at the top right. It is a small forest glade with a pond and a dirt path,
+and you can walk behind its bushes. It is the first map in this port that the
+original game never had: the art, the walkable ground and the sprites are all
+this project's own, and no game data is in the mod.
+
+Something strong waits at the end of the path. It is a hard secret fight: bring a
+fully grown, well-trained partner and strong healing items. It starts only when
+you press confirm next to it, you can run, and it is back on your next visit.
+
+* A save made inside resumes just outside it, in Native Forest. No memory card
+  depends on the mod, so turning it off is always safe.
+* It needs the exact disc image in `DISC.md` and cannot run with Digimon World 1.5.
+* It has no other Digimon, and no items of its own yet.
+
+**A fix for a freeze in the original game.** A battle hung on its results when the
+win lifted your partner's Brains past 700, 800, 900 or 999, and you lost everything
+since your last save. The game now shows its MP bonus message and carries on, on
+the original game and on Digimon World 1.5. **Battle End Freeze Fix** is the first
+mod that is on by default; you can untick it under **Mods → Quality of Life**. The
+message reads "MP Cost Bonus! reduced by 10 pct!", because the original line ran off
+the box and the game's font has no % sign. Savestates made before this update belong
+to the old mod settings, so they appear only with the fix unticked.
+
 ## 0.5.0
 
 **Rewind is in.** Press **F8** (or **Select + R3** on a pad) and a strip of
