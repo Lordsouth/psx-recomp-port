@@ -29,10 +29,12 @@ you press confirm next to it, you can run, and it is back on your next visit.
 
 **A fix for a freeze in the original game.** A battle hung on its results when the
 win lifted your partner's Brains past 700, 800, 900 or 999, and you lost everything
-since your last save. Tick **Battle End Freeze Fix** under **Mods → Quality of Life**,
-or its 1.5 edition if you play Digimon World 1.5. The game then shows its MP bonus
-message and carries on. The message now reads "MP Cost Bonus! reduced by 10 pct!",
-because the original line ran off the box and the game's font has no % sign.
+since your last save. The game now shows its MP bonus message and carries on, on
+the original game and on Digimon World 1.5. **Battle End Freeze Fix** is the first
+mod that is on by default; you can untick it under **Mods → Quality of Life**. The
+message reads "MP Cost Bonus! reduced by 10 pct!", because the original line ran off
+the box and the game's font has no % sign. Savestates made before this update belong
+to the old mod settings, so they appear only with the fix unticked.
 
 ## 0.5.0
 

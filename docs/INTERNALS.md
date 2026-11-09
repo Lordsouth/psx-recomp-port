@@ -879,7 +879,7 @@ page, menu text, branch and the purchase match stock. The shop's 6-row list
 draws in 1 call instead of 6. The `scriptSetTextboxSize` site has not been
 reached in a test; no caller was found.
 
-**Battle End Freeze Fix** (`end-box-fix`, 4 `disc_user` writes and 1 `main_exe` write). A win whose Brains gain crosses 700, 800, 900 or 999 froze the end-of-battle box, on stock and on 1.5. The message's row count was wrong, the reader stopped on the digit 0, and the font has no `%`. `GAME.md` 12.1 has the mechanism, every write and what was tested.
+**Battle End Freeze Fix** (`end-box-fix`, 4 `disc_user` writes and 1 `main_exe` write). A win whose Brains gain crosses 700, 800, 900 or 999 froze the end-of-battle box, on stock and on 1.5. It is the only feature on by default, and `dw15` makes the same writes. The message's row count was wrong, the reader stopped on the digit 0, and the font has no `%`. `GAME.md` 12.1 has the mechanism, every write and what was tested.
 
 **Run Speed** (`walk-speed`, 3 `main_exe` writes, 2 live). The game already
 runs by default: a held direction plays anim 3 (run, 50 units per logic frame),
@@ -915,7 +915,7 @@ edition is in §4.4.
 
 ### 4.4 `dw.1_5` — Digimon World 1.5 (Test Build 1.3.1)
 
-**4 features (1.5 and three 1.5-only editions), 1 `[[disc_delta]]`, 1 plugin**
+**3 features (1.5 and two 1.5-only editions), 1 `[[disc_delta]]`, 1 plugin**
 (`dw.dw15`). The fan mod by Capablemite, shipped as the author's own BPS
 (`assets/digimon_world_1_5_test1.bps`, unchanged).
 
@@ -955,7 +955,7 @@ against the 1.5 disc. Five features cannot run with it:
 | `dw.vanilla.trainer/guaranteed-drops` | 1.5 changed 138 of the `DIGIMON_DATA` drop bytes it guards; Guaranteed Item Drops (1.5) replaces it |
 | `dw.vanilla.evolution/native-evolution` | 1.5 changed `getFreshEvolutionTarget`, the replaced function |
 | `dw.newmaps/glade` | 1.5 rewrites the same disc files (§3.2), and its hook's function |
-| `dw.vanilla.qol/end-box-fix` | 1.5's delta owns its `BTL_REL.BIN` sectors, though not these bytes. Its 1.5 edition makes the same writes |
+| `dw.vanilla.qol/end-box-fix` | 1.5's delta owns its `BTL_REL.BIN` sectors, though not these bytes. The `dw15` feature makes the same writes itself. This one is default-on, so it gives way without being unticked (`MOD_PACKAGES.md`, Feature conflicts) |
 
 Everything else passed, widescreen included: none of its seven hooked
 functions, three matched call sites, two bracketed functions or the BTL bar
@@ -1005,7 +1005,7 @@ launch with "collides at disc LBA ... with disc delta ...". A cross-package
 `[[requirement]]` does not count. Details: "Disc deltas" in
 `psxrecomp/docs/MOD_PACKAGES.md`.
 
-**1.5-only features.** Three features in `dw.1_5` are the 1.5 editions of
+**1.5-only features.** Two features in `dw.1_5` are the 1.5 editions of
 features 1.5 turns off. Each has a `requires_feature dw15` constraint:
 ticking one ticks 1.5, unticking 1.5 unticks it, and a `state.toml` with one
 but not 1.5 refuses to launch. `tools/gen_dw15_extras.py` generates both from
@@ -1015,7 +1015,6 @@ the 1.5 disc, below a marker in the manifest.
 |---|---|
 | `dw15-guaranteed-drops` | 203 `main_exe` bytes: `dropChance` (`0x801F4322 + type × 0x34`) to 100 for every named record below 100. 1.5's drop roll (`0x800ED298`) is the stock code with the new base. The 159 nameless slots are all zero and no 1.5 map places one. Records with chance 0 are raised too, as in the vanilla feature, so they drop their item byte, mostly item 0 |
 | `dw15-evolution-unbound` | 616 `disc_user` writes: each scaled wall (`max(1, v × pct / 100)`) of the 67 walled targets the three choosers can pick, once per copy of the block. Row 254 (all 32767, unreachable) is skipped; `-1`, flags and weight are left alone. Same `walls` option as the vanilla feature |
-| `dw15-end-box-fix` | The same five writes as `end-box-fix` (§ Battle End Freeze Fix). 1.5 keeps these bytes but changes others in their sectors, so the runtime takes the `BTL_REL.BIN` writes only from a feature that requires `dw15` |
 
 Checked in game: with the drops feature, 21 of 21 defeated enemies dropped
 their item (control: 3 of 18). With Evolution Unbound (1.5) on relaxed,
@@ -1834,7 +1833,7 @@ different executables.
 | `gen_trainer.py` | `dw.vanilla.trainer` |
 | `gen_qol_mods.py`, `gen_gameplay_mods.py` | the QoL and gameplay packages |
 | `gen_save_anywhere.py`, `gen_text_speed.py`, `gen_walk_speed.py` | Save Anywhere, Text Speed and Run Speed, imported by `gen_qol_mods.py`. Run alone they only verify; `--out` writes a standalone test manifest |
-| `gen_dw15_extras.py` | the three 1.5-only features, below a marker in the `dw.1_5` manifest (needs the 1.5 image; `--check`) |
+| `gen_dw15_extras.py` | the two 1.5-only features and 1.5's own end-box writes, below a marker in the `dw.1_5` manifest (needs the 1.5 image; `--check`) |
 | `gen_cheats_mod.py` | `dw.vanilla.cheats` and `dw_cheats_data.inc` from `cheats.txt` (`--check`) |
 | `gen_vice_mod.py` | a local-only package that must never be redistributed |
 | `gen_newmap_spike.py` | the local-only `dw.newmaps.spike` dev package (§3.1) in `build/mods/installed/`; never commit its output |
@@ -1857,7 +1856,7 @@ sandbox memory card seeded from `saves/`; none of them touches your own saves.
 | `verify_model.py` | are a model file's bytes resident in guest RAM? |
 | `scan_trigger_ids.py` | which trigger ids do the disc scripts use? Run before widening any guard that writes one |
 | `extract_disc_file.py` | pull a file off the disc image by its ISO path, so a probe comes from the same disc as the build |
-| `verify_newmap.py` | does a map on row 239 work like a real map? `--map spike` or `glade`; `run1` walks in, runs the map's checks, saves and walks out; `run2` relaunches and continues (the glade: just outside it, then walks in and out and saves next door); `off --map glade --card glade\|host` loads those cards with the mod off; `fight --map glade [--wide] [--brains N] [--end-fix] [--drops]` wins, flees and loses the secret fight, and `--brains` sets up the stock end-box freeze, which `--end-fix` must clear (`GAME.md` 12.1); `measure --map glade --stats ... [--heal N]` plays a real fight, with nothing poked but `--heal`'s stand-in for recovery items, and only prints (§3.1, §3.2, `GAME.md` 7.18) |
+| `verify_newmap.py` | does a map on row 239 work like a real map? `--map spike` or `glade`; `run1` walks in, runs the map's checks, saves and walks out; `run2` relaunches and continues (the glade: just outside it, then walks in and out and saves next door); `off --map glade --card glade\|host` loads those cards with the mod off; `fight --map glade [--wide] [--brains N] [--no-end-fix] [--drops]` wins, flees and loses the secret fight, and `--brains` crosses a stock end-box threshold, which freezes only with `--no-end-fix` (`GAME.md` 12.1); `measure --map glade --stats ... [--heal N]` plays a real fight, with nothing poked but `--heal`'s stand-in for recovery items, and only prints (§3.1, §3.2, `GAME.md` 7.18) |
 | `dis_script.py` | disassembles a DG script or a MAPHEAD section from your disc; prints only (`GAME.md` 4) |
 | `dw_tables.py` | writes the map records, species and moves as CSV under `build/tables/`. Derived game data, so it refuses a tracked folder |
 | `fight_sim.py` | an estimate of a fight against `BOSS`, from your disc's move data, and how the stock bosses compare (`GAME.md` 7.17) |

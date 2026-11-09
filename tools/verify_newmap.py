@@ -20,7 +20,7 @@
     fight (glade) fresh sandbox card: the secret fight, won, fled and lost for real.
           HP is poked so the outcome is the one under test: the numbers are not
           judged here. --wide does it at 21:9 with the Expanded Roster on.
-          --brains N --end-fix checks Battle End Freeze Fix on the win (docs/GAME.md 12.1)
+          --brains N checks Battle End Freeze Fix on the win (docs/GAME.md 12.1)
     measure (glade) a real fight: the partner evolved and set to --stats, then nothing
           poked but --heal. Presses only the finisher button. Prints how it went, judges nothing
 
@@ -76,7 +76,7 @@ WIDE = ('\n[[package]]\nid = "psx.enhancement.widescreen"\nversion = "1.0.0"\n\n
         '[[feature]]\npackage_id = "psx.enhancement.widescreen"\nid = "widescreen"\nenabled = true\n'
         '[feature.values]\naspect = "21:9"\n\n'
         '[[feature]]\npackage_id = "dw.vanilla.roster"\nid = "roster"\nenabled = true\n')
-END_FIX = '\n[[feature]]\npackage_id = "dw.vanilla.qol"\nid = "end-box-fix"\nenabled = true\n'
+NO_END_FIX = '\n[[feature]]\npackage_id = "dw.vanilla.qol"\nid = "end-box-fix"\nenabled = false\n'
 DROPS = ('\n[[package]]\nid = "dw.vanilla.trainer"\nversion = "1.0.0"\n\n'
          '[[feature]]\npackage_id = "dw.vanilla.trainer"\nid = "guaranteed-drops"\nenabled = true\n')
 END_BUFFER, END_LINES = 0x80073EA0, 0x801350B0        # the box's text; lines expected, then rows drawn
@@ -96,7 +96,7 @@ def main():
     ap.add_argument("--stats", default="5500,5000,600,600,450,450", help="measure: partner HP, MP, off, def, speed, brains")
     ap.add_argument("--heal", type=int, default=0, help="measure: stand-in for N recovery items, +5000 HP each below 2500")
     ap.add_argument("--brains", type=int, help="fight: the partner's Brains going in, so the win's gain crosses a threshold")
-    ap.add_argument("--end-fix", action="store_true", help="fight: with Battle End Freeze Fix on; --brains then checks its message")
+    ap.add_argument("--no-end-fix", action="store_true", help="fight: with Battle End Freeze Fix off, so --brains freezes as stock does")
     ap.add_argument("--drops", action="store_true", help="fight: with Guaranteed Drops on, so the box has a drop message first")
     ap.add_argument("--wide", action="store_true", help="fight: at 21:9, with the Expanded Roster on")
     ap.add_argument("--card", choices=("glade", "host"), default="glade", help="off: which saved card to load")
@@ -127,7 +127,7 @@ def main():
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
         fh.write("format_version = 2\n" if a.mode == "off" else STATE % (mp["package"], mp["package"], mp["feature"])
-                 + (WIDE if a.wide else "") + (END_FIX if a.end_fix else "") + (DROPS if a.drops else ""))
+                 + (WIDE if a.wide else "") + (NO_END_FIX if a.no_end_fix else "") + (DROPS if a.drops else ""))
     if a.mode == "off":                                # a copy of the card that save was left on
         shutil.rmtree(cards, ignore_errors=True)
         shutil.copytree(os.path.join(out, "cards_" + a.card), cards)
@@ -478,7 +478,9 @@ def main():
         while time.time() < end and gstate() not in BATTLE:
             g.route("4:cross,20:none")
         check(gstate() in BATTLE and g.d.read(0x80134D7C, 1)[0] == 0, "the battle starts, with fleeing allowed")
-        check(wait_for(lambda: gstate() == 1, 30), "the fight is on")    # setup has captured the starting stats
+        # A battle goes 3 loading, 2 intro, 1 fighting, and its starting stats are written at the intro.
+        # A brief 1 can show before the loading begins, and the last battle's stats stay in memory.
+        check(wait_for(lambda: gstate() == 2, 30) and wait_for(lambda: gstate() == 1, 30), "the fight is on")
         shot("battle")
 
     def partner(stat, hp):
@@ -489,7 +491,9 @@ def main():
         """A maxed partner. First the boss fights for real until it has used every move (a move plays
         the animation of its slot number), both sides topped up, then on 1 HP it takes a hit and runs off."""
         if a.brains:
-            check(struct.unpack("<h", g.d.read(0x8013D610 + 10, 2))[0] == a.brains, "the battle started on Brains %d" % a.brains)
+            got = struct.unpack("<h", g.d.read(0x8013D610 + 10, 2))[0]
+            check(got == a.brains, "the battle started on Brains %d (read %d, partner now %d)"
+                  % (a.brains, got, struct.unpack("<h", g.d.read(PARTNER_STATS + 6, 2))[0]))
         partner(999, 9999)
         rec = spec["boss"]["record"]
         moves, seen = set(rec[22:26]), {}
@@ -522,7 +526,7 @@ def main():
             g.route("4:cross,20:none")
         check(hit and gstate() == 0 and g.tamer_state == 0 and screen() == 239,
               "won: the run-off ended, player in control, still on map 239")
-        if a.end_fix and a.brains and a.brains + 1 in MP_BONUS:
+        if not a.no_end_fix and a.brains and a.brains + 1 in MP_BONUS:
             text = b"#C1MP Cost Bonus!#Rreduced by %d pct!#W" % MP_BONUS[a.brains + 1]
             check(box is not None and text in box, "the end box finished on its MP bonus message")
         check(i32(MONEY) - bits == spec["boss"]["record"][19], "the bits were paid: %d -> %d" % (bits, i32(MONEY)))
@@ -545,7 +549,9 @@ def main():
                            and i32(IS_SCRIPT_PAUSED) == 1)
         ok = wait_for(arrived, 120)
         g.advance(120)                                 # the arrival settles
-        check(ok and arrived() and near(*mp["host_at"], r=400), "fled to the entrance on map %d %s" % (screen(), pos(TAMER)))
+        check(ok and arrived() and near(*mp["host_at"], r=400),
+              "fled to the entrance on map %d %s (arrived in time %s; now tamer %d, game %d, script idle %s)"
+              % (screen(), pos(TAMER), ok, g.tamer_state, gstate(), i32(IS_SCRIPT_PAUSED) == 1))
         shot("fled")
 
     def lose():
@@ -630,6 +636,8 @@ def main():
                 step()
 
         vec = {}
+        # Noon: the run takes a varying amount of game time, and reaching the partner's sleepy hour hides Save Anywhere.
+        g.d.write_bytes(struct.pack("<hh", 12, 0), HOUR)
         stage(lambda: g.warp(mp["host_row"], spec["host"]["exit"]), walk_in, loaded_files,
               lambda: boss_fresh("on arrival"), lambda: vec.update(calibrate()),
               lambda: a.brains and (g.d.write_bytes(struct.pack("<h", a.brains), PARTNER_STATS + 6),

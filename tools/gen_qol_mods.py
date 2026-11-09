@@ -44,9 +44,9 @@ One more is a plain bug fix, built here:
   Battle End Freeze Fix
     A win whose Brains gain crosses 700, 800, 900 or 999 adds the MP bonus message
     to the end-of-battle box, and the box never finishes (docs/GAME.md 12.1). Four
-    small writes to BTL_REL.BIN and one to the executable. 1.5 owns those sectors
-    but keeps these bytes, so gen_dw15_extras.py makes a 1.5 edition from the same
-    tables.
+    small writes to BTL_REL.BIN and one to the executable. The only feature that is
+    on by default. 1.5 owns those sectors but keeps these bytes, so
+    gen_dw15_extras.py gives the dw15 feature the same writes.
 
 Guards are read from our own extracted executable, never copied from
 dw_decomp -- Vice patches the binary and constants do move.
@@ -145,7 +145,7 @@ def end_box_lines():
         'name = "Battle End Freeze Fix"',
         'description = "%s"' % END_BOX_DESC,
         'group = "Fixes"',
-        "default_enabled = false",
+        "default_enabled = true",
         "",
     ] + end_box_patches("end-box-fix")
 
@@ -262,7 +262,7 @@ def main():
         'description = "Comfort and pacing: how long your partner lives, how '
         'fast the world clock runs, saving from the field menu, faster '
         'dialogue and faster running, and a fix for a freeze in the original '
-        'game. All are off by default and none turns a mechanic off."',
+        'game. Only the fix is on by default, and none turns a mechanic off."',
         'resolver = "declarative"',
         'save_compatibility = "shared"',
         "",
