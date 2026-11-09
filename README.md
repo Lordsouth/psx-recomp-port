@@ -154,6 +154,12 @@ it in memory each time you play. Your disc file is never changed.
 
 ### Hidden Glade
 
+![Hidden Glade: a forest clearing with a pond, a stump, a log and a dirt path](docs/images/hidden_glade.jpg)
+
+![The glade at day, dusk and night](docs/images/hidden_glade_times.jpg)
+
+*The glade's own backdrop, in the game's day, dusk and night lighting.*
+
 A map the original game never had, with a secret fight at the end of its dirt
 path. Its art, walkable ground and bushes you can walk behind are all this port's
 own; no game data is in the mod.
