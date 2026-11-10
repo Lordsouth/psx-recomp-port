@@ -203,14 +203,15 @@ def render_evo(skipped, rows, bases):
         "[[feature]]",
         'id = "dw15-evolution-unbound"',
         'name = "Evolution Unbound (1.5)"',
-        'description = "Scales the six stat walls each evolution demands in '
-        "Digimon World 1.5: HP, MP, Offense, Defense, Speed and Brain, for "
-        "every evolution the game can choose, the new lines included. Care "
-        "mistakes, weight, discipline, happiness and battle/tech counts are "
-        "left alone, as in Evolution Unbound. Needs Digimon World 1.5 and "
-        'turns it on."',
+        'description = "Evolution Unbound on Digimon World 1.5: scales the six '
+        "stat walls each evolution demands, HP, MP, Offense, Defense, Speed and "
+        "Brain, for every evolution the game can choose, the new lines included. "
+        "It runs by itself in place of Evolution Unbound while 1.5 is on, with "
+        'the same Stat requirements setting."',
         'group = "Gameplay"',
         "default_enabled = false",
+        "hidden = true",
+        'edition_of = "dw.vanilla.gameplay/evolution-unbound"',
         "",
         "# Patches below sit in files only the 1.5 delta serves.",
         "[[constraint]]",
@@ -278,13 +279,15 @@ def render(named, drops):
         "[[feature]]",
         'id = "dw15-guaranteed-drops"',
         'name = "Guaranteed Item Drops (1.5)"',
-        'description = "Every Digimon you defeat in Digimon World 1.5 drops '
-        "its item. The 1.5 edition of Guaranteed Item Drops: it raises the "
-        "drop chance of all %d species in 1.5's own Digimon table, the new "
-        'ones included, to certain. Needs Digimon World 1.5 and turns it on."'
+        'description = "Guaranteed Item Drops on Digimon World 1.5: raises the '
+        "drop chance of all %d species in 1.5's own Digimon table, the new ones "
+        "included, to certain. It runs by itself in place of Guaranteed Item "
+        'Drops while 1.5 is on."'
         % named,
         'group = "Battle"',
         "default_enabled = false",
+        "hidden = true",
+        'edition_of = "dw.vanilla.trainer/guaranteed-drops"',
         "",
         "# Patches below sit in RAM that only 1.5's entry stub fills.",
         "[[constraint]]",

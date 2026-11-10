@@ -442,10 +442,19 @@ def main():
           % (vexe.t_addr, vexe.end, pexe.t_addr, pexe.end))
     changed = sum(vexe.text[i] != pexe.text[i] for i in range(len(vexe.text)))
     print("%d bytes of the original image differ\n" % changed)
+    # A feature with a 1.5 edition (edition_of) gives way to it by itself while 1.5 is on.
+    editions = {f["edition_of"]: "%s/%s" % (SELF, f["id"])
+                for f in manifests[SELF].get("feature", []) if f.get("edition_of")}
     for owner in features:
         why = reasons.get(owner)
         if not why:
             print("  ok        %s" % owner)
+            if owner in editions:
+                errors.append("%s has a 1.5 edition but runs with 1.5 as it is" % owner)
+            continue
+        if owner in editions:
+            print("  edition   %s  (on 1.5 runs %s instead; %d writes differ)"
+                  % (owner, editions[owner], len(why)))
             continue
         print("  CONFLICT  %s  (%d)" % (owner, len(why)))
         for w in why[:3]:
@@ -480,7 +489,7 @@ def main():
         for nm, addr in cheat_staging.items():
             print("           0x%08X  %s" % (addr, nm))
 
-    off = [o for o in features if o in reasons]
+    off = [o for o in features if o in reasons and o not in editions]
     print("\nturn off with 1.5 (%d):" % len(off))
     for o in off:
         print("  " + o)

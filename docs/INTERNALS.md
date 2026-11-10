@@ -946,14 +946,15 @@ during the BIOS load that byte is part of the block copied to `0x801F0204`.
 
 **Conflicts.** `tools/check_dw15_compat.py` (§7.5) compares every guarded
 write, every `game.toml` hook and the ranges the widescreen plugins depend on
-against the 1.5 disc. Five features cannot run with it:
+against the 1.5 disc. Six features cannot run on it as they are. Three of them have
+1.5 editions that run in their place by themselves; the other three turn off:
 
 | Feature | Why |
 |---|---|
 | `dw.vanilla.roster/roster` | same free Digimon slots; 223 of its patches also hit changed bytes |
-| `dw.vanilla.gameplay/evolution-unbound` | 1.5 rewrote `EVO_REQ_DATA`; Evolution Unbound (1.5) replaces it |
-| `dw.vanilla.trainer/guaranteed-drops` | 1.5 changed 138 of the `DIGIMON_DATA` drop bytes it guards; Guaranteed Item Drops (1.5) replaces it |
-| `dw.vanilla.evolution/native-evolution` | 1.5 changed `getFreshEvolutionTarget`, the replaced function |
+| `dw.vanilla.gameplay/evolution-unbound` | 1.5 rewrote `EVO_REQ_DATA`. Not a conflict: `dw15-evolution-unbound` runs in its place |
+| `dw.vanilla.trainer/guaranteed-drops` | 1.5 changed 138 of the `DIGIMON_DATA` drop bytes it guards. Not a conflict: `dw15-guaranteed-drops` runs in its place |
+| `dw.vanilla.evolution/native-evolution` | 1.5 changed `getFreshEvolutionTarget`, the replaced function: its first instruction jumps to 1.5's own chooser at `0x801F9940`. Not a conflict: `dw15-native-evolution`, which writes nothing and hooks nothing, runs in its place, so 1.5's chooser runs. The engine changes no behaviour yet, so nothing is lost |
 | `dw.newmaps/glade` | 1.5 rewrites the same disc files (§3.2), and its hook's function |
 | `dw.vanilla.qol/end-box-fix` | 1.5's delta owns its `BTL_REL.BIN` sectors, though not these bytes. The `dw15` feature makes the same writes itself. This one is default-on, so it gives way without being unticked (`MOD_PACKAGES.md`, Feature conflicts) |
 
@@ -1005,11 +1006,19 @@ launch with "collides at disc LBA ... with disc delta ...". A cross-package
 `[[requirement]]` does not count. Details: "Disc deltas" in
 `psxrecomp/docs/MOD_PACKAGES.md`.
 
-**1.5-only features.** Two features in `dw.1_5` are the 1.5 editions of
-features 1.5 turns off. Each has a `requires_feature dw15` constraint:
-ticking one ticks 1.5, unticking 1.5 unticks it, and a `state.toml` with one
-but not 1.5 refuses to launch. `tools/gen_dw15_extras.py` generates both from
-the 1.5 disc, below a marker in the manifest.
+**1.5 editions.** Three features in `dw.1_5` are the 1.5 editions of vanilla
+features (the third, `dw15-native-evolution`, is hand-written above the marker
+and empty). Each is `hidden`, has a `requires_feature dw15` constraint and names
+its original with `edition_of` (format 13, "Feature editions" in
+`psxrecomp/docs/MOD_PACKAGES.md`). While 1.5 and the original are both on, the
+session runs the edition instead, with the original's option values, and saves
+nothing: the player keeps one checkbox, and the runtime logs the edition as
+"activated implicitly (required by ...)". The originals are not in `dw15`'s
+`conflicts`. `tools/gen_dw15_extras.py` generates both from the 1.5 disc, below a
+marker in the manifest, and `tools/check_dw15_compat.py` reports an original with
+an edition as `edition`, not `CONFLICT`. Checked in game (2026-11-10): with 1.5,
+plain Guaranteed Drops and Evolution Unbound on Open, both editions activated and
+1.5's live drop table read 100 for species 1-11 (1.5 alone: 0, 0, 50, 30, ...).
 
 | Feature | Writes |
 |---|---|
