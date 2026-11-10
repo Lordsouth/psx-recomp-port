@@ -9,7 +9,7 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ---
 
-## Unreleased
+## 0.6.0
 
 **A new map: the Hidden Glade.** Tick it under **Mods → New maps**, go to the
 Native Forest screen where Palmon waits, and walk north through the gap in the
