@@ -20,8 +20,8 @@ So a feature conflicts with 1.5 when:
     the game no longer reads);
   * a game.toml hook it owns (mod_function_entry/exit/replace_funcs) sits in a
     function 1.5 changed, or a code/data range its plugin depends on changed.
-The expanded roster is exclusive with 1.5 regardless: both use the same free
-Digimon slots.
+The expanded roster's own writes always conflict with 1.5 (both use slot 114);
+its 1.5 edition, roster-15, runs in its place.
 
 main_exe guards are checked when the plan is applied, at the stock entry point
 0x800A4240 -- under 1.5 that is after its entry stub has copied its blocks out
@@ -325,7 +325,7 @@ def main():
                 only15[owner] = [0, []]
             elif owner != DW15:
                 features.append(owner)
-            if pkg in ALWAYS_EXCLUSIVE:
+            if pkg in ALWAYS_EXCLUSIVE and owner not in only15:
                 flag(owner, "uses the same free Digimon slots as 1.5")
         for p in m.get("patch", []):
             owner = "%s/%s" % (pkg, p["feature"])

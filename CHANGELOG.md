@@ -11,11 +11,13 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ## Unreleased
 
-**Hidden Glade, Guaranteed Item Drops and Evolution Unbound work with Digimon
-World 1.5.** Tick them as usual: while 1.5 is on they switch to versions made for
-1.5, the new Digimon included, and back when you untick 1.5. The glade is the same
-map and fight, written where 1.5 keeps the files it moved. The separate "(1.5)"
-entries are gone from the Mods list, and ticking 1.5 no longer turns these two
+**Every mod now works with Digimon World 1.5.** Expanded Roster, Hidden Glade,
+Guaranteed Item Drops and Evolution Unbound switch to versions made for 1.5 while
+it is on, the new Digimon included, and back when you untick 1.5. On 1.5 the roster
+makes the same 51 Digimon raisable, written into 1.5's own tables; Machinedramon is
+left out, because 1.5 uses its slot for Veemon. The glade is the same map and fight,
+written where 1.5 keeps the files it moved. The separate "(1.5)"
+entries are gone from the Mods list, and ticking 1.5 no longer turns any of these
 off. The Native Evolution Engine no longer turns 1.5 off either: on 1.5 it steps
 aside for 1.5's own evolution chooser.
 

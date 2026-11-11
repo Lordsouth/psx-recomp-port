@@ -958,12 +958,13 @@ during the BIOS load that byte is part of the block copied to `0x801F0204`.
 
 **Conflicts.** `tools/check_dw15_compat.py` (§7.5) compares every guarded
 write, every `game.toml` hook and the ranges the widescreen plugins depend on
-against the 1.5 disc. Six features cannot run on it as they are. Four of them have
-1.5 editions that run in their place by themselves; the other two turn off:
+against the 1.5 disc. Six features cannot run on it as they are. Five of them have
+1.5 editions that run in their place by themselves; the sixth, Battle End Freeze Fix,
+is built into `dw15` and gives way by itself:
 
 | Feature | Why |
 |---|---|
-| `dw.vanilla.roster/roster` | same free Digimon slots; 223 of its patches also hit changed bytes |
+| `dw.vanilla.roster/roster` | 1.5 grew and moved every table it relocates, and slot 114 is Veemon. Not a conflict: `roster-15` runs in its place (below) |
 | `dw.vanilla.gameplay/evolution-unbound` | 1.5 rewrote `EVO_REQ_DATA`. Not a conflict: `dw15-evolution-unbound` runs in its place |
 | `dw.vanilla.trainer/guaranteed-drops` | 1.5 changed 138 of the `DIGIMON_DATA` drop bytes it guards. Not a conflict: `dw15-guaranteed-drops` runs in its place |
 | `dw.vanilla.evolution/native-evolution` | 1.5 changed `getFreshEvolutionTarget`, the replaced function: its first instruction jumps to 1.5's own chooser at `0x801F9940`. Not a conflict: `dw15-native-evolution`, which writes nothing and hooks nothing, runs in its place, so 1.5's chooser runs. The engine changes no behaviour yet, so nothing is lost |
@@ -1031,6 +1032,42 @@ marker in the manifest, and `tools/check_dw15_compat.py` reports an original wit
 an edition as `edition`, not `CONFLICT`. Checked in game (2026-11-10): with 1.5,
 plain Guaranteed Drops and Evolution Unbound on Open, both editions activated and
 1.5's live drop table read 100 for species 1-11 (1.5 alone: 0, 0, 50, 30, ...).
+
+**The roster on 1.5** (`roster-15`, `tools/gen_roster_dw15.py`, in `dw.vanilla.roster`
+behind a `[[requirement]]` on `dw15`). 1.5 already grew every table the roster relocates
+to 384 types and moved it, and fills the rows for the roster's 51 species with
+placeholders, so nothing is relocated: the roster's rows are written into 1.5's tables,
+found by decoding 1.5's instructions at the stock reference sites. Requirement rows are
+the roster's own; raise, gains, item-take and training-animation rows come from the same
+donors, read from 1.5's tables; each species is wired into its source's path row (seven
+targets per row on 1.5, so Koromon, Tokomon, Tsunomon and Tanemon reach six).
+
+| Table | 1.5 address | Index | Written as |
+|---|---|---|---|
+| `EVO_REQ` / `EVO_GAINS` / `EVO_PATHS` | `0x80089020` / `0x8008BA20` / `0x8008CF20` (MODTBL) | type / type / type-1 | `disc_user`, both copies |
+| `RAISE_DATA` | `0x801FA01C` | type | `main_exe` |
+| `ITEM_TAKE_DISTANCE` | `0x801FCA40` | type-1 | `main_exe` |
+| `TRAINING_ANIM_IDS` / TRN2 | `0x8012ED14` / `0x8012F014` (inside the stock `DIGIMON_DATA` range) | type | `main_exe` |
+| `EVOCHART_ICONS` | `0x801215D4` | | not written: 1.5 rewrote the chart |
+
+Raised flags: 1.5's `setDigimonRaised` (`0x801F0D40`) banks species 63-179 at
+`0x262 + species`, which for 63-107 lands on treasure-chest ids its scripts use
+(`0x28A`-`0x2CC`, `tools/scan_trigger_ids.py` on 1.5's DG.SCN and MAPHEAD.SCN). Plain 1.5
+never raises those species; the roster does, so `roster-15` moves 63-113 to
+`0x296 + species` (`0x2D5`-`0x307`). The stock roster's replacement hook would not fire on a
+function 1.5 rewrote, so this is guarded patches on 1.5's own `setDigimonRaised`, which
+grows into the padding after it, and two words of its `hasDigimonRaised` (`0x801F9B80`).
+1.5's only raisable species in 115-179 is Veemon (114, `0x2D4`). The evolution-item level
+test and the Prosperity bound are the stock roster's patches, unchanged on 1.5.
+
+Not carried over: Machinedramon (slot 114 is Veemon); the battle-intro name glyphs, which
+1.5 still reads from the stock 112-row table, so WaruSeadramon and Meteormon show garbage
+on the arena banner, as they do without the roster; and the chart cursor fix.
+
+Checked in game (2026-11-11), `tools/verify_roster15.py`, 1.5's own choosers picking from
+shaped stats: Airdramon to Gigadramon (Champion), Meteormon to MudFrigimon (a roster source)
+and Koromon to ToyAgumon (1.5's Rookie chooser). Each evolution finished with control back,
+the flag set in the roster bank and the treasure-chest id untouched.
 
 | Feature | Writes |
 |---|---|
@@ -1856,6 +1893,8 @@ different executables.
 | `gen_save_anywhere.py`, `gen_text_speed.py`, `gen_walk_speed.py` | Save Anywhere, Text Speed and Run Speed, imported by `gen_qol_mods.py`. Run alone they only verify; `--out` writes a standalone test manifest |
 | `gen_dw15_extras.py` | the two generated 1.5 editions and 1.5's own end-box writes, below a marker in the `dw.1_5` manifest (needs the 1.5 image; `--check`) |
 | `gen_newmap_dw15.py` | `glade-15`, Hidden Glade's 1.5 edition, below a marker in the `dw.newmaps` manifest (needs the 1.5 image; `--check`) |
+| `gen_roster_dw15.py` | `roster-15`, Expanded Roster's 1.5 edition, below a marker in the `dw.vanilla.roster` manifest (needs the 1.5 image; `--check`) |
+| `verify_roster15.py` | on 1.5, a roster evolution 1.5's own chooser picks from shaped stats: `--source S --target T`, default Airdramon to Gigadramon; checks the raised flag's bank |
 | `gen_cheats_mod.py` | `dw.vanilla.cheats` and `dw_cheats_data.inc` from `cheats.txt` (`--check`) |
 | `gen_vice_mod.py` | a local-only package that must never be redistributed |
 | `gen_newmap_spike.py` | the local-only `dw.newmaps.spike` dev package (§3.1) in `build/mods/installed/`; never commit its output |

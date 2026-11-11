@@ -36,6 +36,8 @@ NOT_SHIPPED = {"dw.vanilla.vice"}
 
 
 EDITIONS = set()      # {frozenset(("pkg/edition", "pkg/original"))}: the runtime never runs both
+NEEDS = {}            # "pkg/feature" -> what it requires: requires_feature, unconditional [[requirement]]
+GIVES_WAY = {}        # "pkg/original" -> what its edition requires: while that is on, the original is off
 
 
 def load_patches(include_all):
@@ -47,9 +49,17 @@ def load_patches(include_all):
             pkg = m.get("id") or os.path.basename(mf)
             if not include_all and pkg in NOT_SHIPPED:
                 continue
+            for c in m.get("constraint", []):
+                if c.get("kind") == "requires_feature":
+                    NEEDS.setdefault("%s/%s" % (pkg, c["feature"]), set()).add("%s/%s" % (pkg, c["requires_feature"]))
+            for r in m.get("requirement", []):
+                if not r.get("when"):
+                    NEEDS.setdefault("%s/%s" % (pkg, r["feature"]), set()).add(
+                        "%s/%s" % (r["package"], r["requires_feature"]))
             for feat in m.get("feature", []):
                 if feat.get("edition_of"):
                     EDITIONS.add(frozenset(("%s/%s" % (pkg, feat["id"]), feat["edition_of"])))
+                    GIVES_WAY.setdefault(feat["edition_of"], set()).add("%s/%s" % (pkg, feat["id"]))
             for p in m.get("patch", []):
                 exp = (p.get("expected") or "").replace(" ", "")
                 start = p.get("address", p.get("offset"))
@@ -68,8 +78,15 @@ def load_patches(include_all):
 def mutually_exclusive(a, b):
     """Two patches of the same feature gated on different values of one option
     can never both be live; nor can a feature and its edition (edition_of)."""
-    if frozenset(("%s/%s" % (a["pkg"], a["feature"]), "%s/%s" % (b["pkg"], b["feature"]))) in EDITIONS:
+    ka, kb = "%s/%s" % (a["pkg"], a["feature"]), "%s/%s" % (b["pkg"], b["feature"])
+    if frozenset((ka, kb)) in EDITIONS:
         return True
+    # An original is off whenever what its edition needs is on, so it never runs
+    # beside a feature that needs the same thing (say, anything that needs 1.5).
+    for orig, other in ((ka, kb), (kb, ka)):
+        need = set().union(*(NEEDS.get(e, set()) for e in GIVES_WAY.get(orig, ())))
+        if need and (other in need or NEEDS.get(other, set()) & need):
+            return True
     if a["pkg"] != b["pkg"] or a["feature"] != b["feature"]:
         return False
     wa, wb = dict(a["when"]), dict(b["when"])
