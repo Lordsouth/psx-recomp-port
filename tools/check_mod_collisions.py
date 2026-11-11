@@ -35,6 +35,9 @@ SEARCH = [
 NOT_SHIPPED = {"dw.vanilla.vice"}
 
 
+EDITIONS = set()      # {frozenset(("pkg/edition", "pkg/original"))}: the runtime never runs both
+
+
 def load_patches(include_all):
     out = []
     for base in SEARCH:
@@ -44,6 +47,9 @@ def load_patches(include_all):
             pkg = m.get("id") or os.path.basename(mf)
             if not include_all and pkg in NOT_SHIPPED:
                 continue
+            for feat in m.get("feature", []):
+                if feat.get("edition_of"):
+                    EDITIONS.add(frozenset(("%s/%s" % (pkg, feat["id"]), feat["edition_of"])))
             for p in m.get("patch", []):
                 exp = (p.get("expected") or "").replace(" ", "")
                 start = p.get("address", p.get("offset"))
@@ -61,7 +67,9 @@ def load_patches(include_all):
 
 def mutually_exclusive(a, b):
     """Two patches of the same feature gated on different values of one option
-    can never both be live."""
+    can never both be live; nor can a feature and its edition (edition_of)."""
+    if frozenset(("%s/%s" % (a["pkg"], a["feature"]), "%s/%s" % (b["pkg"], b["feature"]))) in EDITIONS:
+        return True
     if a["pkg"] != b["pkg"] or a["feature"] != b["feature"]:
         return False
     wa, wb = dict(a["when"]), dict(b["when"])

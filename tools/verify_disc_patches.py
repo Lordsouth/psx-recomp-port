@@ -27,6 +27,7 @@ manifest's target_sha256), every other patch against the stock disc.
   py -3.12 tools/verify_disc_patches.py                  # auto-locate discs
   py -3.12 tools/verify_disc_patches.py path/to/game.bin [path/to/patched.bin]
 """
+import glob
 import hashlib
 import os
 import re
@@ -69,6 +70,18 @@ def delta_features(path):
     with open(path, "rb") as f:
         m = tomllib.load(f)
     if not m.get("disc_delta"):
+        # Another package's feature reaching a delta through an unconditional
+        # [[requirement]] is guarded after it too (the runtime's requires_delta).
+        packages = os.path.dirname(os.path.dirname(os.path.dirname(path)))
+        for r in m.get("requirement", []):
+            if r.get("when"):
+                continue
+            for other in glob.glob(os.path.join(packages, r["package"], "*", "manifest.toml")):
+                target, owned = delta_features(other)
+                if target and r["requires_feature"] in owned:
+                    return target, {x["feature"] for x in m["requirement"]
+                                    if x["package"] == r["package"] and not x.get("when")
+                                    and x["requires_feature"] in owned}
         return None, set()
     delta = m["disc_delta"][0]
     req = {}

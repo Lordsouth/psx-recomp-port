@@ -21,6 +21,7 @@
           HP is poked so the outcome is the one under test: the numbers are not
           judged here. --wide does it at 21:9 with the Expanded Roster on.
           --brains N checks Battle End Freeze Fix on the win (docs/GAME.md 12.1)
+    --dw15 runs a mode on Digimon World 1.5, where the glade runs its 1.5 edition
     measure (glade) a real fight: the partner evolved and set to --stats, then nothing
           poked but --heal. Presses only the finisher button. Prints how it went, judges nothing
 
@@ -79,6 +80,8 @@ WIDE = ('\n[[package]]\nid = "psx.enhancement.widescreen"\nversion = "1.0.0"\n\n
 NO_END_FIX = '\n[[feature]]\npackage_id = "dw.vanilla.qol"\nid = "end-box-fix"\nenabled = false\n'
 DROPS = ('\n[[package]]\nid = "dw.vanilla.trainer"\nversion = "1.0.0"\n\n'
          '[[feature]]\npackage_id = "dw.vanilla.trainer"\nid = "guaranteed-drops"\nenabled = true\n')
+DW15 = ('\n[[package]]\nid = "dw.1_5"\nversion = "1.0.0"\n\n'
+        '[[feature]]\npackage_id = "dw.1_5"\nid = "dw15"\nenabled = true\n')
 END_BUFFER, END_LINES = 0x80073EA0, 0x801350B0        # the box's text; lines expected, then rows drawn
 MP_BONUS = {700: 5, 800: 10, 900: 15, 999: 20}        # Brains reached: the percent its message names
 MAPS = {
@@ -99,6 +102,8 @@ def main():
     ap.add_argument("--no-end-fix", action="store_true", help="fight: with Battle End Freeze Fix off, so --brains freezes as stock does")
     ap.add_argument("--drops", action="store_true", help="fight: with Guaranteed Drops on, so the box has a drop message first")
     ap.add_argument("--wide", action="store_true", help="fight: at 21:9, with the Expanded Roster on")
+    ap.add_argument("--dw15", action="store_true",
+                    help="on Digimon World 1.5: the map runs its 1.5 edition, glade-15; cards live in dw15/")
     ap.add_argument("--card", choices=("glade", "host"), default="glade", help="off: which saved card to load")
     ap.add_argument("--map", choices=sorted(MAPS), default="glade")
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
@@ -127,17 +132,19 @@ def main():
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
         fh.write("format_version = 2\n" if a.mode == "off" else STATE % (mp["package"], mp["package"], mp["feature"])
-                 + (WIDE if a.wide else "") + (NO_END_FIX if a.no_end_fix else "") + (DROPS if a.drops else ""))
+                 + (WIDE if a.wide else "") + (NO_END_FIX if a.no_end_fix else "") + (DROPS if a.drops else "")
+                 + (DW15 if a.dw15 else ""))
+    card_dir = os.path.join(cards, "dw15") if a.dw15 else cards     # 1.5 keeps its own cards (dw_dw15.c)
     if a.mode == "off":                                # a copy of the card that save was left on
         shutil.rmtree(cards, ignore_errors=True)
         shutil.copytree(os.path.join(out, "cards_" + a.card), cards)
     if a.mode in ("run1", "fight", "measure"):
         shutil.rmtree(cards, ignore_errors=True)
-        os.makedirs(cards)
+        os.makedirs(card_dir)
         for name in ("card1.mcd", "card2.mcd"):
             if os.path.exists(os.path.join(a.seed, name)):
-                shutil.copy(os.path.join(a.seed, name), cards)
-        if not os.path.exists(os.path.join(cards, "card1.mcd")):
+                shutil.copy(os.path.join(a.seed, name), card_dir)
+        if not os.path.exists(os.path.join(card_dir, "card1.mcd")):
             print("No memory card to seed from at %s" % a.seed, file=sys.stderr)
             return 2
 
@@ -636,7 +643,13 @@ def main():
                 step()
 
         vec = {}
-        # Noon: the run takes a varying amount of game time, and reaching the partner's sleepy hour hides Save Anywhere.
+        # The run takes a varying amount of game time, and the partner's sleepy hour hides Save Anywhere. If it is
+        # already sleepy, roll the clock to just before its wake hour so the game clears the flag itself (it does not
+        # when the hour jumps), then set noon. PARTNER_PARA +08 is the wake hour (docs/GAME.md 8).
+        if g.para_condition & 1:
+            wake = struct.unpack("<h", g.d.read(0x80138460 + 8, 2))[0]
+            g.d.write_bytes(struct.pack("<hh", (wake - 1) % 24, 58), HOUR)
+            check(wait_for(lambda: not g.para_condition & 1, 30), "the partner woke at its wake hour %d" % wake)
         g.d.write_bytes(struct.pack("<hh", 12, 0), HOUR)
         stage(lambda: g.warp(mp["host_row"], spec["host"]["exit"]), walk_in, loaded_files,
               lambda: boss_fresh("on arrival"), lambda: vec.update(calibrate()),
@@ -675,7 +688,7 @@ def main():
         wait_for(lambda: i32(TRI_STATE) == -1, 10)
         g.route("6:triangle,40:none")
         wait_for(lambda: g.tamer_state == 0, 10)
-        card = open(os.path.join(cards, "card1.mcd"), "rb").read()
+        card = open(os.path.join(card_dir, "card1.mcd"), "rb").read()
         blk = next(i for i in range(1, 16) if card[i * 128 + 10:i * 128 + 26] == b"BASLUS-01032DMR0")
         s0 = card[blk * 0x2000 + 0x200:]
         main_state, px, py, pz = struct.unpack_from("<4i", s0)

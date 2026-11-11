@@ -314,8 +314,11 @@ def main():
                     errors.append("%s/%s has no requires_feature dw15 constraint"
                                   % (pkg, feat["id"]))
         else:
+            # An unconditional [[requirement]] on dw15 keeps the delta beneath
+            # the feature's writes, as the runtime's requires_delta follows it.
             needs = {r["feature"] for r in m.get("requirement", [])
-                     if r.get("package") == SELF and r.get("requires_feature") == "dw15"}
+                     if r.get("package") == SELF and r.get("requires_feature") == "dw15"
+                     and not r.get("when")}
         for feat in m.get("feature", []):
             owner = "%s/%s" % (pkg, feat["id"])
             if feat["id"] in needs:
@@ -332,10 +335,7 @@ def main():
                 only15[owner][0] += 1
                 where = "%s 0x%X" % (
                     t, p["address"] if t == "main_exe" else p["offset"])
-                if t != "main_exe" and pkg != SELF and owned(p, len(exp)) is not None:
-                    only15[owner][1].append(where + " (on a 1.5-delta sector; "
-                                            "only dw.1_5's own features may write there)")
-                elif not guard_ok_on_1_5(p, exp):
+                if not guard_ok_on_1_5(p, exp):
                     only15[owner][1].append(where)
                 continue
             if owner == DW15:
@@ -353,6 +353,24 @@ def main():
                     t, hit, pat.file_at(hit) or van.file_at(hit) or "no file"))
             elif name and pat.files.get(name) != van.files[name]:
                 flag(owner, "disc_user %s: 1.5 moved this file" % name)
+
+    # Overlays: the runtime refuses any on a delta-owned sector, required or not.
+    for pkg, m in manifests.items():
+        if pkg in NOT_SHIPPED:
+            continue
+        for o in m.get("overlay", []):
+            owner = "%s/%s" % (pkg, o["feature"])
+            if owner == DW15 or o["target"] == "main_exe":
+                continue
+            asset = os.path.join(ROOT, "mods", "preloaded", "packages", pkg, "1.0.0", o["file"])
+            hit = owned(o, os.path.getsize(asset))
+            if hit is None:
+                continue
+            why = "overlay %s at LBA %d is on a 1.5-delta sector" % (o["file"], hit)
+            if owner in only15:
+                only15[owner][1].append(why)
+            else:
+                flag(owner, why)
 
     # Hooks: function = [start, next seed start).
     with open(os.path.join(ROOT, "game.toml"), "rb") as f:
@@ -443,8 +461,10 @@ def main():
     changed = sum(vexe.text[i] != pexe.text[i] for i in range(len(vexe.text)))
     print("%d bytes of the original image differ\n" % changed)
     # A feature with a 1.5 edition (edition_of) gives way to it by itself while 1.5 is on.
-    editions = {f["edition_of"]: "%s/%s" % (SELF, f["id"])
-                for f in manifests[SELF].get("feature", []) if f.get("edition_of")}
+    editions = {f["edition_of"]: "%s/%s" % (pkg, f["id"])
+                for pkg, m in manifests.items() if pkg not in NOT_SHIPPED
+                for f in m.get("feature", [])
+                if f.get("edition_of") and "%s/%s" % (pkg, f["id"]) in only15}
     for owner in features:
         why = reasons.get(owner)
         if not why:

@@ -385,8 +385,20 @@ game (`docs/GAME.md` 2.3), so the glade stays on MGEN17's own sectors: a 30-tile
 TFS leaves 2 KB, and the 24-tile backdrop leaves room for 2 texture pages.
 The row, the MAPHEAD section and the entrance are small guarded patches. The DG
 script is a file because a patch must repeat the stock bytes it replaces, and those
-are live script bytecode; `disc_sha256` and the generator's asserts guard it. The MAPHEAD tail sectors overlap the `dw.1_5` delta, so the feature
-conflicts with 1.5.
+are live script bytecode; `disc_sha256` and the generator's asserts guard it.
+
+**On 1.5** the glade runs its edition `glade-15` (§4.4, 1.5 editions), written by
+`tools/gen_newmap_dw15.py` below a marker in the manifest; `gen_newmap.py` keeps that
+block when it rewrites the part above. 1.5 leaves row 239, MGEN17's sectors, DG slot
+118 and MAYO03's warp slot 4 free but moves three things: its stub copies the file
+table to `0x801F1000` (MGEN17's entries at `0x801F268C`), DG.SCN grew and sits past
+the stock end at LBA 162388 (slot 118 is rewritten there as a guarded `[[patch]]`,
+since the runtime refuses an overlay on a delta sector), and 1.5's own new MAPHEAD
+sections fill the tail to `0x60DE`, so the glade's section goes at `0x60DE`. The
+other writes are the glade's own, their guards checked against 1.5. The edition sits
+in `dw.newmaps` and reaches `dw15` through a `[[requirement]]`, which the runtime
+accepts for writes on delta sectors. Checked in game (2026-11-11): `run1 --dw15`
+passed every check, the save on a 1.5 card included.
 
 **The secret fight.** The MAP's entity block has one record, H-Kabuterimon, which
 the game places nowhere, at the end of the dirt path: HP 8800, MP 16000, Off 820,
@@ -946,8 +958,8 @@ during the BIOS load that byte is part of the block copied to `0x801F0204`.
 
 **Conflicts.** `tools/check_dw15_compat.py` (§7.5) compares every guarded
 write, every `game.toml` hook and the ranges the widescreen plugins depend on
-against the 1.5 disc. Six features cannot run on it as they are. Three of them have
-1.5 editions that run in their place by themselves; the other three turn off:
+against the 1.5 disc. Six features cannot run on it as they are. Four of them have
+1.5 editions that run in their place by themselves; the other two turn off:
 
 | Feature | Why |
 |---|---|
@@ -955,7 +967,7 @@ against the 1.5 disc. Six features cannot run on it as they are. Three of them h
 | `dw.vanilla.gameplay/evolution-unbound` | 1.5 rewrote `EVO_REQ_DATA`. Not a conflict: `dw15-evolution-unbound` runs in its place |
 | `dw.vanilla.trainer/guaranteed-drops` | 1.5 changed 138 of the `DIGIMON_DATA` drop bytes it guards. Not a conflict: `dw15-guaranteed-drops` runs in its place |
 | `dw.vanilla.evolution/native-evolution` | 1.5 changed `getFreshEvolutionTarget`, the replaced function: its first instruction jumps to 1.5's own chooser at `0x801F9940`. Not a conflict: `dw15-native-evolution`, which writes nothing and hooks nothing, runs in its place, so 1.5's chooser runs. The engine changes no behaviour yet, so nothing is lost |
-| `dw.newmaps/glade` | 1.5 rewrites the same disc files (§3.2), and its hook's function |
+| `dw.newmaps/glade` | 1.5 moved the file table, DG.SCN and the MAPHEAD tail it writes. Not a conflict: `glade-15` runs in its place (§3.2) |
 | `dw.vanilla.qol/end-box-fix` | 1.5's delta owns its `BTL_REL.BIN` sectors, though not these bytes. The `dw15` feature makes the same writes itself. This one is default-on, so it gives way without being unticked (`MOD_PACKAGES.md`, Feature conflicts) |
 
 Everything else passed, widescreen included: none of its seven hooked
@@ -1842,7 +1854,8 @@ different executables.
 | `gen_trainer.py` | `dw.vanilla.trainer` |
 | `gen_qol_mods.py`, `gen_gameplay_mods.py` | the QoL and gameplay packages |
 | `gen_save_anywhere.py`, `gen_text_speed.py`, `gen_walk_speed.py` | Save Anywhere, Text Speed and Run Speed, imported by `gen_qol_mods.py`. Run alone they only verify; `--out` writes a standalone test manifest |
-| `gen_dw15_extras.py` | the two 1.5-only features and 1.5's own end-box writes, below a marker in the `dw.1_5` manifest (needs the 1.5 image; `--check`) |
+| `gen_dw15_extras.py` | the two generated 1.5 editions and 1.5's own end-box writes, below a marker in the `dw.1_5` manifest (needs the 1.5 image; `--check`) |
+| `gen_newmap_dw15.py` | `glade-15`, Hidden Glade's 1.5 edition, below a marker in the `dw.newmaps` manifest (needs the 1.5 image; `--check`) |
 | `gen_cheats_mod.py` | `dw.vanilla.cheats` and `dw_cheats_data.inc` from `cheats.txt` (`--check`) |
 | `gen_vice_mod.py` | a local-only package that must never be redistributed |
 | `gen_newmap_spike.py` | the local-only `dw.newmaps.spike` dev package (§3.1) in `build/mods/installed/`; never commit its output |
@@ -1865,7 +1878,7 @@ sandbox memory card seeded from `saves/`; none of them touches your own saves.
 | `verify_model.py` | are a model file's bytes resident in guest RAM? |
 | `scan_trigger_ids.py` | which trigger ids do the disc scripts use? Run before widening any guard that writes one |
 | `extract_disc_file.py` | pull a file off the disc image by its ISO path, so a probe comes from the same disc as the build |
-| `verify_newmap.py` | does a map on row 239 work like a real map? `--map spike` or `glade`; `run1` walks in, runs the map's checks, saves and walks out; `run2` relaunches and continues (the glade: just outside it, then walks in and out and saves next door); `off --map glade --card glade\|host` loads those cards with the mod off; `fight --map glade [--wide] [--brains N] [--no-end-fix] [--drops]` wins, flees and loses the secret fight, and `--brains` crosses a stock end-box threshold, which freezes only with `--no-end-fix` (`GAME.md` 12.1); `measure --map glade --stats ... [--heal N]` plays a real fight, with nothing poked but `--heal`'s stand-in for recovery items, and only prints (§3.1, §3.2, `GAME.md` 7.18) |
+| `verify_newmap.py` | does a map on row 239 work like a real map? `--map spike` or `glade`; `run1` walks in, runs the map's checks, saves and walks out; `run2` relaunches and continues (the glade: just outside it, then walks in and out and saves next door); `off --map glade --card glade\|host` loads those cards with the mod off; `fight --map glade [--wide] [--brains N] [--no-end-fix] [--drops]` wins, flees and loses the secret fight, and `--brains` crosses a stock end-box threshold, which freezes only with `--no-end-fix` (`GAME.md` 12.1); `measure --map glade --stats ... [--heal N]` plays a real fight, with nothing poked but `--heal`'s stand-in for recovery items, and only prints; `--dw15` runs a mode on Digimon World 1.5, through `glade-15` (§3.1, §3.2, `GAME.md` 7.18) |
 | `verify_endfix15.py` | Battle End Freeze Fix on 1.5: `N` (699, 799, 899 or 998) wins a fight on DGHA01 with Brains at N, and checks the end box finishes on its MP bonus message and control comes back (`GAME.md` 12.1) |
 | `dis_script.py` | disassembles a DG script or a MAPHEAD section from your disc; prints only (`GAME.md` 4) |
 | `dw_tables.py` | writes the map records, species and moves as CSV under `build/tables/`. Derived game data, so it refuses a tracked folder |
