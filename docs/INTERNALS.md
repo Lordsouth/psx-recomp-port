@@ -1069,6 +1069,13 @@ shaped stats: Airdramon to Gigadramon (Champion), Meteormon to MudFrigimon (a ro
 and Koromon to ToyAgumon (1.5's Rookie chooser). Each evolution finished with control back,
 the flag set in the roster bank and the treasure-chest id untouched.
 
+All five editions together (2026-11-11, `tools/verify_dw15_states.py`): with 1.5 and every
+mod ticked, standing in the Hidden Glade, a savestate load and a Rewind jump both restored
+the game with the glade, 1.5's drop table, the roster's rows and wiring intact, and
+Evolution Unbound on Open read Flamedramon's walls as 50. Netplay is covered by
+`test_mod_packages`: a peer that adopts the host's selection derives the same editions and
+plan fingerprint. A real online room was not run.
+
 | Feature | Writes |
 |---|---|
 | `dw15-guaranteed-drops` | 203 `main_exe` bytes: `dropChance` (`0x801F4322 + type × 0x34`) to 100 for every named record below 100. 1.5's drop roll (`0x800ED298`) is the stock code with the new base. The 159 nameless slots are all zero and no 1.5 map places one. Records with chance 0 are raised too, as in the vanilla feature, so they drop their item byte, mostly item 0 |
@@ -1894,6 +1901,7 @@ different executables.
 | `gen_dw15_extras.py` | the two generated 1.5 editions and 1.5's own end-box writes, below a marker in the `dw.1_5` manifest (needs the 1.5 image; `--check`) |
 | `gen_newmap_dw15.py` | `glade-15`, Hidden Glade's 1.5 edition, below a marker in the `dw.newmaps` manifest (needs the 1.5 image; `--check`) |
 | `gen_roster_dw15.py` | `roster-15`, Expanded Roster's 1.5 edition, below a marker in the `dw.vanilla.roster` manifest (needs the 1.5 image; `--check`) |
+| `verify_dw15_states.py` | on 1.5 with every mod ticked, in the Hidden Glade: a savestate load and a Rewind jump (driven through the debug host pad layer, the only input Rewind reads headless) must bring the game back with the editions' data intact; also checks Evolution Unbound's setting reaches its 1.5 edition |
 | `verify_roster15.py` | on 1.5, a roster evolution 1.5's own chooser picks from shaped stats: `--source S --target T`, default Airdramon to Gigadramon; checks the raised flag's bank |
 | `gen_cheats_mod.py` | `dw.vanilla.cheats` and `dw_cheats_data.inc` from `cheats.txt` (`--check`) |
 | `gen_vice_mod.py` | a local-only package that must never be redistributed |

@@ -643,14 +643,6 @@ def main():
                 step()
 
         vec = {}
-        # The run takes a varying amount of game time, and the partner's sleepy hour hides Save Anywhere. If it is
-        # already sleepy, roll the clock to just before its wake hour so the game clears the flag itself (it does not
-        # when the hour jumps), then set noon. PARTNER_PARA +08 is the wake hour (docs/GAME.md 8).
-        if g.para_condition & 1:
-            wake = struct.unpack("<h", g.d.read(0x80138460 + 8, 2))[0]
-            g.d.write_bytes(struct.pack("<hh", (wake - 1) % 24, 58), HOUR)
-            check(wait_for(lambda: not g.para_condition & 1, 30), "the partner woke at its wake hour %d" % wake)
-        g.d.write_bytes(struct.pack("<hh", 12, 0), HOUR)
         stage(lambda: g.warp(mp["host_row"], spec["host"]["exit"]), walk_in, loaded_files,
               lambda: boss_fresh("on arrival"), lambda: vec.update(calibrate()),
               lambda: a.brains and (g.d.write_bytes(struct.pack("<h", a.brains), PARTNER_STATS + 6),
@@ -671,6 +663,10 @@ def main():
         shot("row122")
 
     def save_here(on_new_map=True, anywhere=False):
+        # A run takes a varying amount of game time and can reach the partner's sleepy hour, which hides Save
+        # Anywhere. Noon first: the game re-checks the hour against its sleepy..wake window and clears the flag.
+        g.d.write_bytes(struct.pack("<hh", 12, 0), HOUR)
+        wait_for(lambda: not g.para_condition & 1, 5)
         check((g.para_condition & 1) == 0, "partner not sleepy, so Save Anywhere is offered")
         if on_new_map and a.map == "glade":            # a pile dropped here, in the table's last slot
             g.d.write_bytes(bytes([239, 50, 50, 5]), WORLD_POOP + 99 * 4)
