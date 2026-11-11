@@ -58,6 +58,7 @@
 
 #include "cpu_state.h"
 #include "mod_plugins.h"
+#include "dw_newmaps_files.h"
 
 extern int32_t psx_mod_ws_native_wide_offset(void);
 
@@ -186,6 +187,35 @@ static void dw_tfs_invalidate(void) {
     dw_tfs_tried = 0;
 }
 
+/* A map served from the unused MMM.DAT area has no ISO entry; read it by sector.
+ * Whole sectors are read, so a buffer that cannot hold ceil(size/2048)*2048 bytes
+ * gets a bounce buffer, and the copy-out is exactly size bytes. */
+static int dw_tfs_read_served(const char* name, uint8_t* buf, uint32_t cap, uint32_t* size) {
+    char file[DW_MAP_NAME_MAX + 5];
+    uint32_t lba, sz, rounded;
+    uint8_t* tmp;
+    int ok;
+
+    *size = 0;
+    snprintf(file, sizeof file, "%s.TFS", name);
+    if (!dw_newmaps_file(file, &lba, &sz) || sz < 8 || sz > cap)
+        return 0;
+    rounded = (sz + 2047u) & ~2047u;
+    if (rounded <= cap) {
+        ok = psx_mod_read_disc_sectors(lba, rounded / 2048u, buf);
+    } else {
+        tmp = (uint8_t*)malloc(rounded);
+        ok = tmp && psx_mod_read_disc_sectors(lba, rounded / 2048u, tmp);
+        if (ok)
+            memcpy(buf, tmp, sz);
+        free(tmp);
+    }
+    if (!ok)
+        return 0;
+    *size = sz;
+    return 1;
+}
+
 /* buildMapPath (map.c:4101): \MAP\MAP<id/15+1>\<filename><ext>. The name is
  * from MAP_ENTRIES, the executable's static map table; the bytes only ever
  * come from the disc. */
@@ -208,7 +238,9 @@ static int dw_tfs_read(int32_t map, uint8_t* buf, uint32_t cap, uint32_t* size) 
     if (i == 0)
         return 0;
     snprintf(path, sizeof path, "\\MAP\\MAP%d\\%s.TFS", (map / 15) + 1, name);
-    return psx_mod_read_disc_file(path, buf, cap, size) && *size >= 8;
+    if (psx_mod_read_disc_file(path, buf, cap, size) && *size >= 8)
+        return 1;
+    return dw_tfs_read_served(name, buf, cap, size);
 }
 
 static void dw_bank_prepare(int32_t map);
