@@ -92,7 +92,7 @@ mod_function_exit_funcs = ["0x800D78BC", "0x800D6A4C", "0x800D57EC", "0x800B4CF4
 # byte patch is GONE from the manifest and must stay gone: a patched function
 # is refused by native dispatch, and the replacement lives inside the body that
 # would be refused. tools/scan_trigger_ids.py re-runs the audit.
-mod_function_replace_funcs = ["0x800E2544", "0x800D7F68", "0x800FF7F8", "0x800FF824"]
+mod_function_replace_funcs = ["0x800E2544", "0x800D7F68", "0x800FF7F8", "0x800FF824", "0x800A31F8"]
 # 0x800D7F68 = cameraIsAtEdge (map.c:2341-2370): a 212-byte leaf with no calls,
 # and the single per-frame chokepoint for the camera scroll clamp. dw_ws_camera.c
 # widens its X arm by the native-wide reveal so the map edge stays inside the
@@ -139,6 +139,13 @@ mod_function_replace_funcs = ["0x800E2544", "0x800D7F68", "0x800FF7F8", "0x800FF
 # all built in overlays no hook reaches. dw_ws_backdrop.c walks the table once
 # and moves every edge of a full-height untextured or solid-patch rectangle
 # that lies exactly on the 4:3 frame edge out to the presented width.
+# 0x800A31F8 = lookupFileTable: the name -> disc sector/size lookup every file read
+# goes through (it strips the path to the name after the last backslash and
+# strcmp's the game's FILE_OFFSET_TABLE). dw_newmaps.c answers for the names in
+# dw_newmaps_files.inc, which live in the unused MMM.DAT area, and returns 0 (the
+# stock body runs) for every other name, and whenever the dw.newmaps plugin is not
+# in the plan. A replace hook is not plan-gated by the framework, so the plugin
+# gates itself with an activation / session-reset pair.
 seeds ="seeds/ghidra_funcs.txt"
 out_dir = "generated"
 strict = true

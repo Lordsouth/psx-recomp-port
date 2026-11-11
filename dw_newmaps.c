@@ -19,11 +19,13 @@
  * writes the default payload without writeSavegame, hence the return-address filter.
  *
  * Entry hooks are selected by the plan ([[plugin]] in the manifest), so this is inert
- * with the feature off. It holds no state, so savestates and rewind have nothing to do.
+ * with the feature off. It holds no guest state, so savestates and rewind have nothing to do
+ * (s_live below is host plan state, set at activation).
  */
 #include <stdint.h>
 
 #include "cpu_state.h"
+#include "dw_newmaps_files.h"
 #include "mod_plugins.h"
 
 #define DW_CHECKSUM   0x80112D34u   /* createSavegameChecksum */
@@ -99,6 +101,34 @@ static void dw_newmaps_pre_checksum(struct CPUState* cpu, uint32_t address) {
         psx_mod_write_byte(PREV_EXIT, DW_STOCK_EXIT);
 }
 
+/* lookupFileTable(FileLookup* a0, char* a1): answer for the names dw_newmaps_files.inc lists,
+ * and decline every other name so the stock body runs. FileLookup is { CdlLOC pos; u32 size }.
+ *
+ * Function replacements fire whether or not a plan selected the plugin, so the gate is the
+ * activation pair: the plan that selects "dw.newmaps" sets s_live, and the session reset that
+ * precedes every plan (including ones that omit the plugin) clears it. */
+#define DW_LOOKUP_FILE_TABLE 0x800A31F8u
+static int s_live;
+
+static void dw_newmaps_on(void) { s_live = 1; }
+static void dw_newmaps_off(void) { s_live = 0; }
+
+static int dw_newmaps_lookup(struct CPUState* cpu, uint32_t address) {
+    char buf[65];
+    uint32_t lba, size;
+    (void)address;
+    if (!s_live || !dw_newmaps_file(dw_newmaps_basename(cpu->gpr[5], buf), &lba, &size))
+        return 0;
+    psx_mod_write_word(cpu->gpr[4] + 4, size);
+    psx_mod_write_word(cpu->gpr[4], dw_newmaps_cdloc(lba));
+    cpu->gpr[2] = 1;
+    cpu->pc = cpu->gpr[31];
+    return 1;
+}
+
 PSX_MOD_CONSTRUCTOR(dw_newmaps_register) {
+    psx_mod_register_activation_plugin("dw.newmaps", dw_newmaps_on);
+    psx_mod_register_session_reset_plugin("dw.newmaps", dw_newmaps_off);
+    psx_mod_register_function_replace_plugin("dw.newmaps", DW_LOOKUP_FILE_TABLE, dw_newmaps_lookup);
     psx_mod_register_function_entry_plugin("dw.newmaps", DW_CHECKSUM, dw_newmaps_pre_checksum);
 }
