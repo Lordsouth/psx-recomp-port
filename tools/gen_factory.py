@@ -65,7 +65,7 @@ STOCK_FILLER = bytes.fromhex("fb00b400")  # a free row's MAPHEAD section binds s
 HOST = dict(file="GIAS09", row=78, warp=1,          # the free MapWarps slot the new exit takes
             cells=((54, 53), range(30, 36)),        # (wall column, floor column), rows
             spawn=(50, 0, 1750, 0x400),             # coming back: x, y, z, rotation (0x400 faces west, away)
-            save_exit=0)                            # the stock exit a card names instead (Task 4: dw_newmaps.c)
+            save_exit=0)                            # the stock exit a card names instead (k_maps in dw_newmaps.c)
 
 PAINT = (6, 5)                       # the frame the art will be painted in, as the glade's ...
 GRID = (6, 4)                        # ... and the backdrop, its centre crop: 24 tiles
@@ -538,6 +538,8 @@ def main():
         tz, tx = cell(x, z)
         assert hd[hcol + tz * 100 + tx] == 0, "the return spawn and the partner's spot must be floor"
         assert tx <= floor_col - 1, "the return spawn must stay off the strip"
+    E.assert_in_k_maps(open(os.path.join(ROOT, "dw_newmaps.c"), encoding="utf-8").read(), PACKAGE, ROWS[0], ROWS[-1],
+                       HOST["row"], HOST["warp"], HOST["save_exit"])
     h = hashlib.sha256()
     f.seek(0)
     for block in iter(lambda: f.read(1 << 22), b""):

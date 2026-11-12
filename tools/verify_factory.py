@@ -8,10 +8,16 @@
            gap). From AFAC4 walk back through every screen to the host, landing at each previous screen's spawn 2
            and at the host's return spawn.
            --wide does it at 21:9 and checks each screen's edges against its backdrop (Field.slivers).
+    saves  fresh sandbox card, Save Anywhere on: walk in and save on AFAC1, save on AFAC2..AFAC4, then walk out to the
+           host and save there. Every card names the host, the stock exit and the gate's return spawn, and no card
+           names a row 240-243. The card saved inside is kept as factory-inside.
+    off    the factory OFF, on the stock game: Continue from factory-inside loads the host and the player walks.
 
     py -3.12 tools/gen_factory.py
     cmake --build build-debug --target psx-runtime      (stages the bundled package)
     py -3.12 -I tools/verify_factory.py walk --seed <card dir> [--port N] [--wide]
+    py -3.12 -I tools/verify_factory.py saves --seed <card dir> [--port N]
+    py -3.12 -I tools/verify_factory.py off [--port N]
 
 The seed is any card dir whose slot 1 holds a Digimon World file. It writes build/mods/state.toml. Verdicts are
 guest-memory reads (and at 21:9 the screenshot's edges against our own backdrop).
@@ -27,12 +33,14 @@ import tomllib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game  # noqa: E402
-from field_drive import Field, TAMER, RIGHT, LEFT  # noqa: E402
+from field_drive import Field, TAMER, RIGHT, LEFT, IS_SCRIPT_PAUSED, PREVIOUS_SCREEN  # noqa: E402
 from newmap_engine import tile_of  # noqa: E402
 
 PACKAGE, FEATURE = "dw.newmaps.factory", "factory"
 STATE = ('format_version = 2\n\n[[package]]\nid = "%s"\nversion = "1.0.0"\n\n'
          '[[feature]]\npackage_id = "%s"\nid = "%s"\nenabled = true\n' % (PACKAGE, PACKAGE, FEATURE))
+SAVES = ('\n[[package]]\nid = "dw.vanilla.qol"\nversion = "1.0.0"\n\n'
+         '[[feature]]\npackage_id = "dw.vanilla.qol"\nid = "save-anywhere"\nenabled = true\n')
 WIDE = ('\n[[package]]\nid = "psx.enhancement.widescreen"\nversion = "1.0.0"\n\n'
         '[[feature]]\npackage_id = "psx.enhancement.widescreen"\nid = "widescreen"\nenabled = true\n'
         '[feature.values]\naspect = "21:9"\n')
@@ -41,7 +49,7 @@ WIDE = ('\n[[package]]\nid = "psx.enhancement.widescreen"\nversion = "1.0.0"\n\n
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=("walk",))
+    ap.add_argument("mode", choices=("walk", "saves", "off"))
     ap.add_argument("--wide", action="store_true", help="at 21:9, with each screen's edges checked")
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
     ap.add_argument("--port", type=int, default=4450)
@@ -74,15 +82,19 @@ def main():
     overlays = {o["file"]: o["offset"] for o in tomllib.load(open(os.path.join(src, "manifest.toml"), "rb"))["overlay"]} \
         if os.path.exists(os.path.join(src, "manifest.toml")) else {}
     shutil.rmtree(cards, ignore_errors=True)
-    os.makedirs(cards)
-    for name in ("card1.mcd", "card2.mcd"):
-        if os.path.exists(os.path.join(a.seed, name)):
-            shutil.copy(os.path.join(a.seed, name), cards)
-    if not os.path.exists(os.path.join(cards, "card1.mcd")):
-        print("No memory card to seed from at %s" % a.seed, file=sys.stderr)
-        return 2
+    if a.mode == "off":                                # a copy of the card the last inside save left
+        shutil.copytree(os.path.join(out, "cards_factory-inside"), cards)
+    else:
+        os.makedirs(cards)
+        for name in ("card1.mcd", "card2.mcd"):
+            if os.path.exists(os.path.join(a.seed, name)):
+                shutil.copy(os.path.join(a.seed, name), cards)
+        if not os.path.exists(os.path.join(cards, "card1.mcd")):
+            print("No memory card to seed from at %s" % a.seed, file=sys.stderr)
+            return 2
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
-        fh.write(STATE + (WIDE if a.wide else ""))
+        fh.write("format_version = 2\n" if a.mode == "off"
+                 else STATE + (SAVES if a.mode == "saves" else "") + (WIDE if a.wide else ""))
 
     g = Game.launch(exe=os.path.join(a.build, "Digimon_World_Recompiled.exe"), port=a.port,
                     memcard_dir=cards, extra_args=["--headless-opengl"], log_path=os.path.join(out, a.mode + ".log"))
@@ -124,17 +136,78 @@ def main():
         ok = go(tuple(target), lambda: screen() == row_to or g.tamer_state == 5, vec=vec)
         check(ok and wait_for(lambda: screen() == row_to and g.tamer_state == 0, 120), "%s: walked onto map %d" % (what, row_to))
 
-    try:
-        f.enter()
-        g.settle(timeout_frames=1800)
-        for sc in screens:
-            check(g.map_record(sc["row"])["file"] == sc["name"], "row %d holds %s (is %s enabled?)" % (sc["row"], sc["name"], PACKAGE))
-        g.warp(host["row"], host["exit"])
-        arrived(host["row"], host["spawn"], "the gate's spawn on %s" % host["file"])
+    def walk_in():
+        """From the host's spawn, straight east through the gate onto AFAC1."""
         f.pad(RIGHT)                                   # straight east: the walker's calibration would take the gate
         ok = wait_for(lambda: screen() == screens[0]["row"] or g.tamer_state == 5, 10)
         f.pad(0)
         check(ok, "walked east through the new gate on %s" % host["file"])
+
+    def save(what):
+        """Save Anywhere here; the card must name the host, the stock exit and the return spawn, and no factory row."""
+        def judge(s0, main_state, at):
+            names_factory = any(240 <= s0[i] <= 243 for i in (0x49A, 0x49B)) or \
+                any(240 <= s0[i] <= 243 for i in range(0x24, 0x24 + 0x190, 4))
+            check(main_state == 1 and s0[0x49A] == host["row"] and s0[0x49C] == host["save_exit"] and not names_factory,
+                  "%s: card names map %d exit %d (before: map %d exit %d), no factory row"
+                  % (what, s0[0x49A], s0[0x49C], s0[0x49B], s0[0x49D]))
+            check(tuple(at) == tuple(host["spawn"][:3]), "%s: card position %s is the gate's return spawn" % (what, tuple(at)))
+        f.save_here(cards, out, judge)
+
+    def settled_on(row):
+        ok = wait_for(lambda: screen() == row and g.tamer_state == 0, 120)
+        wait_for(lambda: f.i32(IS_SCRIPT_PAUSED) == 1, 20)
+        g.advance(120)                                 # the field menu takes input once the arrival has settled
+        check(ok, "on map %d, in control" % row)
+
+    def saves():
+        g.warp(host["row"], host["exit"])
+        arrived(host["row"], host["spawn"], "the gate's spawn on %s" % host["file"])
+        walk_in()
+        for i, sc in enumerate(screens):
+            if i:
+                g.warp(sc["row"], 0)                   # the walk test covers the way through
+            settled_on(sc["row"])
+            save("saved inside %s" % sc["name"])
+            check(screen() == sc["row"], "%s: play stays on map %d after the save" % (sc["name"], sc["row"]))
+        f.keep_card("factory-inside", cards, out)
+        g.warp(screens[0]["row"], 0)                   # out through AFAC1's strip: the live previous screen is a factory row
+        settled_on(screens[0]["row"])
+        vec.update(f.calibrate())
+        leave(screens[0]["strip_back"], host["row"], "%s, the strip back" % screens[0]["name"])
+        settled_on(host["row"])
+        live = g.d.read(PREVIOUS_SCREEN, 1)[0]
+        check(live == screens[0]["row"], "next door, the live game names the factory: previous screen %d" % live)
+        save("saved out at the host")
+
+    def off():
+        saved = json.load(open(os.path.join(out, "saved_pos_factory-inside.json")))
+        p = pos(TAMER)
+        shot("off")
+        check(g.map_record(screens[0]["row"])["file"] == "", "the factory is off: row %d is empty" % screens[0]["row"])
+        check(screen() == host["row"], "Continue lands on the stock map %d" % host["row"])
+        check(p is not None and abs(p[0] - saved[0]) < 60 and abs(p[2] - saved[2]) < 60,
+              "at the saved position %s (now %s)" % (saved, p))
+        f.walk(RIGHT, 3)                               # the walk that enters the factory with it on: a stock wall now
+        q = pos(TAMER)
+        check(screen() == host["row"] and f.gstate() == 0 and q is not None and q[0] != p[0],
+              "the player walks, on the stock map (now %s)" % (q,))
+        f0 = g.d.frame()
+        time.sleep(2)
+        check(g.d.frame() > f0 + 60, "game running")
+
+    try:
+        f.enter()
+        g.settle(timeout_frames=1800)
+        if a.mode in ("saves", "off"):
+            (saves if a.mode == "saves" else off)()
+            print("RESULT factory %s: %s" % (a.mode, "FAIL %s" % fails if fails else "PASS"))
+            return 1 if fails else 0
+        for sc in screens:
+            check(g.map_record(sc["row"])["file"] == sc["name"], "row %d holds %s (is %s enabled?)" % (sc["row"], sc["name"], PACKAGE))
+        g.warp(host["row"], host["exit"])
+        arrived(host["row"], host["spawn"], "the gate's spawn on %s" % host["file"])
+        walk_in()
         for i, sc in enumerate(screens):
             arrived(sc["row"], sc["spawn"][0], "%s, walking in" % sc["name"])
             files(sc)

@@ -439,9 +439,7 @@ def main():
     for x, z in ((HOST_SPAWN[0], HOST_SPAWN[2]), (HOST_SPAWN[0], HOST_SPAWN[2] + 200)):   # tamer, then partner
         assert hd[hcol + (50 - int(z / 100) - (z > 0)) * 100 + int(x / 100) + 50 - (x < 0)] == 0, "spawn must be floor"
     src = open(os.path.join(root, "dw_newmaps.c"), encoding="utf-8").read()
-    for name, value in (("DW_ROW", ROW), ("DW_HOST_ROW", HOST_ROW), ("DW_HOST_EXIT", HOST_WARP),
-                        ("DW_STOCK_EXIT", HOST_SAVE_EXIT)):
-        assert re.search(r"#define %s\s+%d\b" % (name, value), src), "dw_newmaps.c disagrees on " + name
+    E.assert_in_k_maps(src, "dw.newmaps", ROW, ROW, HOST_ROW, HOST_WARP, HOST_SAVE_EXIT)
     h = hashlib.sha256()
     f.seek(0)
     for block in iter(lambda: f.read(1 << 22), b""):

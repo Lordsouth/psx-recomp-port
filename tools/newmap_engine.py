@@ -10,6 +10,7 @@ primitives are `ell` (ellipsoid: c, r), `cyl` (vertical cylinder: c = (x, z), r,
 
     py -3.12 -I tools/newmap_engine.py      # self-check of the box primitive
 """
+import re
 import struct
 from dataclasses import dataclass, field
 from typing import Callable
@@ -22,6 +23,13 @@ FG_MARGIN = 100                      # camera-depth gap kept between a sprite's 
 CHAR_SAMPLES = [(dx, y, dz) for dx in np.arange(-50, 51, 12.5) for y in np.arange(-10, -350, -25) for dz in (-40, 0, 40)]
                                      # a character's box at about pixel pitch: a pixel is 7-15 units here
 DEFAULT_SUN = np.array([0.35, 1.0, -0.55]) / np.linalg.norm([0.35, 1.0, -0.55])   # +Y down: from behind-left
+
+
+def assert_in_k_maps(src, plugin, first_row, last_row, host_row, host_exit, stock_exit):
+    """dw_newmaps.c's k_maps must hold this map's entry, the one its save remap reads."""
+    entry = '{"%s", %d, %d, %d, %d, %s}' % (plugin, first_row, last_row, host_row, host_exit, stock_exit)
+    flat = re.sub(r"\s+", " ", src)
+    assert entry in flat, "dw_newmaps.c k_maps disagrees on " + plugin
 
 
 def _flat_albedo(x, z):

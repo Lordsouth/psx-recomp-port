@@ -33,10 +33,13 @@
 #define S0            0x80131B2Cu   /* SAVE_FILE.saves[0] */
 #define DW_MAP_WARPS  0x80138730u   /* i16 spawnX[10], Y, Z, rotation, targetMap, targetExit */
 
-#define DW_ROW        239           /* the new map */
-#define DW_HOST_ROW   2             /* its host, and the exit added there: gen_newmap.py asserts these */
-#define DW_HOST_EXIT  4
-#define DW_STOCK_EXIT 0             /* what a card names instead: slot 4's spawn is empty on the stock map */
+/* One entry per map package: its rows, the host screen, the warp slot the host's new exit takes, and the
+ * stock exit a card names instead (the glade's host slot 4 has an empty spawn on the stock map). The generators assert their own row against this table. */
+typedef struct { const char* plugin; uint8_t first_row, last_row, host_row, host_exit, stock_exit; } DwMap;
+static const DwMap k_maps[] = {
+    {"dw.newmaps",         239, 239,  2, 4, 0},
+    {"dw.newmaps.factory", 240, 243, 78, 1, 0},
+};
 
 #define SCREEN      (S0 + 0x49A)    /* currentScreen */
 #define PREV_SCREEN (S0 + 0x49B)
@@ -80,25 +83,30 @@ static void move_save_to_host(void) {
     psx_mod_write_byte(S0 + 0x4E0, 0);                    /* tamerWaypointActive */
 }
 
-static void dw_newmaps_pre_checksum(struct CPUState* cpu, uint32_t address) {
-    (void)address;
+static int in_map(const DwMap* m, uint8_t row) { return row >= m->first_row && row <= m->last_row; }
+
+static void remap(const DwMap* m, struct CPUState* cpu) {
     if (cpu->gpr[31] != DW_RA_SLEEP && cpu->gpr[31] != DW_RA_MACHINE)
         return;
 
     for (uint32_t i = 0; i < 100; i++)
-        if (psx_mod_read_byte(POOP + i * 4) == DW_ROW)
+        if (in_map(m, psx_mod_read_byte(POOP + i * 4)))
             psx_mod_write_word(POOP + i * 4, POOP_FREE);
-    if (psx_mod_read_byte(SCREEN) == DW_ROW)
+    if (in_map(m, psx_mod_read_byte(SCREEN)))
         move_save_to_host();
-    if (psx_mod_read_byte(PREV_SCREEN) == DW_ROW) {     /* walked out, then saved next door */
+    if (in_map(m, psx_mod_read_byte(PREV_SCREEN))) {     /* walked out, then saved next door */
         psx_mod_write_byte(PREV_SCREEN, psx_mod_read_byte(SCREEN));
         psx_mod_write_byte(PREV_EXIT, psx_mod_read_byte(EXIT));
     }
-    if (psx_mod_read_byte(SCREEN) == DW_HOST_ROW && psx_mod_read_byte(EXIT) == DW_HOST_EXIT)
-        psx_mod_write_byte(EXIT, DW_STOCK_EXIT);
-    if (psx_mod_read_byte(PREV_SCREEN) == DW_HOST_ROW && psx_mod_read_byte(PREV_EXIT) == DW_HOST_EXIT)
-        psx_mod_write_byte(PREV_EXIT, DW_STOCK_EXIT);
+    if (psx_mod_read_byte(SCREEN) == m->host_row && psx_mod_read_byte(EXIT) == m->host_exit)
+        psx_mod_write_byte(EXIT, m->stock_exit);
+    if (psx_mod_read_byte(PREV_SCREEN) == m->host_row && psx_mod_read_byte(PREV_EXIT) == m->host_exit)
+        psx_mod_write_byte(PREV_EXIT, m->stock_exit);
 }
+
+/* A hook takes no argument and a plugin id holds one hook per address, so each map has its own entry. */
+static void dw_newmaps_pre_checksum(struct CPUState* cpu, uint32_t address) { (void)address; remap(&k_maps[0], cpu); }
+static void dw_newmaps_factory_pre_checksum(struct CPUState* cpu, uint32_t address) { (void)address; remap(&k_maps[1], cpu); }
 
 /* lookupFileTable(FileLookup* a0, char* a1): answer for the names dw_newmaps_files.inc lists,
  * and decline every other name so the stock body runs. FileLookup is { CdlLOC pos; u32 size }.
@@ -127,5 +135,6 @@ static int dw_newmaps_lookup(struct CPUState* cpu, uint32_t address) {
 PSX_MOD_CONSTRUCTOR(dw_newmaps_register) {
     for (uint32_t i = 0; i < sizeof DW_FILE_PLUGINS / sizeof *DW_FILE_PLUGINS; i++)
         psx_mod_register_function_filter_plugin(DW_FILE_PLUGINS[i], DW_LOOKUP_FILE_TABLE, dw_newmaps_lookup);
-    psx_mod_register_function_entry_plugin("dw.newmaps", DW_CHECKSUM, dw_newmaps_pre_checksum);
+    psx_mod_register_function_entry_plugin(k_maps[0].plugin, DW_CHECKSUM, dw_newmaps_pre_checksum);
+    psx_mod_register_function_entry_plugin(k_maps[1].plugin, DW_CHECKSUM, dw_newmaps_factory_pre_checksum);
 }
