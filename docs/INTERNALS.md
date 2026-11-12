@@ -520,6 +520,34 @@ Still to do:
 - foreground sprites for the rocks, stump and log (their collision comes from
   the painting, so a sprite would need the painted footprint)
 
+### 3.3 Map files and scripts from MMM.DAT (verified in game, 2026-11-11)
+
+New maps beyond the stock file table need no table rows and no overlay patches.
+
+- **Files by name.** `dw_newmaps.c` replaces `lookupFileTable` (0x800A31F8, `src/main/file.c:16`) for plans that include the
+  `dw.newmaps` plugin, and is inert otherwise. For a name listed in `dw_newmaps_files.inc` (`{"NAME.EXT", lba, size}`,
+  searched by `dw_newmaps_files.c`) it writes the `FileLookup` (the CdlLOC of the LBA, the size) and returns 1; any other
+  name runs the stock body. `readFile` then reads whole sectors from the LBA, so a file in MMM.DAT (LBA 148668+) loads like
+  any other. The .inc holds only the two proof rows, `FACT0.MAP` and `FACT0.TFS`.
+- **The sliver.** The 21:9 backdrop reads the TFS through the ISO directory, which a served name does not have. When
+  that misses, `dw_ws_sliver.c` looks the name up in the same table and reads the TFS by sector (through a bounce buffer
+  when the destination is smaller than the whole sectors).
+- **Scripts by row.** A DG table row 223+ pointing into MMM.DAT runs on stock code (GAME.md 4.1). The map's MAPHEAD
+  section names the row in its `FB` op.
+- **The proof, local only.** `tools/gen_newmap_proof.py` writes `build-debug/mods/installed/dw.newmaps.proof` (feature `proof`,
+  plugin `dw.newmaps`) and the two .inc rows: map row 240 named `FACT0` carrying the glade's own MAP, TFS and script,
+  placed in MMM.DAT, with DG table[223] pointing at the script and a MAPHEAD section for row 240 after the glade's.
+  It carries copies of the glade's assets and is never committed.
+- **What ran** [run 2026-11-11]:
+  - `verify_newmap_files.py --proof`: row 240 names FACT0, the TFS and collision are resident after a warp, a savestate
+    saved on 240 and loaded from map 2 returns to 240 with the TFS resident, confirm by the boss starts a battle (DG row 223
+    ran), and with an empty `state.toml` row 240 is empty. Without the flag it is the stock-behaviour half.
+  - `verify_newmap.py run1 --map proof` and `fight --map proof --wide`: the glade's checks on row 240 (files, camera, palette,
+    pond, bush, boss, win, save). The proof has no entrance in the host, so it is reached by warp and runs no walk out,
+    flee or lose; a card save on 240 is not remapped (the save remap in `dw_newmaps.c` is for row 239 only).
+- **Limits.** A name must be listed in the .inc to be served. The hook changes a lookup only: the file must still fit its
+  RAM window (GAME.md 2.4).
+
 ---
 
 ## 4. Mod packages

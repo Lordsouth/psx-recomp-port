@@ -21,6 +21,9 @@
           HP is poked so the outcome is the one under test: the numbers are not
           judged here. --wide does it at 21:9 with the Expanded Roster on.
           --brains N checks Battle End Freeze Fix on the win (docs/GAME.md 12.1)
+    --map proof   (local) gen_newmap_proof.py: the same glade on row 240 "FACT0", its files from MMM.DAT and its
+          script from DG row 223. Reached by warp; run1 and fight only (no walk out, flee or lose, and no
+          save remap: a card save names 240)
     --dw15 runs a mode on Digimon World 1.5, where the glade runs its 1.5 edition
     measure (glade) a real fight: the partner evolved and set to --stats, then nothing
           poked but --heal. Presses only the finisher button. Prints how it went, judges nothing
@@ -89,7 +92,11 @@ MAPS = {
     "spike": dict(package="dw.newmaps.spike", feature="spike", file="MGEN17",
                   spawn=(1474, -446), out=[(450, -350), (450, -1450)]),
     "glade": dict(package="dw.newmaps", feature="glade", file="MGEN17"),
+    # the glade's own files placed in MMM.DAT under a new name and a new script row (tools/gen_newmap_proof.py,
+    # local only, in mods/installed). No host entrance: it is reached by warp, and a card names row 240 itself
+    "proof": dict(package="dw.newmaps.proof", feature="proof", file="FACT0"),
 }
+ROWS = {"spike": 239, "glade": 239, "proof": 240}
 
 
 def main():
@@ -110,9 +117,13 @@ def main():
     ap.add_argument("--port", type=int, default=4430)
     ap.add_argument("--seed", default=os.path.join(root, "saves"))
     a = ap.parse_args()
+    if a.map == "proof" and a.mode not in ("run1", "fight"):
+        ap.error("--map proof runs run1 and fight only")
     mp = dict(MAPS[a.map])
+    row = ROWS[a.map]
+    proof = a.map == "proof"
     spec = None
-    if a.map == "glade":
+    if a.map in ("glade", "proof"):
         spec = json.load(open(os.path.join(a.build, "newmap", "spec.json")))
         mp["spawn"] = (spec["spawn"][0], spec["spawn"][2])
         # via the middle of the meadow: from the east side a straight line to the spawn snags on the log
@@ -126,6 +137,13 @@ def main():
         for name in ["manifest.toml"] + [os.path.join("assets", n) for n in os.listdir(src)]:
             if open(os.path.join(src, "..", name), "rb").read() != open(os.path.join(pkg_dir, name), "rb").read():
                 print("%s in %s is stale: rebuild to stage what gen_newmap.py wrote" % (name, pkg_dir), file=sys.stderr)
+                return 2
+    if proof:                                          # installed copies of the glade's assets: stale if they differ
+        src = os.path.join(root, "mods", "preloaded", "packages", "dw.newmaps", "1.0.0", "assets")
+        for name in ("glade.map", "glade.tfs", "glade.dg"):
+            want, have = (open(os.path.join(d, name), "rb").read() for d in (src, os.path.join(pkg_dir, "assets")))
+            if want[:len(have)] != have or any(want[len(have):]):   # the proof's copies stop at the file's real size
+                print("%s in %s differs from the glade's: rerun gen_newmap_proof.py" % (name, pkg_dir), file=sys.stderr)
                 return 2
     out = os.path.join(a.build, "newmap_%s" % a.map)
     cards = os.path.join(out, "cards_fight" if a.mode in ("fight", "measure") else "cards")    # run2 needs run1's
@@ -250,12 +268,19 @@ def main():
               "arrived at the entrance's spawn %s" % (p,))
 
     def walk_in():
-        """From the host's side of the entrance, north through the new exit."""
+        """From the host's side of the entrance, north through the new exit (the proof has none: warp)."""
+        if proof:
+            g.warp(row, 0)
+            check(wait_for(lambda: screen() == row and g.tamer_state == 0), "warped onto map %d" % row)
+            g.advance(20)
+            p = pos(TAMER)
+            check(p is not None and (p[0], p[2]) == tuple(mp["spawn"]), "arrived at spawn 0 %s" % (p,))
+            return
         pad(UP)                                        # straight on: the walker's calibration steps
-        ok = wait_for(lambda: screen() == 239 or g.tamer_state == 5, 10)   # would leave this narrow notch
+        ok = wait_for(lambda: screen() == row or g.tamer_state == 5, 10)   # would leave this narrow notch
         pad(0)
-        check(ok and wait_for(lambda: screen() == 239 and g.tamer_state == 0),
-              "walked north through the new exit onto map 239 (no cutscene took over)")
+        check(ok and wait_for(lambda: screen() == row and g.tamer_state == 0),
+              "walked north through the new exit onto map %d" % row + " (no cutscene took over)")
         g.advance(20)
         p = pos(TAMER)
         check(p is not None and (p[0], p[2]) == tuple(mp["spawn"]), "arrived at spawn 0 %s" % (p,))
@@ -348,7 +373,7 @@ def main():
                 go(meadow[1], lambda: near(*meadow[1]), limit=60, vec=vec)
             ok = go(t, lambda: near(*t), limit=60, vec=vec)
             p = pos(TAMER)
-            check(ok and screen() == 239, "walked the meadow to %s (at %s)" % (t, p))
+            check(ok and screen() == row, "walked the meadow to %s (at %s)" % (t, p))
             measure("meadow%d" % i)
         # the pond is solid: stand on its south shore, walk straight at it, stay ashore
         lobes, south = spec["pond"]["lobes"], tuple(spec["pond"]["shore"])
@@ -531,8 +556,8 @@ def main():
                 shot("end_box")
                 print("MEASURE end box, %d rows: %r" % (rows, box), flush=True)
             g.route("4:cross,20:none")
-        check(hit and gstate() == 0 and g.tamer_state == 0 and screen() == 239,
-              "won: the run-off ended, player in control, still on map 239")
+        check(hit and gstate() == 0 and g.tamer_state == 0 and screen() == row,
+              "won: the run-off ended, player in control, still on map %d" % row)
         if not a.no_end_fix and a.brains and a.brains + 1 in MP_BONUS:
             text = b"#C1MP Cost Bonus!#Rreduced by %d pct!#W" % MP_BONUS[a.brains + 1]
             check(box is not None and text in box, "the end box finished on its MP bonus message")
@@ -564,7 +589,7 @@ def main():
     def lose():
         """A feeble partner on 1 HP. Jijimon's home, as every lost battle."""
         partner(1, 1)
-        free = lambda: gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1 and screen() != 239
+        free = lambda: gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1 and screen() != row
         end = time.time() + 300
         while time.time() < end and not free():
             if gstate() in BATTLE and struct.unpack("<h", g.d.read(PARTNER_MAX_HP + 4, 2))[0] > 1:
@@ -596,7 +621,7 @@ def main():
         # Buster Dive, Pulse Laser, Metal Sprinter, and its finisher: animation 46 + the slot in its move list
         g.d.write_bytes(bytes([34, 33, 33, 0, 50, 54, 56, 60]), PARTNER_STATS + 8)
         g.d.write_bytes(struct.pack("<4h", hp, mp_, hp, mp_), PARTNER_MAX_HP)
-        g.warp(239, 0)                                 # coming back from the glade a big partner lands in the entrance's
+        g.warp(row, 0)                                 # coming back from the glade a big partner lands in the entrance's
         vec = calibrate()                              # lane, as it would at any stock exit: not what this measures
         talk(vec)
         rec = spec["boss"]["record"]
@@ -633,7 +658,7 @@ def main():
         while time.time() < end and not (gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1):
             g.route("4:cross,20:none")
         over = gstate() == 0 and g.tamer_state == 0
-        print("MEASURE outcome: %s (map %d)" % ("unfinished" if not over else "won" if screen() == 239 else "lost", screen()), flush=True)
+        print("MEASURE outcome: %s (map %d)" % ("unfinished" if not over else "won" if screen() == row else "lost", screen()), flush=True)
 
     def fight():
         def stage(*steps):                             # each step runs on what the last left: stop at a failure
@@ -643,13 +668,17 @@ def main():
                 step()
 
         vec = {}
-        stage(lambda: g.warp(mp["host_row"], spec["host"]["exit"]), walk_in, loaded_files,
-              lambda: boss_fresh("on arrival"), lambda: vec.update(calibrate()),
+        head = [lambda: g.warp(mp["host_row"], spec["host"]["exit"]), walk_in, loaded_files, lambda: shot("arrival"),
+                lambda: boss_fresh("on arrival"), lambda: vec.update(calibrate()),
               lambda: a.brains and (g.d.write_bytes(struct.pack("<h", a.brains), PARTNER_STATS + 6),
                                     g.d.write_bytes(struct.pack("<h", 999), NPC_STATS + 6)),   # a sure gain
-              lambda: talk(vec), win,
-              loaded_files,                            # the battle left the map's art and collision as they were
-              lambda: measure("after_win"), save_here, walk_out,
+                lambda: talk(vec), win,
+                loaded_files,                          # the battle left the map's art and collision as they were
+                lambda: measure("after_win"), save_here]
+        if proof:                                      # no entrance on the host: no walk out, flee or lose to judge
+            stage(*head)
+            return
+        stage(*head, walk_out,
               lambda: wait_for(lambda: i32(IS_SCRIPT_PAUSED) == 1, 20), lambda: g.advance(60),
               walk_in, lambda: boss_fresh("back on the next visit"), lambda: talk(vec), flee,
               walk_in, lambda: boss_fresh("after fleeing"), lambda: talk(vec), lose,
@@ -702,6 +731,9 @@ def main():
             if on_new_map:
                 check((px, py, pz) == tuple(host["spawn"]) and screen() == 239,
                       "a save made on 239 resumes at the entrance, and play stays on 239")
+        elif proof:                                    # dw_newmaps.c's remap is for row 239 only: the card names 240
+            check(main_state == 1, "card save made (main state %d, map %d exit %d at %s: not remapped, as expected)"
+                  % (main_state, s0[0x49A], s0[0x49C], (px, py, pz)))
         else:
             check(main_state == 1 and s0[0x49A] == 239 and s0[0x49C] == 0,
                   "card save: map %d exit %d at %s" % (s0[0x49A], s0[0x49C], (px, py, pz)))
@@ -726,13 +758,13 @@ def main():
             check(g.d.frame() > f0 + 60, "game running")
             print("RESULT newmap off %s: %s" % (a.card, "FAIL %s" % fails if fails else "PASS"))
             return 1 if fails else 0
-        check(g.map_record(239)["file"] == mp["file"], "row 239 holds %s (is %s enabled?)" % (mp["file"], mp["package"]))
+        check(g.map_record(row)["file"] == mp["file"], "row %d holds %s (is %s enabled?)" % (row, mp["file"], mp["package"]))
         if a.mode == "measure":
             measure_fight()
         elif a.mode == "fight":
             fight()
         elif a.mode == "run1":
-            if a.map == "glade":
+            if a.map in ("glade", "proof"):
                 g.warp(mp["host_row"], spec["host"]["exit"])
                 check(screen() == mp["host_row"], "standing in the host's notch %s" % (pos(TAMER),))
                 walk_in()
@@ -750,7 +782,8 @@ def main():
             save_here()
             if a.map == "glade":
                 keep_card("glade")
-            walk_out()
+            if not proof:                              # the proof's exit strip leads to a host spawn it does not have
+                walk_out()
         elif a.map == "glade":
             saved = json.load(open(os.path.join(out, "saved_pos.json")))
             p = pos(TAMER)

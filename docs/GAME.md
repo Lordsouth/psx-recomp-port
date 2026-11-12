@@ -83,24 +83,30 @@ table cannot grow in place: `SIN_LOOKUP_TABLE` follows it at 0x80122480. String 
 rows, which with MGEN17's two could carry 13 new map names by rewriting a name or pointer [inferred]. Scripts and DG
 offsets are cached in RAM, so a savestate holds stale copies: test disc changes from a memory card [Horizon].
 
-### 2.3 MMM.DAT: free space, not yet proven in game
-**Nothing has been run in game with data placed in MMM.DAT.** The facts about the file are read from the disc; every
-use of it below is a reading of code. Proof still owed: one `verify_newmap --map glade` and fight `--wide` with the
-files moved.
+### 2.3 MMM.DAT: free space, proven in game
+**Map files placed in MMM.DAT load in game under a new name [run 2026-11-11].** `tools/gen_newmap_proof.py` writes a
+local-only package that puts the glade's MAP and TFS in MMM.DAT as `FACT0` on row 240, and `verify_newmap_files.py --proof`,
+`verify_newmap.py run1 --map proof` and `fight --map proof --wide` pass on it (INTERNALS 3.3). The rest of the file's facts
+are read from the disc.
 
 LBA 148668, 27,648,000 B, 13,500 sectors, all user bytes zero, Mode 2, submode 0x08 (last sector 0x89). The name appears
 only at `src/main/file_table_us.c:824` (row 817) and in the EXE's string pool. No shipped manifest's overlay falls there; the
 `dw.1_5` BPS delta was not walked. It holds 54 pairs the size of MGEN17's 247 sectors (6 MAP at 39734, 241 TFS at 39740), the
-only room proven so far [run], or 28 pairs at 241 + 241; the windows in 2.4 still apply. The route, all [not run]:
+only room proven so far [run], or 28 pairs at 241 + 241; the windows in 2.4 still apply. The route:
 
 - Place sector-aligned files and repoint their table rows, with no code change (Horizon's `dwmap.py mmm` plus
   `file-entry`, which it does not use itself [Horizon]). For the glade that moves two rows, two ISO records and two
   overlay offsets; skipping the records brings back black edges at 21:9. It could then keep 30 tiles and 3 sprite pages
   [inferred].
-- New DG scripts at rows 223+: nothing bounds a row (`src/main/script_interp.c:663-665,2810`), but the 0x2000 B table holds 2048 and rows 512+ are entry 0's bytes. A row is an offset
+- A new name needs no table row: `dw_newmaps.c`'s hook on `lookupFileTable` answers for the names in `dw_newmaps_files.inc`
+  (lba, size) while a plan includes the `dw.newmaps` plugin, and passes every other name to the stock table. The
+  widescreen sliver reads a served TFS by sector, since it has no ISO record. `FACT0.MAP` and `FACT0.TFS` came from
+  MMM.DAT sectors 0 and 43, were resident in `GENERAL_BUFFER` and were drawn at 21:9 [run 2026-11-11].
+- New DG scripts at rows 223+ [run 2026-11-11, row 223]: nothing bounds a row (`src/main/script_interp.c:663-665,2810`), but the 0x2000 B table holds 2048 and rows 512+ are entry 0's bytes. A row is an offset
   from `DG.SCN`'s start, so `(148668-142589)*2048 = 12,449,792` plus the sector offset, in whole sectors, and needs
   both `table[N]` and `table[N+1]`. Never touch `table[222]`: it is the file's end and script 221's size.
   `table[223]` on holds stale ASCII a guard must expect. `tools/scan_trigger_ids.py` stops at row 222.
+  Row 223 held the glade's script placed in MMM.DAT; the boss's dialogue and battle ran from it on stock code (`verify_newmap_files.py --proof`).
 
 ### 2.4 Where each file lands in RAM
 | File | Destination | Room |
@@ -335,7 +341,7 @@ blocked line keeps an NPC out of a fight (`src/main/btl.c:109`); 0x8F no drops (
 | NPC models | `LOADED_DIGIMON_MODELS` holds 8 and drops the rest (`src/main/script_interp.c:2561-2571`), but `NPC_MODELS` has 5 slots (`src/main/model.c:2698`). Same species shares a slot. Index k maps to page 0x16+k/2, CLUT `((k+2)*16, 488)` (`src/main/model.c:3400-3403`) | Read. Index 4 overlaps `SBOY.TIM`'s pixels and `SYSTEM_W.TIM`'s CLUT, so 4 are clean. A sixth returns NULL [not run] |
 | Heap | `_end` to stack: 197,520 B (0x801BFB70-0x801EFF00, `src/main/main.c:3537-3538`). A map needs MMDs in whole sectors, plus bones x (0x88 + 0x52) per placed Digimon (`src/main/model.c:2829-2830`), plus 0x4800 while loading (`src/main/model.c:3299`). A failed `malloc3` reads to NULL (`src/main/model.c:3410-3414`). Only `model.c` and `std_setup.c` call it | Read. Stock free heap is 40.2 KB to 192.9 KB by screen [Horizon]. Vice's randomizer re-rolls two-group areas until combined model weight is at most 152,000, unit not stated [Vice] |
 | MAPHEAD tail | 0x6070-0x61A8: 312 B for all new sections; the glade's takes 20. Every row has a table entry to repoint. Free rows hold a filler binding script 180, a real cutscene: never ship one | Read. 1.5 puts its own new sections in the tail, up to 0x60DE; the glade's 1.5 edition goes after them |
-| DG script | 0x4000 B. No slot is free: MAPHEAD binds 1-198, cross-calls reach 199-221 | Read. Rows 223+ [not run] |
+| DG script | 0x4000 B. No slot is free: MAPHEAD binds 1-198, cross-calls reach 199-221 | Read. Rows 223+ in MMM.DAT [run 2026-11-11] |
 
 Unknown, and not to be assumed either way:
 - What fails first on a busy map: heap, the 0x41000 effect heap, VRAM or SPU. Nobody has measured free memory on row 239
@@ -374,8 +380,8 @@ Both files share one layout: u16 first-body offset (0x468 in MAPHEAD), then {u16
 start} pairs ended by 0xFFFF, then the bodies. Only `setMapHeadActive` reads the first word (`:671-689`, `:2181-2188`).
 
 No slot is free. The largest are 0x3800. Slot 118 (offset 0x55000, 0x800 bytes) was the cheap room: stock it is one bare END
-as section FE, and only row 122 binds it. A row N in 223..510 pointing into `MMM.DAT` should give a script its own slot on stock
-code: store (148668-142589)*2048 = 12,449,792 plus the sector offset, in table[N] and table[N+1], whole sectors [not run].
+as section FE, and only row 122 binds it. A row N in 223..510 pointing into `MMM.DAT` gives a script its own slot on stock
+code: store (148668-142589)*2048 = 12,449,792 plus the sector offset, in table[N] and table[N+1], whole sectors [run 2026-11-11, row 223].
 The scan tool stops at row 222, so it would not audit it. Savestates hold the cached script: test edits from a card [Horizon].
 
 ### 4.2 Section numbers
@@ -1404,8 +1410,8 @@ The port translates the stock EXE ahead of time. It can change data, apply guard
 | Item | Where | State |
 |---|---|---|
 | Format facts: MAP, TFS, entities, sprites, DG, MAPHEAD, text, MMD, VAB, SEQ | Horizon `docs/reference/`, `docs/mods/` | Agree with the decomp where other sections cite them. For stock opcodes cite `include/dw/script.h`, not Horizon: its IF kind 0x28, sub-values 6 and 7, and ops 0x80-0x9F are mod-only. |
-| `MMM.DAT` as free disc space | Horizon `docs/reference/disc.md`, `tools/dwmap.py` (`mmm`, `file-entry`) | Disc: LBA 148668, 13,500 all-zero Form 1 sectors, named only in table row 817. A `disc_user` overlay should apply there by code reading [not run]. Moving a map takes four location patches, not two: skip the two ISO records and 21:9 shows black edges (INTERNALS 3.2). |
-| DG script rows 223 and up | `src/main/script_interp.c:647-668,2204,2783-2815` | No bounds check, so a row can point into `MMM.DAT` [not run]. Sizes must be whole sectors, a row needs `table[N]` and `table[N+1]`, `table[222]` must not change, and guards must expect stale ASCII from 223 on. `tools/scan_trigger_ids.py` stops at row 222 and would not audit them. |
+| `MMM.DAT` as free disc space | Horizon `docs/reference/disc.md`, `tools/dwmap.py` (`mmm`, `file-entry`) | Disc: LBA 148668, 13,500 all-zero Form 1 sectors, named only in table row 817. A `disc_user` overlay applies there [run 2026-11-11]. Moving a map takes four location patches, not two: skip the two ISO records and 21:9 shows black edges (INTERNALS 3.2); a new name needs none of them (INTERNALS 3.3). |
+| DG script rows 223 and up | `src/main/script_interp.c:647-668,2204,2783-2815` | No bounds check, so a row can point into `MMM.DAT` [run 2026-11-11, row 223]. Sizes must be whole sectors, a row needs `table[N]` and `table[N+1]`, `table[222]` must not change, and guards must expect stale ASCII from 223 on. `tools/scan_trigger_ids.py` stops at row 222 and would not audit them. |
 | More file names | Scan of the decomp and all `*_REL.BIN` | 25 rows have no `lookupFileTable` consumer; with MGEN17's two that is 27 rows, or 13 new map names [inferred]. Overlay rows are not free (`src/main/utils2.c:382`). |
 | Relayout of existing rows | Horizon `tools/build-disc.py --relayout` | Rewriting table sectors and sizes, plus ISO records for `CdSearchFile` users, is data on stock code. Only rows past 819 need a rebuilt table. |
 | Script assembler | Horizon `tools/dws/bytecode/` | `dis`, `asm`, `check`, `libres`, offline. Not standalone: it imports Horizon's tools package. 105 stock ops and 32 of its own. Byte-exact on all 222 scripts plus MAPHEAD [Horizon]. |
