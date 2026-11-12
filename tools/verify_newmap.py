@@ -54,22 +54,12 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game  # noqa: E402
+from field_drive import (  # noqa: E402
+    Field, UP, TAMER, NPC0, CAMERA, IS_SCRIPT_PAUSED, PREVIOUS_SCREEN, CURRENT_EXIT, NPC_ANIM, NPC_ON_MAP,
+    NPC_STATS, PARTNER_STATS, PARTNER_MAX_HP, PARTNER_ANIM, HOUR, CURRENT_FRAME)
 
-UP, RIGHT, DOWN, LEFT = 0x0010, 0x0020, 0x0040, 0x0080
-TAMER, NPC0 = 0x8015576C, 0x8012F344 + 8          # ENTITY_TABLE[2]: first map NPC
-CURRENT_SCREEN, GAME_STATE, IS_SCRIPT_PAUSED = 0x80134DA8, 0x80134F0A, 0x80134FF4
-TRI_STATE, MENU_CURSOR, CURRENT_MENU, YES_NO = 0x80134D30, 0x80123E8C, 0x8013504C, 0x801317D8
-GENERAL_BUFFER, MAP_TILE_DATA, MAP_COLLISION = 0x80010000, 0x8014F084, 0x801AF398
-GS_VIEWPOINT, VIEWPORT_DISTANCE, HOUR, CURRENT_FRAME = 0x80185BA8, 0x80134ED4, 0x80134EBC, 0x80134F08
-CAMERA = MAP_TILE_DATA + 7092                     # cameraX, cameraY (i16), width, height (i8)
-MAP_OBJECT_INSTANCE_COUNT = 0x80134D1C            # map objects (foreground sprites) loadMapObjects set up
-PREVIOUS_SCREEN, CURRENT_EXIT = 0x80134DA9, 0x80134DAA
-NPC_ANIM, NPC_ON_MAP, NPC_STATS = 0x80155828 + 0x2E, 0x80155828 + 0x34, 0x80155828 + 0x38   # NPC_ENTITIES[0]: animId, isOnMap, off ...
-PARTNER_STATS, PARTNER_MAX_HP, MONEY = 0x801557E0, 0x801557F0, 0x80134EB8    # off, def, speed, brain; max HP, MP, current HP, MP
-PARTNER_ANIM, WORLD_POOP = 0x801557A8 + 0x2E, 0x80138504
-CURRENT_COMMAND, HOVERED_COMMAND = 0x8013D640 + 0x64E, 0x8013D640 + 0x652   # COMBAT_DATA.player.*[0]
+
 ROW_122 = 122                                     # the other map bound to DG script 118 (TUNN07_2)
-BATTLE = (1, 2, 3)                                # GAME_STATE: 3 loading, 2 starting or ending, 1 fighting
 HOST_EXIT = (1858, -1142)                         # Coela Point's east-exit spawn
 STATE = ('format_version = 2\n\n[[package]]\nid = "%s"\nversion = "1.0.0"\n\n'
          '[[package]]\nid = "dw.vanilla.qol"\nversion = "1.0.0"\n\n'
@@ -85,8 +75,6 @@ DROPS = ('\n[[package]]\nid = "dw.vanilla.trainer"\nversion = "1.0.0"\n\n'
          '[[feature]]\npackage_id = "dw.vanilla.trainer"\nid = "guaranteed-drops"\nenabled = true\n')
 DW15 = ('\n[[package]]\nid = "dw.1_5"\nversion = "1.0.0"\n\n'
         '[[feature]]\npackage_id = "dw.1_5"\nid = "dw15"\nenabled = true\n')
-END_BUFFER, END_LINES = 0x80073EA0, 0x801350B0        # the box's text; lines expected, then rows drawn
-MP_BONUS = {700: 5, 800: 10, 900: 15, 999: 20}        # Brains reached: the percent its message names
 MAPS = {
     # spawn 0, then the legs from anywhere inside to the map's warp strip
     "spike": dict(package="dw.newmaps.spike", feature="spike", file="MGEN17",
@@ -176,66 +164,12 @@ def main():
     g = Game.launch(exe=os.path.join(a.build, "Digimon_World_Recompiled.exe"), port=a.port,
                     memcard_dir=cards, extra_args=["--headless-opengl"],
                     log_path=os.path.join(out, a.mode + ".log"))
-    i32 = lambda addr: struct.unpack("<i", g.d.read(addr, 4))[0]
-    gstate = lambda: struct.unpack("<b", g.d.read(GAME_STATE, 1))[0]
-    screen = lambda: g.d.read(CURRENT_SCREEN, 1)[0]
     shot = lambda n: (g.artifact_shot(os.path.join(out, "%s_%s.png" % (a.mode, n))),
                       os.path.join(out, "%s_%s.png" % (a.mode, n)))[1]
-
-    def pad(mask):
-        g.d.cmd("set_input", layer="host", buttons="0x%04X" % (0xFFFF & ~mask))
-
-    def pos(entity):
-        ptr = struct.unpack("<I", g.d.read(entity + 4, 4))[0]
-        if not 0x80000000 <= ptr < 0x80200000:
-            return None
-        return struct.unpack("<3i", g.d.read(ptr + 120, 12))
-
-    def walk(mask, seconds):
-        """Counted in game frames, not wall time: a busy machine must not stretch the step."""
-        g.route("%d:%s,4:none" % (seconds * 60, {UP: "up", RIGHT: "right", DOWN: "down", LEFT: "left"}[mask]), poll_s=0.02)
-
-    def wait_for(pred, timeout=30.0):
-        end = time.time() + timeout
-        while time.time() < end:
-            if pred():
-                return True
-            time.sleep(0.2)
-        return False
-
-    def calibrate():
-        """Pad direction -> world (dx, dz) under this screen's camera."""
-        vec = {}
-        for d in (RIGHT, LEFT, UP, DOWN):
-            p = pos(TAMER); walk(d, 0.35); time.sleep(0.15); q = pos(TAMER)
-            vec[d] = (q[0] - p[0], q[2] - p[2])
-        return vec
-
-    def go(target, until, limit=90, vec=None):
-        """Greedy walk toward world (x, z); tries the next-best direction at a wall."""
-        vec = vec or calibrate()
-        for _ in range(limit):
-            if until():
-                return True
-            p = pos(TAMER)
-            if p is None or g.tamer_state != 0 or gstate() != 0:
-                g.route("4:cross,20:none")        # talk or fight through whatever stopped us
-                time.sleep(0.3)                   # (the spike's Piddomon respawns on entry)
-                continue
-            want = (target[0] - p[0], target[1] - p[2])
-            order = sorted(vec, key=lambda d: -(vec[d][0] * want[0] + vec[d][1] * want[1]))[:3]
-            for d in order:
-                # 0.3 s runs about 300 units, wider than the targets: slow down to land on one
-                need = 0.35 * (vec[d][0] * want[0] + vec[d][1] * want[1]) / max(1, vec[d][0] ** 2 + vec[d][1] ** 2)
-                walk(d, min(0.3, max(0.1, need)) if d == order[0] else 0.3)
-                q = pos(TAMER)
-                if q is None or until() or abs(q[0] - p[0]) + abs(q[2] - p[2]) > 20:
-                    break
-        return until()
-
-    def near(x, z, r=120):
-        p = pos(TAMER)
-        return p is not None and abs(p[0] - x) < r and abs(p[2] - z) < r
+    f = Field(g, check, shot)
+    i32, gstate, screen, pad, pos = f.i32, f.gstate, f.screen, f.pad, f.pos
+    walk, wait_for, calibrate, go, near = f.walk, f.wait_for, f.calibrate, f.go, f.near
+    partner = f.partner
 
     def enter():
         """Title -> CONTINUE. DOWN waits for the menu to take input: an early DOWN
@@ -286,56 +220,10 @@ def main():
         check(p is not None and (p[0], p[2]) == tuple(mp["spawn"]), "arrived at spawn 0 %s" % (p,))
 
     def battle():
-        npc = struct.unpack("<I", g.d.read(NPC0, 4))[0]
-        check(0x80000000 <= npc < 0x80200000, "Piddomon spawned in NPC slot 0")
-        e = pos(npc)
-        go((e[0], e[2]), lambda: g.tamer_state != 0 or gstate() != 0, limit=30)
-        seen, end = set(), time.time() + 120
-        while time.time() < end:
-            s = gstate()
-            if s == 3 and 3 not in seen:
-                shot("battle")
-            seen.add(s)
-            if s == 0 and 3 in seen and g.tamer_state == 0:
-                break
-            g.route("4:cross,20:none")
-            time.sleep(0.3)
-        check(3 in seen, "battle started on map 239 (game states %s)" % sorted(seen))
-        check(gstate() == 0 and g.tamer_state == 0 and screen() == 239,
-              "battle over, player in control, still on map 239")
+        f.battle(row)
 
     def loaded_files():
-        """Memory and VRAM say the game runs on OUR map and tile files."""
-        pkg = os.path.join(pkg_dir, "assets")
-        tfs = open(os.path.join(pkg, "glade.tfs"), "rb").read()
-        mapf = open(os.path.join(pkg, "glade.map"), "rb").read()
-        used = 8 + 512 * struct.unpack_from("<i", tfs, 4)[0] + 16388 * spec["camera"]["gw"] * spec["camera"]["gh"]
-        ram = b"".join(g.d.read(GENERAL_BUFFER + o, min(0x4000, used - o)) for o in range(0, used, 0x4000))
-        check(ram == tfs[:used], "our TFS is the one resident in GENERAL_BUFFER (%d bytes)" % used)
-        nw = struct.unpack_from("<i", mapf, 0)[0] // 4
-        coll = struct.unpack_from("<i", mapf, 4 * (nw - 1))[0]        # the last header word
-        check(g.d.read(MAP_COLLISION, 10000) == mapf[coll:coll + 10000], "our collision grid is live")
-        if "fg" in spec:                                       # foreground sprites: objects and their image
-            n = struct.unpack("<h", g.d.read(MAP_OBJECT_INSTANCE_COUNT, 2))[0]
-            check(n == spec["fg"]["count"], "%d foreground sprites loaded as map objects" % n)
-            tim = struct.unpack_from("<i", mapf, 4)[0]          # first image: TIM, clut block, pixel block
-            pix = tim + 8 + struct.unpack_from("<I", mapf, tim + 8)[0]
-            px, py, pw, ph = struct.unpack_from("<4H", mapf, pix + 4)
-            row = max(range(ph), key=lambda r: sum(mapf[pix + 12 + 256 * r:pix + 12 + 256 * (r + 1)]))
-            hexrow = g.d.cmd("vram_peek", x=px, y=py + row, w=pw, h=1)["hex"]      # one halfword per 4 digits
-            live = b"".join(bytes.fromhex(hexrow[i:i + 4])[::-1] for i in range(0, len(hexrow), 4))
-            check(live == mapf[pix + 12 + 256 * row:pix + 12 + 256 * (row + 1)],
-                  "our sprite texels are in VRAM at (%d,%d)" % (px, py + row))
-        vp = struct.unpack("<6i", g.d.read(GS_VIEWPOINT, 24))
-        cam = spec["camera"]
-        check(list(vp) == [int(v) // 2 * 2 for v in cam["vp"] + cam["vr"]]
-              and i32(VIEWPORT_DISTANCE) == cam["h"], "our camera is live (GS_VIEWPOINT %s)" % (vp,))
-        w, h = g.d.read(CAMERA + 4, 2)
-        check((w, h) == (cam["gw"], cam["gh"]), "tile grid %dx%d" % (w, h))
-        hexrow = "".join(g.d.cmd("vram_peek", x=x, y=480, w=128, h=1)["hex"] for x in (0, 128))
-        live = [int(hexrow[i:i + 4], 16) for i in range(0, 1024, 4)]
-        clut0 = list(struct.unpack_from("<256H", tfs, 8))
-        check(live == clut0, "our day palette is the live CLUT (VRAM row 480)")
+        f.loaded_files(spec, os.path.join(pkg_dir, "assets"))
 
     def measure(tag):
         """Screenshot vs our own backdrop under the live camera (evidence, not verdict)."""
@@ -467,10 +355,7 @@ def main():
             shot(name)
 
     def keep_card(name):
-        """A copy of the card as this save left it, for the mod-off runs."""
-        shutil.rmtree(os.path.join(out, "cards_" + name), ignore_errors=True)
-        shutil.copytree(cards, os.path.join(out, "cards_" + name))
-        shutil.copy(os.path.join(out, "saved_pos.json"), os.path.join(out, "saved_pos_%s.json" % name))
+        f.keep_card(name, cards, out)
 
     def boss_fresh(when):
         """The map's record is what the game spawned, at full strength."""
@@ -484,121 +369,16 @@ def main():
               "%s: the boss stands at %s, HP %d/%d, moves %s" % (when, p, hp[2], hp[0], list(st[12:16])))
 
     def talk(vec):
-        """Up the path to the boss. Standing there starts nothing; pressing confirm does."""
-        x, z = spec["boss"]["at"][0], spec["boss"]["at"][2]
-        centre = tuple(spec["meadow"][1])
-        go(centre, lambda: near(*centre), limit=60, vec=vec)
-        check(go((x, z - 700), lambda: near(x, z - 700, r=200), limit=40, vec=vec), "up the path, below the boss %s" % (pos(TAMER),))
-        north = max(vec, key=lambda d: vec[d][1])              # walk at it until it stops us: it is wide
-        pad(north)
-        last = None
-        for _ in range(30):
-            time.sleep(0.15)
-            if pos(TAMER) == last:
-                break
-            last = pos(TAMER)
-        pad(0)
-        time.sleep(3)
-        check(gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1,
-              "next to it at %s, standing still starts nothing" % (last,))
-        shot("boss")
-        g.route("6:cross,20:none")
-        time.sleep(1)
-        check(gstate() == 0 and i32(IS_SCRIPT_PAUSED) != 1, "confirm opens its dialogue (the game is still on the map)")
-        shot("talk")
-        end = time.time() + 30
-        while time.time() < end and gstate() not in BATTLE:
-            g.route("4:cross,20:none")
-        check(gstate() in BATTLE and g.d.read(0x80134D7C, 1)[0] == 0, "the battle starts, with fleeing allowed")
-        # A battle goes 3 loading, 2 intro, 1 fighting, and its starting stats are written at the intro.
-        # A brief 1 can show before the loading begins, and the last battle's stats stay in memory.
-        check(wait_for(lambda: gstate() == 2, 30) and wait_for(lambda: gstate() == 1, 30), "the fight is on")
-        shot("battle")
-
-    def partner(stat, hp):
-        g.d.write_bytes(struct.pack("<4h", stat, stat, stat, stat), PARTNER_STATS)
-        g.d.write_bytes(struct.pack("<4h", hp, 9999, hp, 9999), PARTNER_MAX_HP)
+        f.talk(vec, spec["boss"]["at"], tuple(spec["meadow"][1]))
 
     def win():
-        """A maxed partner. First the boss fights for real until it has used every move (a move plays
-        the animation of its slot number), both sides topped up, then on 1 HP it takes a hit and runs off."""
-        if a.brains:
-            got = struct.unpack("<h", g.d.read(0x8013D610 + 10, 2))[0]
-            check(got == a.brains, "the battle started on Brains %d (read %d, partner now %d)"
-                  % (a.brains, got, struct.unpack("<h", g.d.read(PARTNER_STATS + 6, 2))[0]))
-        partner(999, 9999)
-        rec = spec["boss"]["record"]
-        moves, seen = set(rec[22:26]), {}
-        t0 = time.time()
-        while time.time() - t0 < 240 and gstate() == 1 and not moves <= set(seen):
-            m = g.d.read(NPC_ANIM, 1)[0]
-            if m in moves and m not in seen:
-                seen[m] = round(time.time() - t0)
-                shot("move%d" % m)
-            g.d.write_bytes(struct.pack("<hh", rec[11], rec[12]), NPC_STATS + 0x14)
-            g.d.write_bytes(struct.pack("<hh", 9999, 9999), PARTNER_MAX_HP + 4)
-            if time.time() - t0 > 12 and "menu" not in seen:
-                seen["menu"] = 0
-                shot("battle_ui")
-            time.sleep(0.05)
-        seen.pop("menu", None)
-        check(moves <= set(seen) and gstate() == 1, "the boss used all four moves %s (move: seconds in)" % seen)
-        bits, hit, box = i32(MONEY), False, None
-        end = time.time() + 240
-        while time.time() < end and not (hit and gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1):
-            if gstate() not in BATTLE:
-                hit = True
-            elif struct.unpack("<h", g.d.read(NPC_STATS + 0x14, 2))[0] > 1:
-                g.d.write_bytes(struct.pack("<h", 1), NPC_STATS + 0x14)
-            lines, rows = struct.unpack("<hh", g.d.read(END_LINES, 4))
-            if box is None and lines and rows == lines:  # the last row is up, for 60 frames or the next press
-                box = g.d.read(END_BUFFER, 200).split(b"\0")[0]
-                shot("end_box")
-                print("MEASURE end box, %d rows: %r" % (rows, box), flush=True)
-            g.route("4:cross,20:none")
-        check(hit and gstate() == 0 and g.tamer_state == 0 and screen() == row,
-              "won: the run-off ended, player in control, still on map %d" % row)
-        if not a.no_end_fix and a.brains and a.brains + 1 in MP_BONUS:
-            text = b"#C1MP Cost Bonus!#Rreduced by %d pct!#W" % MP_BONUS[a.brains + 1]
-            check(box is not None and text in box, "the end box finished on its MP bonus message")
-        check(i32(MONEY) - bits == spec["boss"]["record"][19], "the bits were paid: %d -> %d" % (bits, i32(MONEY)))
-        check(g.d.read(NPC_ON_MAP, 1)[0] == 0, "the boss has left the map")
-        g.advance(30)
-        shot("won")
+        f.win(spec["boss"]["record"], row, a.brains, not a.no_end_fix)
 
     def flee():
-        """Back to the host's side of the entrance, as any fled battle goes back where it came from."""
-        partner(999, 9999)
-        end = time.time() + 30
-        while time.time() < end and g.d.read(HOVERED_COMMAND, 1)[0] != 1:
-            g.route("6:left,12:none")
-        check(g.d.read(HOVERED_COMMAND, 1)[0] == 1, "cursor on Flee")
-        end = time.time() + 30
-        while time.time() < end and g.d.read(CURRENT_COMMAND, 1)[0] != 1:
-            g.route("6:cross,12:none")
-        check(g.d.read(CURRENT_COMMAND, 1)[0] == 1, "the tamer runs")
-        arrived = lambda: (screen() == mp["host_row"] and gstate() == 0 and g.tamer_state == 0
-                           and i32(IS_SCRIPT_PAUSED) == 1)
-        ok = wait_for(arrived, 120)
-        g.advance(120)                                 # the arrival settles
-        check(ok and arrived() and near(*mp["host_at"], r=400),
-              "fled to the entrance on map %d %s (arrived in time %s; now tamer %d, game %d, script idle %s)"
-              % (screen(), pos(TAMER), ok, g.tamer_state, gstate(), i32(IS_SCRIPT_PAUSED) == 1))
-        shot("fled")
+        f.flee(mp["host_row"], mp["host_at"])
 
     def lose():
-        """A feeble partner on 1 HP. Jijimon's home, as every lost battle."""
-        partner(1, 1)
-        free = lambda: gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1 and screen() != row
-        end = time.time() + 300
-        while time.time() < end and not free():
-            if gstate() in BATTLE and struct.unpack("<h", g.d.read(PARTNER_MAX_HP + 4, 2))[0] > 1:
-                g.d.write_bytes(struct.pack("<h", 1), PARTNER_MAX_HP + 4)
-            g.route("4:cross,20:none")
-        check(free(), "lost, and back in control on map %d" % screen())
-        check(screen() in (205, 218), "the loss ends at Jijimon's (map %d)" % screen())
-        shot("lost")
-        g.advance(120)
+        f.lose(row)
 
     def measure_fight():
         hp, mp_, off, de, spd, brain = (int(v) for v in a.stats.split(","))
@@ -692,53 +472,32 @@ def main():
         shot("row122")
 
     def save_here(on_new_map=True, anywhere=False):
-        # A run takes a varying amount of game time and can reach the partner's sleepy hour, which hides Save
-        # Anywhere. Noon first: the game re-checks the hour against its sleepy..wake window and clears the flag.
-        g.d.write_bytes(struct.pack("<hh", 12, 0), HOUR)
-        wait_for(lambda: not g.para_condition & 1, 5)
-        check((g.para_condition & 1) == 0, "partner not sleepy, so Save Anywhere is offered")
-        if on_new_map and a.map == "glade":            # a pile dropped here, in the table's last slot
-            g.d.write_bytes(bytes([239, 50, 50, 5]), WORLD_POOP + 99 * 4)
-        g.route("6:triangle,40:none")
-        check(wait_for(lambda: i32(TRI_STATE) == -1, 10), "field menu open")
-        g.route("6:left,20:none")
-        check(struct.unpack("<h", g.d.read(MENU_CURSOR, 2))[0] == 6, "cursor on Save")
-        g.route("6:cross,30:none")
-        check(wait_for(lambda: i32(CURRENT_MENU) == 0x45, 10), "save prompt open")
-        if g.d.read(YES_NO, 1)[0] != 0:
-            g.route("6:up,20:none")
-        g.route("6:cross,30:none")
-        wait_for(lambda: i32(CURRENT_MENU) in (-1, 3, 0x42, 0x46), 20)
-        check(i32(CURRENT_MENU) == -1, "save finished without a card error")
-        wait_for(lambda: i32(TRI_STATE) == -1, 10)
-        g.route("6:triangle,40:none")
-        wait_for(lambda: g.tamer_state == 0, 10)
-        card = open(os.path.join(card_dir, "card1.mcd"), "rb").read()
-        blk = next(i for i in range(1, 16) if card[i * 128 + 10:i * 128 + 26] == b"BASLUS-01032DMR0")
-        s0 = card[blk * 0x2000 + 0x200:]
-        main_state, px, py, pz = struct.unpack_from("<4i", s0)
-        if a.map == "glade":
-            check(239 not in s0[0x24:0x24 + 0x190:4], "no poop pile on the card names map 239")
-        if anywhere:
-            check(main_state == 1 and s0[0x49A] != 239 and s0[0x49B] != 239,
-                  "card save: map %d (before: map %d) at %s" % (s0[0x49A], s0[0x49B], (px, py, pz)))
-        elif a.map == "glade":                         # no card names the new map, or the new exit
-            host = spec["host"]
-            check(main_state == 1 and s0[0x49A] == host["row"] and s0[0x49C] == host["save_exit"]
-                  and s0[0x49B] != 239 and not (s0[0x49B] == host["row"] and s0[0x49D] == host["exit"]),
-                  "card save: map %d exit %d (before: map %d exit %d) at %s"
-                  % (s0[0x49A], s0[0x49C], s0[0x49B], s0[0x49D], (px, py, pz)))
-            if on_new_map:
-                check((px, py, pz) == tuple(host["spawn"]) and screen() == 239,
-                      "a save made on 239 resumes at the entrance, and play stays on 239")
-        elif proof:                                    # dw_newmaps.c's remap is for row 239 only: the card names 240
-            check(main_state == 1, "card save made (main state %d, map %d exit %d at %s: not remapped, as expected)"
-                  % (main_state, s0[0x49A], s0[0x49C], (px, py, pz)))
-        else:
-            check(main_state == 1 and s0[0x49A] == 239 and s0[0x49C] == 0,
-                  "card save: map %d exit %d at %s" % (s0[0x49A], s0[0x49C], (px, py, pz)))
-        with open(os.path.join(out, "saved_pos.json"), "w") as fh:
-            json.dump([px, py, pz], fh)
+        def judge(s0, main_state, at):
+            px, py, pz = at
+            if a.map == "glade":
+                check(239 not in s0[0x24:0x24 + 0x190:4], "no poop pile on the card names map 239")
+            if anywhere:
+                check(main_state == 1 and s0[0x49A] != 239 and s0[0x49B] != 239,
+                      "card save: map %d (before: map %d) at %s" % (s0[0x49A], s0[0x49B], (px, py, pz)))
+            elif a.map == "glade":                         # no card names the new map, or the new exit
+                host = spec["host"]
+                check(main_state == 1 and s0[0x49A] == host["row"] and s0[0x49C] == host["save_exit"]
+                      and s0[0x49B] != 239 and not (s0[0x49B] == host["row"] and s0[0x49D] == host["exit"]),
+                      "card save: map %d exit %d (before: map %d exit %d) at %s"
+                      % (s0[0x49A], s0[0x49C], s0[0x49B], s0[0x49D], (px, py, pz)))
+                if on_new_map:
+                    check((px, py, pz) == tuple(host["spawn"]) and screen() == 239,
+                          "a save made on 239 resumes at the entrance, and play stays on 239")
+            elif proof:                                    # dw_newmaps.c's remap is for row 239 only: the card names 240
+                check(main_state == 1, "card save made (main state %d, map %d exit %d at %s: not remapped, as expected)"
+                      % (main_state, s0[0x49A], s0[0x49C], (px, py, pz)))
+            else:
+                check(main_state == 1 and s0[0x49A] == 239 and s0[0x49C] == 0,
+                      "card save: map %d exit %d at %s" % (s0[0x49A], s0[0x49C], (px, py, pz)))
+
+        # a pile dropped here, in the table's last slot
+        f.save_here(card_dir, out, judge, bytes([239, 50, 50, 5]) if on_new_map and a.map == "glade" else None)
+
 
     try:
         enter()
