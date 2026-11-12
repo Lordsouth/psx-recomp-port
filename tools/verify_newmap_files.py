@@ -24,6 +24,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game  # noqa: E402
+from field_drive import Field  # noqa: E402
 
 CURRENT_SCREEN, GAME_STATE, IS_SCRIPT_PAUSED = 0x80134DA8, 0x80134F0A, 0x80134FF4
 GENERAL_BUFFER = 0x80010000
@@ -83,21 +84,6 @@ def main():
         if not 0x80000000 <= ptr < 0x80200000:
             return None
         return struct.unpack("<3i", g.d.read(ptr + 120, 12))
-
-    def enter():                                       # verify_newmap.py's enter(): title -> CONTINUE
-        free = lambda: (g.partner_type and g.tamer_state == 0 and gstate() == 0
-                        and screen() != 238 and i32(IS_SCRIPT_PAUSED) == 1)
-        for _ in range(12):
-            g.route("6:start,150:none")
-        g.advance(120)
-        g.route("6:down,90:none")
-        for i in range(600):
-            g.route("6:cross,30:none")
-            if free() and i % 5 == 0:
-                g.advance(120)
-                if free():
-                    return
-        raise RuntimeError("never reached the world from CONTINUE GAME")
 
     def plays(row, what):
         f0 = g.d.frame()
@@ -166,7 +152,7 @@ def main():
         check(wait_for(lambda: gstate() == 2, 30) and wait_for(lambda: gstate() == 1, 30), "the fight is on")
 
     try:
-        enter()
+        Field(g, check).enter()
         g.settle(timeout_frames=1800)
         check(g.map_record(239)["file"] == "MGEN17", "row 239 holds MGEN17 (glade ticked)")
         g.warp(2, 0)

@@ -155,25 +155,6 @@ def main():
     walk, wait_for, calibrate, go, near = f.walk, f.wait_for, f.calibrate, f.go, f.near
     partner = f.partner
 
-    def enter():
-        """Title -> CONTINUE. DOWN waits for the menu to take input: an early DOWN
-        is dropped and the crosses then start a NEW GAME. The intro gives a partner
-        while still on the opening screen (238) with its script running, so "in
-        control" also needs the script idle (the field menu's own test) for 2 s."""
-        free = lambda: (g.partner_type and g.tamer_state == 0 and gstate() == 0
-                        and screen() != 238 and i32(IS_SCRIPT_PAUSED) == 1)
-        for _ in range(12):
-            g.route("6:start,150:none")
-        g.advance(120)
-        g.route("6:down,90:none")
-        for i in range(600):
-            g.route("6:cross,30:none")
-            if free() and i % 5 == 0:
-                g.advance(120)
-                if free():
-                    return
-        raise RuntimeError("never reached the world from CONTINUE GAME")
-
     def walk_out():
         for leg in mp["out"][:-1]:
             go(leg, lambda: near(*leg) or screen() == mp["host_row"], limit=60)
@@ -471,7 +452,7 @@ def main():
 
 
     try:
-        enter()
+        f.enter()
         g.settle(timeout_frames=1800)
         if a.mode == "off":
             saved = json.load(open(os.path.join(out, "saved_pos_%s.json" % a.card)))

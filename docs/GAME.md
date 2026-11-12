@@ -144,8 +144,8 @@ the stock disc. Taken: 239 by the Hidden Glade, 240-243 by the Abandoned Factory
 Savanna's loadingName 30). Free for later maps: 244-246, 250-252.
 
 The factory's entrance is warp slot 1 of row 78 (`GIAS09`, Gear Savanna's dead end with the signs), cells 111 at
-columns 53-54 (stock floor, then stock wall), rows 30-35; it comes back to spawn (50, 1750) facing west, and a card names
-stock exit 0 instead (Task 4). That edge because past the campfire and its bucket the grass visibly runs on between the
+columns 53-54 (stock floor, then stock wall), rows 30-35; it comes back to spawn (50, 1750) facing west, and the factory's
+slot 1 points a save at stock exit 0 instead. That edge because past the campfire and its bucket the grass visibly runs on between the
 camp and the boulders toward the open savanna, where stock walls you off and no warp goes. Gear Savanna's other screens were
 ruled out: their edges either carry stock exits or show no way on, and rows 75 and 131 are one place in two story states
 [inferred: both are GIAS06, and row 70 leads to 131].

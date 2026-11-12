@@ -65,7 +65,8 @@ def main():
     check(staged, "the factory package is staged in %s" % pkg)
     if staged:                                         # the exe serves the staged copy: test what was generated
         for name in ["manifest.toml"] + [os.path.join("assets", n) for n in os.listdir(os.path.join(src, "assets"))]:
-            if open(os.path.join(src, name), "rb").read() != open(os.path.join(pkg, name), "rb").read():
+            if not os.path.exists(os.path.join(pkg, name)) or \
+                    open(os.path.join(src, name), "rb").read() != open(os.path.join(pkg, name), "rb").read():
                 print("%s in %s is stale: rebuild to stage what gen_factory.py wrote" % (name, pkg), file=sys.stderr)
                 return 2
     inc = {(n, ext): (int(lba), int(size)) for n, ext, lba, size in

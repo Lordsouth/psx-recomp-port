@@ -55,6 +55,7 @@ FLAGS = 0xC8                          # sound bank 8, no time of day (so one CLU
 LOADING_ROW, LOADING_NAME = 69, 30    # the arrival card says Gear Savanna: row 69's loadingName (asserted)
 BGM_ROW, BGM, BGM_PSTAT = 152, 0x16, 0    # FACT01's music: its 5D operand and pstat 0xF5 (asserted)
 MH_BUFFER, MH_BUDGET = 0x61A8, 180    # MAPHEAD_SCRIPT_BUFFER; the factory's sections must also fit 1.5's tail
+PREVIEWS = os.path.join(ROOT, "build-debug", "newmap", "factory")   # main() follows --build
 STOCK_FILLER = bytes.fromhex("fb00b400")  # a free row's MAPHEAD section binds script 180 (docs/GAME.md 3.11)
 
 # The entrance. Gear Savanna's dead-end screen with the signs (GIAS09): past the campfire and its bucket the grass
@@ -186,6 +187,7 @@ def production_floor_2():
 
 
 ARENA = (0, 600)                     # the boss chamber's open floor: where Machinedramon (radius 400) will stand
+ARENA_REACH = 4000                   # its distance from spawn 0: the boss's tracking range + 300 must stay below it
 
 
 def boss_chamber():
@@ -317,7 +319,7 @@ def check_screen(i, grid):
         assert not ((near >= 110) & (near < 120)).any(), "%s: an arrival must stay 2 cells off the exit strips" % NAMES[i]
     if i == 3:                                       # room for the boss, out of reach of the arrival
         r, c = cell(*ARENA)
-        assert (grid[r - 6:r + 7, c - 6:c + 7] == 0).all() and np.hypot(ARENA[0] - SPAWN0[0], ARENA[1] - SPAWN0[2]) >= 4000, \
+        assert (grid[r - 6:r + 7, c - 6:c + 7] == 0).all() and np.hypot(ARENA[0] - SPAWN0[0], ARENA[1] - SPAWN0[2]) >= ARENA_REACH, \
             "AFAC4 needs a wide open floor far from spawn 0"
     seen = reach(grid, s0)
     for value in scr.strips:
@@ -350,7 +352,7 @@ def built(i):
     try:
         check_screen(i, grid)
     except AssertionError:                           # show what failed
-        path = os.path.join(ROOT, "build-debug", "newmap", "factory", "failed_%s.png" % scr.name)
+        path = os.path.join(PREVIEWS, "failed_%s.png" % scr.name)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         Image.fromarray(overlay(scr, grid, pal(day)[idx])).save(path)
         print("collision overlay of the failed screen: %s" % path)
@@ -451,8 +453,10 @@ def main():
     ap.add_argument("--preview", action="store_true", help="render previews only")
     ap.add_argument("--check", action="store_true", help="build in memory and compare with the committed package")
     a = ap.parse_args()
+    global PREVIEWS
+    PREVIEWS = os.path.join(a.build, "newmap", "factory")
     if not a.check:
-        previews(os.path.join(a.build, "newmap", "factory"))
+        previews(PREVIEWS)
     if a.preview:
         return 0
 
