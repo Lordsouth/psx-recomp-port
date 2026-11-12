@@ -106,7 +106,10 @@ HOOK_OWNER = {
     0x800FF824: ROSTER,  # dw_roster_flags.c hasDigimonRaised
     0x800E2544: "dw.vanilla.evolution/native-evolution",  # dw_evolution.c
     0x80112D34: "dw.newmaps/glade",  # dw_newmaps.c  createSavegameChecksum
-    0x800A31F8: "dw.newmaps/glade",  # dw_newmaps.c  lookupFileTable
+    # lookupFileTable: a filter hook for the map packages that serve new file names. No shipped
+    # feature uses it yet (the glade serves none), so it is owned by the local-only proof
+    # package; a flag on it reaches no shipped feature's line. Re-own it when a map ships.
+    0x800A31F8: "dw.newmaps.proof/proof",  # dw_newmaps.c  lookupFileTable (filter)
 }
 
 # Code and data the widescreen plugins read or write besides their hooks
@@ -377,8 +380,11 @@ def main():
     with open(os.path.join(ROOT, "game.toml"), "rb") as f:
         rec = tomllib.load(f)["recompiler"]
     starts = function_starts()
-    for key in ("mod_function_entry_funcs", "mod_function_exit_funcs",
-                "mod_function_replace_funcs"):
+    # Only the kinds that die when the function runs interpreted are checked: generated code
+    # fires exit and replace hooks, but dirty_ram_interp.c fires only psx_mod_function_entry
+    # (entry callbacks and filters) and psx_mod_try_function_replacement. An entry hook
+    # follows the function wherever it is interpreted at the same address.
+    for key in ("mod_function_exit_funcs", "mod_function_replace_funcs"):
         for s in rec.get(key, []):
             addr = int(s, 16)
             owner = HOOK_OWNER.get(addr)

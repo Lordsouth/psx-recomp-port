@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Does the file-by-name hook (dw_newmaps_files.c on lookupFileTable) leave stock behaviour alone?
 
-Regression half: boot the stock game with the glade ticked (so the hook is live) and
-check that map 2 (MAYO03) loads and plays, that row 239 loads the glade (MGEN17, its
-TFS resident), and that talking to the glade boss starts the battle (DG.SCN read
-through the hooked lookup). Run it before the hook exists and after: both must pass.
+Regression half: boot the stock game with the glade ticked (the file hook is not in that
+plan: the glade serves no new names) and check that map 2 (MAYO03) loads and plays, that row 239 loads the glade (MGEN17, its
+TFS resident), and that talking to the glade boss starts the battle (DG.SCN is read by
+sector through CdSearchFile, not through the hooked lookup, so this guards the table rows
+and the glade's own plan, not the hook). Run it before the hook exists and after: both must pass.
 
     py -3.12 tools/verify_newmap_files.py --seed <card dir> [--port N] [--build DIR]
 
@@ -14,7 +15,8 @@ collision are resident after a warp, a savestate saved on 240 and loaded elsewhe
 TFS resident, standing by the boss and pressing confirm starts a battle (DG row 223 ran), and with an
 empty state.toml row 240 is empty. At 21:9 (widescreen ticked) the arrival on row 240 must match the glade's on
 row 239 (same art) in both slivers: the sliver reads a served TFS by sector (dw_ws_sliver.c), so black or missing
-edges fail it. The savestate check proves a state taken on 240 restores onto 240, not a re-serve by name. Needs a game build that includes the two FACT0 rows of dw_newmaps_files.inc.
+edges fail it. With the glade AND the proof ticked together the plan must be accepted (each map package
+has its own plugin id; the framework refuses two features claiming one) and both rows must exist. The savestate check proves a state taken on 240 restores onto 240, not a re-serve by name. Needs a game build that includes the two FACT0 rows of dw_newmaps_files.inc.
 
     py -3.12 tools/verify_newmap_files.py --seed <card dir> --proof [--port N]
 
@@ -42,6 +44,8 @@ STATE = ('format_version = 2\n\n[[package]]\nid = "dw.newmaps"\nversion = "1.0.0
 
 PROOF_STATE = ('format_version = 2\n\n[[package]]\nid = "dw.newmaps.proof"\nversion = "1.0.0"\n\n'
                '[[feature]]\npackage_id = "dw.newmaps.proof"\nid = "proof"\nenabled = true\n')
+PROOF_BODY = ('\n[[package]]\nid = "dw.newmaps.proof"\nversion = "1.0.0"\n\n'
+              '[[feature]]\npackage_id = "dw.newmaps.proof"\nid = "proof"\nenabled = true\n')
 MAP_COLLISION, SLOT = 0x801AF398, 7
 WIDE = ('\n[[package]]\nid = "psx.enhancement.widescreen"\nversion = "1.0.0"\n\n'
         '[[feature]]\npackage_id = "psx.enhancement.widescreen"\nid = "widescreen"\nenabled = true\n'
@@ -236,6 +240,22 @@ def main():
             enter()
             g.settle(timeout_frames=1800)
             check(g.map_record(240)["file"] == "", "with an empty state.toml row 240 is empty")
+        finally:
+            g.shutdown()
+    if a.proof:                                        # glade + proof: one plan, two map plugins
+        with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
+            fh.write(STATE + PROOF_BODY)
+        g = Game.launch(exe=os.path.join(a.build, "Digimon_World_Recompiled.exe"), port=a.port + 4,
+                        memcard_dir=cards, extra_args=["--headless-opengl"],
+                        log_path=os.path.join(out, "run_both.log"))
+        try:
+            enter()
+            g.settle(timeout_frames=1800)
+            check(g.map_record(239)["file"] == "MGEN17", "glade + proof ticked together: row 239 is MGEN17")
+            check(g.map_record(240)["file"] == "FACT0", "glade + proof ticked together: row 240 is FACT0")
+            g.warp(240, 0)
+            g.settle(timeout_frames=600)
+            plays(240, "FACT0 beside the glade")
         finally:
             g.shutdown()
     if a.proof:                                        # 21:9: row 240 (files from MMM.DAT) vs row 239 (stock path), same art

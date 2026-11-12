@@ -120,7 +120,7 @@ def main():
            "[[target]]", 'game_id = "SLUS-01032"', 'disc_sha256 = "%s"' % disc_sha, "",
            "[[feature]]", 'id = "proof"', 'name = "MMM.DAT proof"', 'description = "Dev only."', 'group = "Dev"',
            "default_enabled = false", "",
-           "[[plugin]]", 'feature = "proof"', 'id = "dw.newmaps"', ""]
+           "[[plugin]]", 'feature = "proof"', 'id = "dw.newmaps.proof"', ""]
     for (fn, data), s in zip(blobs, places):
         open(J(pkg, "assets", fn), "wb").write(data)
         out += ["# %s at MMM.DAT sector %d (LBA %d)" % (fn, s, MMM_LBA + s), "[[overlay]]", 'feature = "proof"',
