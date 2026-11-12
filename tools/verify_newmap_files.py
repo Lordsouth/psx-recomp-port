@@ -12,7 +12,9 @@ New-name half (--proof): with tools/gen_newmap_proof.py's package installed (loc
 ticked, row 240 names FACT0, its files come from MMM.DAT and its script from DG row 223: the TFS and
 collision are resident after a warp, a savestate saved on 240 and loaded elsewhere returns there with the
 TFS resident, standing by the boss and pressing confirm starts a battle (DG row 223 ran), and with an
-empty state.toml row 240 is empty. Needs a game build that includes the two FACT0 rows of dw_newmaps_files.inc.
+empty state.toml row 240 is empty. At 21:9 (widescreen ticked) the arrival on row 240 must match the glade's on
+row 239 (same art) in both slivers: the sliver reads a served TFS by sector (dw_ws_sliver.c), so black or missing
+edges fail it. The savestate check proves a state taken on 240 restores onto 240, not a re-serve by name. Needs a game build that includes the two FACT0 rows of dw_newmaps_files.inc.
 
     py -3.12 tools/verify_newmap_files.py --seed <card dir> --proof [--port N]
 
@@ -41,6 +43,10 @@ STATE = ('format_version = 2\n\n[[package]]\nid = "dw.newmaps"\nversion = "1.0.0
 PROOF_STATE = ('format_version = 2\n\n[[package]]\nid = "dw.newmaps.proof"\nversion = "1.0.0"\n\n'
                '[[feature]]\npackage_id = "dw.newmaps.proof"\nid = "proof"\nenabled = true\n')
 MAP_COLLISION, SLOT = 0x801AF398, 7
+WIDE = ('\n[[package]]\nid = "psx.enhancement.widescreen"\nversion = "1.0.0"\n\n'
+        '[[feature]]\npackage_id = "psx.enhancement.widescreen"\nid = "widescreen"\nenabled = true\n'
+        '[feature.values]\naspect = "21:9"\n')
+SLIVER_NCC = 0.9      # measured 0.991 left, 1.000 right between the two rows; a black or missing edge is far below
 
 
 def main():
@@ -232,6 +238,38 @@ def main():
             check(g.map_record(240)["file"] == "", "with an empty state.toml row 240 is empty")
         finally:
             g.shutdown()
+    if a.proof:                                        # 21:9: row 240 (files from MMM.DAT) vs row 239 (stock path), same art
+        import numpy as np
+        from PIL import Image
+        shots = {}
+        for k, (state, row) in enumerate(((PROOF_STATE, 240), (STATE, 239))):
+            with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
+                fh.write(state + WIDE)
+            g = Game.launch(exe=os.path.join(a.build, "Digimon_World_Recompiled.exe"), port=a.port + 2 + k,
+                            memcard_dir=cards, extra_args=["--headless-opengl"],
+                            log_path=os.path.join(out, "run_wide%d.log" % row))
+            try:
+                enter()
+                g.settle(timeout_frames=1800)
+                g.warp(row, 0)
+                plays(row, "21:9")
+                g.advance(120)
+                path = os.path.join(out, "wide_%d.png" % row)
+                g.artifact_shot(path)
+                shots[row] = np.asarray(Image.open(path).convert("L"), float)
+            finally:
+                g.shutdown()
+        a240, a239 = shots[240], shots[239]
+        check(a240.shape == a239.shape and a240.shape[1] * 3 >= a240.shape[0] * 7,
+              "both arrivals are 21:9 screenshots (%s)" % (a240.shape,))
+        w = a240.shape[1]
+        for name, sl in (("left", slice(0, w // 5)), ("right", slice(w * 4 // 5, w))):
+            x, y = a240[:, sl], a239[:, sl]
+            lit = x.mean() > 20 and y.mean() > 20
+            xx, yy = x - x.mean(), y - y.mean()
+            ncc = (xx * yy).sum() / np.sqrt((xx * xx).sum() * (yy * yy).sum() or 1)
+            check(lit and ncc >= SLIVER_NCC, "21:9 %s sliver on FACT0 matches the glade's: NCC %.3f, brightness %.0f/%.0f"
+                  % (name, ncc, x.mean(), y.mean()))
     print("RESULT newmap_files: %s" % ("FAIL %s" % fails if fails else "PASS"))
     return 1 if fails else 0
 

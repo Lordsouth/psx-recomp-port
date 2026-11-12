@@ -540,8 +540,8 @@ New maps beyond the stock file table need no table rows and no overlay patches.
   It carries copies of the glade's assets and is never committed.
 - **What ran** [run 2026-11-11]:
   - `verify_newmap_files.py --proof`: row 240 names FACT0, the TFS and collision are resident after a warp, a savestate
-    saved on 240 and loaded from map 2 returns to 240 with the TFS resident, confirm by the boss starts a battle (DG row 223
-    ran), and with an empty `state.toml` row 240 is empty. Without the flag it is the stock-behaviour half.
+    saved on 240 and loaded from map 2 restores onto 240 (a savestate restores RAM wholesale, so this does not show the files being reloaded through the hook), confirm by the boss starts a battle (DG row 223
+    ran), and with an empty `state.toml` row 240 is empty. At 21:9 the arrival screenshots on row 240 and on the glade's row 239 (same art) must match in both slivers (NCC at or above 0.9; measured 0.99 and 1.00), which exercises the sliver's sector fallback. Without the flag it is the stock-behaviour half.
   - `verify_newmap.py run1 --map proof` and `fight --map proof --wide`: the glade's checks on row 240 (files, camera, palette,
     pond, bush, boss, win, save). The proof has no entrance in the host, so it is reached by warp and runs no walk out,
     flee or lose; a card save on 240 is not remapped (the save remap in `dw_newmaps.c` is for row 239 only).

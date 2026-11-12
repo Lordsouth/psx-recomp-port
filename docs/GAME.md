@@ -101,7 +101,7 @@ only room proven so far [run], or 28 pairs at 241 + 241; the windows in 2.4 stil
 - A new name needs no table row: `dw_newmaps.c`'s hook on `lookupFileTable` answers for the names in `dw_newmaps_files.inc`
   (lba, size) while a plan includes the `dw.newmaps` plugin, and passes every other name to the stock table. The
   widescreen sliver reads a served TFS by sector, since it has no ISO record. `FACT0.MAP` and `FACT0.TFS` came from
-  MMM.DAT sectors 0 and 43, were resident in `GENERAL_BUFFER` and were drawn at 21:9 [run 2026-11-11].
+  MMM.DAT sectors 0 and 43, were resident in `GENERAL_BUFFER` and were drawn at 21:9, the slivers matching the glade's (`verify_newmap_files.py --proof`) [run 2026-11-11].
 - New DG scripts at rows 223+ [run 2026-11-11, row 223]: nothing bounds a row (`src/main/script_interp.c:663-665,2810`), but the 0x2000 B table holds 2048 and rows 512+ are entry 0's bytes. A row is an offset
   from `DG.SCN`'s start, so `(148668-142589)*2048 = 12,449,792` plus the sector offset, in whole sectors, and needs
   both `table[N]` and `table[N+1]`. Never touch `table[222]`: it is the file's end and script 221's size.
