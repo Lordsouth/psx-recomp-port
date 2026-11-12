@@ -110,7 +110,7 @@ static void dw_newmaps_pre_checksum(struct CPUState* cpu, uint32_t address) {
  * Only one feature may claim a plugin id, so each map package that serves files has its own
  * id; list it in DW_FILE_PLUGINS. The glade serves no new names and has no entry here. */
 #define DW_LOOKUP_FILE_TABLE 0x800A31F8u
-static const char* const DW_FILE_PLUGINS[] = { "dw.newmaps.proof" };
+static const char* const DW_FILE_PLUGINS[] = { "dw.newmaps.factory" };
 
 static int dw_newmaps_lookup(struct CPUState* cpu, uint32_t address) {
     char buf[65];

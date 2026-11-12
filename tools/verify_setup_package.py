@@ -16,7 +16,7 @@ releases went out before a player reported it.
 
 Checks, cheap first (plus a mod-payload check: under mods/preloaded/packages only
 manifests ship, and the few allowed binaries, the Digimon World 1.5 BPS and the
-Hidden Glade's map files, must match their hashes):
+Hidden Glade's and the Abandoned Factory's map files, must match their hashes):
 
   headers  Every quoted #include in the staged framework's C/C++ resolves to a
            file that is actually in the package. This is the check that would
@@ -207,6 +207,30 @@ MOD_PAYLOADS = {
         "19115e350ac326fe4426e67628e178719be00d505364114ab53d2a6dde0f8b0b",
     "mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.tfs":
         "11a3c9fbf3743f9452f9808266dbe524477924b120ec23f4008bf15288a130d8",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac1.dg":
+        "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac1.map":
+        "bb65001acf70d8e0f98678f22081aa30c72404f7dd04cab7a9fe4401d0eaeb8a",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac1.tfs":
+        "09e21207fe9a584ca4e046360fa8866f36585ec4d9f7c0e4b1eb8818c8995bc4",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac2.dg":
+        "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac2.map":
+        "956f47f16af6f1c01b09dd8ed04e8bf0d7c46ff4bb8dcdc915aead8273c8a5d4",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac2.tfs":
+        "0b2e6f013b3033704456cd4b6908acf68f6b041e0a363b0d0b3a9a8f19b85cf6",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac3.dg":
+        "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac3.map":
+        "90c1ded58fb39859a063dddc679e2f8d28e788c2f6f1eba4486b3aaa3c911261",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac3.tfs":
+        "b649c4d7271744bfc631c94df0fae62818d4de6b49cee42bf243cf5d70866b94",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac4.dg":
+        "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac4.map":
+        "d9e57e706ee8d1be5de5ba2630346859a0b2f77ca58204d1d5e954f2898185a8",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac4.tfs":
+        "af870e74051812a48235c67d4a9c835b213898dd58829826e1b95492483b81ff",
 }
 
 
@@ -301,7 +325,7 @@ def main():
                 print("   " + p)
         else:
             print("OK: only manifests, plus the allowed Digimon World 1.5 BPS and font licences and the "
-                  "Hidden Glade's map files.")
+                  "new maps' files (Hidden Glade, Abandoned Factory).")
 
         rc = 1 if (gone or missing or payloads) else 0
 

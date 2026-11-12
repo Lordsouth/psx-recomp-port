@@ -524,29 +524,59 @@ Still to do:
 
 New maps beyond the stock file table need no table rows and no overlay patches.
 
-- **Files by name.** `dw_newmaps.c` replaces `lookupFileTable` (0x800A31F8, `src/main/file.c:16`) for plans that include the
-  `dw.newmaps` plugin, and is inert otherwise. For a name listed in `dw_newmaps_files.inc` (`{"NAME.EXT", lba, size}`,
+- **Files by name.** `dw_newmaps.c` replaces `lookupFileTable` (0x800A31F8, `src/main/file.c:16`) for plans that include a
+  plugin in its `DW_FILE_PLUGINS` (today `dw.newmaps.factory`), and is inert otherwise. For a name listed in `dw_newmaps_files.inc` (`{"NAME.EXT", lba, size}`,
   searched by `dw_newmaps_files.c`) it writes the `FileLookup` (the CdlLOC of the LBA, the size) and returns 1; any other
   name runs the stock body. `readFile` then reads whole sectors from the LBA, so a file in MMM.DAT (LBA 148668+) loads like
-  any other. The .inc holds only the two proof rows, `FACT0.MAP` and `FACT0.TFS`.
+  any other. The .inc holds the factory's eight rows; `tools/gen_factory.py` writes it.
 - **The sliver.** The 21:9 backdrop reads the TFS through the ISO directory, which a served name does not have. When
   that misses, `dw_ws_sliver.c` looks the name up in the same table and reads the TFS by sector (through a bounce buffer
   when the destination is smaller than the whole sectors).
 - **Scripts by row.** A DG table row 223+ pointing into MMM.DAT runs on stock code (GAME.md 4.1). The map's MAPHEAD
   section names the row in its `FB` op.
-- **The proof, local only.** `tools/gen_newmap_proof.py` writes `build-debug/mods/installed/dw.newmaps.proof` (feature `proof`,
-  plugin `dw.newmaps`) and the two .inc rows: map row 240 named `FACT0` carrying the glade's own MAP, TFS and script,
-  placed in MMM.DAT, with DG table[223] pointing at the script and a MAPHEAD section for row 240 after the glade's.
-  It carries copies of the glade's assets and is never committed.
-- **What ran** [run 2026-11-11]:
+- **The proof, retired.** Plan 1 proved the route with a local-only package (row 240 `FACT0`, the glade's own files and
+  script in MMM.DAT, DG row 223). The Abandoned Factory (3.4) took over its rows, its .inc and its job; the generator and
+  the `--proof` half of `verify_newmap_files.py` are gone. What it showed [run 2026-11-11]:
   - `verify_newmap_files.py --proof`: row 240 names FACT0, the TFS and collision are resident after a warp, a savestate
     saved on 240 and loaded from map 2 restores onto 240 (a savestate restores RAM wholesale, so this does not show the files being reloaded through the hook), confirm by the boss starts a battle (DG row 223
-    ran), and with an empty `state.toml` row 240 is empty. At 21:9 the arrival screenshots on row 240 and on the glade's row 239 (same art) must match in both slivers (NCC at or above 0.9; measured 0.99 and 1.00), which exercises the sliver's sector fallback. Without the flag it is the stock-behaviour half.
+    ran), and with an empty `state.toml` row 240 is empty. At 21:9 the arrival screenshots on row 240 and on the glade's row 239 (same art) matched in both slivers (NCC 0.99 and 1.00), which exercised the sliver's sector fallback. `verify_newmap_files.py` keeps the stock-behaviour half.
   - `verify_newmap.py run1 --map proof` and `fight --map proof --wide`: the glade's checks on row 240 (files, camera, palette,
     pond, bush, boss, win, save). The proof has no entrance in the host, so it is reached by warp and runs no walk out,
     flee or lose; a card save on 240 is not remapped (the save remap in `dw_newmaps.c` is for row 239 only).
 - **Limits.** A name must be listed in the .inc to be served. The hook changes a lookup only: the file must still fit its
   RAM window (GAME.md 2.4).
+
+### 3.4 The Abandoned Factory (verified in game, 2026-11-12)
+
+Four screens on rows 240-243, walked in a line, built by `tools/gen_factory.py` into `mods/preloaded/packages/dw.newmaps.factory`
+(feature `factory`, plugin `dw.newmaps.factory`, `conflicts = ["dw.1_5/dw15"]` until a 1.5 edition exists).
+
+- **Scenes.** Each screen is a scene of boxes, cylinders and ellipsoids that `newmap_engine.py` turns into the guide, the
+  collision and the MAP/TFS, as the glade's (3.2), on the glade's camera with a 6x4 grid and one CLUT (row flag 0x40).
+  The hall is the same on all four: side walls at x +/-3600, the back wall's face at z 1500 (the frame shows the floor
+  from z -4000 to about 1950), the way back along the bottom edge round x 0, the way on a doorway in the back wall.
+  AFAC1 is an open entry hall; AFAC2 and AFAC3 each have a line of machinery wall to wall with one gap exactly three cells
+  wide, the doorway straight behind it, so a guardian on the gap's middle column holds the way; AFAC4 is a sparse chamber
+  with no way on and open floor round (0, 600) for the boss. The art is the flat guide until it is painted.
+- **Warp slots.** Slot 0 is the arrival walking forward (0, -3500), and cell 110 leads back to the previous screen's exit 2
+  (AFAC1: the host's slot 1). Slot 1 is the host gate's spawn, where a save will resume (no cell 111). Slot 2 is the
+  arrival walking back, two rows in front of the doorway, and cell 112 leads on to the next screen's exit 0. AFAC4 has no
+  slot 2. Arrivals stay two cells off their strips.
+- **Disc layout.** MMM.DAT from sector 0: AFAC1.MAP, AFAC1.TFS, ... AFAC4.TFS, then DG scripts 223-226, one sector each.
+  Each script is a section table with one arrival section 0xFE (a bare END for now). The MAPHEAD sections (bind the
+  script, pstat 0xF5 = 0 and `5D 16` as FACT01, end; 14 bytes each) follow the glade's section at 0x6084, read from the
+  glade's manifest. The entrance is a new exit on `GIAS09` (GAME.md 3.1). Every patch's expected bytes are read from the
+  disc; the generator asserts the names are new, the MMM.DAT sectors and the MAPHEAD tail are zero, the rows and their
+  MAPHEAD sections are stock, the DG rows are consecutive and table[222] untouched, the host slot is free, every spawn is
+  floor, every strip reachable, and each gap exactly three cells wide and the only way on. `--check` rebuilds in memory
+  and compares the package and `dw_newmaps_files.inc`.
+- **What ran** [run 2026-11-12]: `verify_factory.py walk` warps to the host, walks east through the gate and checks on each
+  screen that it is `CURRENT_SCREEN`, that its served MAP and TFS (LBA and size from the .inc) are the ones in memory, the
+  camera, grid and palette; walks three floor spots and the forward strip (through the gap's middle column); then walks
+  all the way back, landing at each spawn 2 and at the gate. `walk --wide` repeats it at 21:9 and checks both edges of each
+  screen against its backdrop (`Field.slivers`: NCC at least 0.9, lit; measured 1.000 on both edges of all four). With
+  `dw_tfs_read_served` made to return 0 in a scratch build, `walk --wide` failed both edges on AFAC1 (NCC 0.53 and 0.26),
+  so the check sees the sector fallback.
 
 ---
 

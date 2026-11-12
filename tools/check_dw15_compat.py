@@ -106,10 +106,8 @@ HOOK_OWNER = {
     0x800FF824: ROSTER,  # dw_roster_flags.c hasDigimonRaised
     0x800E2544: "dw.vanilla.evolution/native-evolution",  # dw_evolution.c
     0x80112D34: "dw.newmaps/glade",  # dw_newmaps.c  createSavegameChecksum
-    # lookupFileTable: a filter hook for the map packages that serve new file names. No shipped
-    # feature uses it yet (the glade serves none), so it is owned by the local-only proof
-    # package; a flag on it reaches no shipped feature's line. Re-own it when a map ships.
-    0x800A31F8: "dw.newmaps.proof/proof",  # dw_newmaps.c  lookupFileTable (filter)
+    # lookupFileTable: a filter hook serving the new map names in dw_newmaps_files.inc (gen_factory.py)
+    0x800A31F8: "dw.newmaps.factory/factory",  # dw_newmaps.c  lookupFileTable (filter)
 }
 
 # Code and data the widescreen plugins read or write besides their hooks

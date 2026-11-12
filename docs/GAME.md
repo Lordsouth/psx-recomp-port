@@ -84,10 +84,11 @@ rows, which with MGEN17's two could carry 13 new map names by rewriting a name o
 offsets are cached in RAM, so a savestate holds stale copies: test disc changes from a memory card [Horizon].
 
 ### 2.3 MMM.DAT: free space, proven in game
-**Map files placed in MMM.DAT load in game under a new name [run 2026-11-11].** `tools/gen_newmap_proof.py` writes a
-local-only package that puts the glade's MAP and TFS in MMM.DAT as `FACT0` on row 240, and `verify_newmap_files.py --proof`,
-`verify_newmap.py run1 --map proof` and `fight --map proof --wide` pass on it (INTERNALS 3.3). The rest of the file's facts
-are read from the disc.
+**Map files placed in MMM.DAT load in game under a new name [run 2026-11-12].** The Abandoned Factory
+(`tools/gen_factory.py`, package `dw.newmaps.factory`) puts its four screens' MAP and TFS files in MMM.DAT as `AFAC1`..`AFAC4`
+on rows 240-243, and its DG scripts after them; `verify_factory.py walk` and `walk --wide` pass on it (INTERNALS 3.4). A
+throwaway proof (the glade's files as `FACT0` on row 240, plan 1) first showed the route [run 2026-11-11]; the factory
+replaced it. The rest of the file's facts are read from the disc.
 
 LBA 148668, 27,648,000 B, 13,500 sectors, all user bytes zero, Mode 2, submode 0x08 (last sector 0x89). The name appears
 only at `src/main/file_table_us.c:824` (row 817) and in the EXE's string pool. No shipped manifest's overlay falls there; the
@@ -100,13 +101,19 @@ only room proven so far [run], or 28 pairs at 241 + 241; the windows in 2.4 stil
   [inferred].
 - A new name needs no table row: `dw_newmaps.c`'s hook on `lookupFileTable` answers for the names in `dw_newmaps_files.inc`
   (lba, size) while a plan includes the `dw.newmaps` plugin, and passes every other name to the stock table. The
-  widescreen sliver reads a served TFS by sector, since it has no ISO record. `FACT0.MAP` and `FACT0.TFS` came from
-  MMM.DAT sectors 0 and 43, were resident in `GENERAL_BUFFER` and were drawn at 21:9, the slivers matching the glade's (`verify_newmap_files.py --proof`) [run 2026-11-11].
+  widescreen sliver reads a served TFS by sector, since it has no ISO record. The factory's eight files sit at MMM.DAT
+  sectors 0-795 (each MAP 6 sectors, each TFS 193), were resident in `GENERAL_BUFFER` on each screen, and were drawn at
+  21:9 with both edges matching the screen's own backdrop (`verify_factory.py walk --wide`) [run 2026-11-12]. The names
+  must be in neither `FILE_OFFSET_TABLE` nor the ISO directory (the generator asserts it), so the hook never serves a stock
+  name and the order of the two lookups cannot matter. `tools/gen_factory.py` owns `dw_newmaps_files.inc` and lays out
+  MMM.DAT; its `--check` compares the .inc with the package.
 - New DG scripts at rows 223+ [run 2026-11-11, row 223]: nothing bounds a row (`src/main/script_interp.c:663-665,2810`), but the 0x2000 B table holds 2048 and rows 512+ are entry 0's bytes. A row is an offset
   from `DG.SCN`'s start, so `(148668-142589)*2048 = 12,449,792` plus the sector offset, in whole sectors, and needs
   both `table[N]` and `table[N+1]`. Never touch `table[222]`: it is the file's end and script 221's size.
   `table[223]` on holds stale ASCII a guard must expect. `tools/scan_trigger_ids.py` stops at row 222.
-  Row 223 held the glade's script placed in MMM.DAT; the boss's dialogue and battle ran from it on stock code (`verify_newmap_files.py --proof`).
+  Rows 223-226 are the factory's (one sector each, at MMM.DAT sectors 796-799, each row ending where the next starts);
+  each screen's arrival ran from them on stock code [run 2026-11-12]. The proof first ran the glade's boss dialogue
+  and battle from row 223 [run 2026-11-11].
 
 ### 2.4 Where each file lands in RAM
 | File | Destination | Room |
@@ -132,7 +139,16 @@ base, since the TFS arrives second [inferred]; stock does (FRZL14 460,408 B unde
 A screen is a `MAP_ENTRIES` row, a MAPHEAD section, a DG script, a `.MAP` and a `.TFS`. `tools/gen_newmap.py` builds one.
 
 ### 3.1 MAP_ENTRIES
-0x801292D4, 255 rows of 16 bytes; the screen id is a u8 (`src/main/map.c:5397`). Rows 239-246 and 250-252 are empty.
+0x801292D4, 255 rows of 16 bytes; the screen id is a u8 (`src/main/map.c:5397`). Rows 239-246 and 250-252 are empty on
+the stock disc. Taken: 239 by the Hidden Glade, 240-243 by the Abandoned Factory (`AFAC1`..`AFAC4`, flags 0xC8, Gear
+Savanna's loadingName 30). Free for later maps: 244-246, 250-252.
+
+The factory's entrance is warp slot 1 of row 78 (`GIAS09`, Gear Savanna's dead end with the signs), cells 111 at
+columns 53-54 (stock floor, then stock wall), rows 30-35; it comes back to spawn (50, 1750) facing west, and a card names
+stock exit 0 instead (Task 4). That edge because past the campfire and its bucket the grass visibly runs on between the
+camp and the boulders toward the open savanna, where stock walls you off and no warp goes. Gear Savanna's other screens were
+ruled out: their edges either carry stock exits or show no way on, and rows 75 and 131 are one place in two story states
+[inferred: both are GIAS06, and row 70 leads to 131].
 Only MGEN17 has a file and no row. Rows 50 and 61 name files not on the disc and row 65 names `YAKA25`, which belongs
 to row 232; no warp reaches those three, so they may be reusable, though two `TELEPORT` ops were not traced [inferred].
 Live: `CURRENT_SCREEN` 0x80134DA8 (u8), `PREVIOUS_SCREEN` +1, `CURRENT_EXIT` +2, `PREVIOUS_EXIT` +3, `TARGET_MAP` 0x80134DE0.
@@ -375,6 +391,7 @@ script runs into `SCRIPT_STATE` [inferred].
 - Id 0 means MAPHEAD, already in RAM (`:653`). Its block at 0x800 is a redundant copy; 0x2000..0x6FFF is never read.
 - 1..198 are all bound by MAPHEAD rows (stock decode). 199..221 are library scripts, reached only by file jumps (`14`, `17`).
 - table[222] = 0xC4800, the file's end, sets script 221's read size: never change it. table[223..511] is stale ASCII and zeros: a guard must expect it.
+- 223..226 are the Abandoned Factory's screens (table[223..227], in MMM.DAT, `tools/gen_factory.py`). Later maps start at 227.
 
 Both files share one layout: u16 first-body offset (0x468 in MAPHEAD), then {u16 section, u16 offset from the script
 start} pairs ended by 0xFFFF, then the bodies. Only `setMapHeadActive` reads the first word (`:671-689`, `:2181-2188`).

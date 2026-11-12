@@ -1,5 +1,5 @@
 /* dw.newmaps: new map files live in the unused MMM.DAT area under names the game's own
- * file table does not hold. dw_newmaps_files.inc (generated) lists them. */
+ * file table does not hold. dw_newmaps_files.inc lists them; tools/gen_factory.py writes it. */
 #ifndef DW_NEWMAPS_FILES_H
 #define DW_NEWMAPS_FILES_H
 #include <stdint.h>

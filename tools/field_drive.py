@@ -27,12 +27,32 @@ BATTLE = (1, 2, 3)                                # GAME_STATE: 3 loading, 2 sta
 END_BUFFER, END_LINES = 0x80073EA0, 0x801350B0        # the box's text; lines expected, then rows drawn
 MP_BONUS = {700: 5, 800: 10, 900: 15, 999: 20}        # Brains reached: the percent its message names
 PSTAT_BASE, TRIGGER_BASE = 0x801BE031, 0x801BDFCD     # docs/GAME.md 4.7, 4.8
+SLIVER_NCC = 0.9      # plan 1 measured 0.991 and 1.000 for a served map's edges; a black or missing edge is far below
 
 
 class Field:
     def __init__(self, g, check, shot=None):
         self.g, self.check = g, check
         self.shot = shot or (lambda name: None)       # shot(name) -> screenshot path, for the caller's own folder
+
+    def enter(self):
+        """Title -> CONTINUE. DOWN waits for the menu to take input: an early DOWN is dropped and the crosses then
+        start a NEW GAME. The intro gives a partner while still on the opening screen (238) with its script running,
+        so "in control" also needs the script idle (the field menu's own test) for 2 s."""
+        g = self.g
+        free = lambda: (g.partner_type and g.tamer_state == 0 and self.gstate() == 0
+                        and self.screen() != 238 and self.i32(IS_SCRIPT_PAUSED) == 1)
+        for _ in range(12):
+            g.route("6:start,150:none")
+        g.advance(120)
+        g.route("6:down,90:none")
+        for i in range(600):
+            g.route("6:cross,30:none")
+            if free() and i % 5 == 0:
+                g.advance(120)
+                if free():
+                    return
+        raise RuntimeError("never reached the world from CONTINUE GAME")
 
     def i32(self, addr):
         return struct.unpack("<i", self.g.d.read(addr, 4))[0]
@@ -158,6 +178,35 @@ class Field:
         live = [int(hexrow[i:i + 4], 16) for i in range(0, 1024, 4)]
         clut0 = list(struct.unpack_from("<256H", tfs, 8))
         check(live == clut0, "our day palette is the live CLUT (VRAM row 480)")
+
+    def slivers(self, shot, backdrop, what):
+        """At 21:9, the edges past the 4:3 view are our backdrop. The middle of the screenshot (drawn by the stock tile
+        ring) finds where the view sits on the backdrop; then each outer fifth must match the backdrop there (NCC at
+        least SLIVER_NCC) and be lit. dw_ws_sliver.c draws those edges from a disc copy of the TFS, which for a
+        served map it reads by sector: black or missing edges fail. Rows 80-195 keep the clock and the bars out."""
+        import cv2
+        import numpy as np
+        from PIL import Image
+        img = Image.open(shot).convert("L")
+        img = np.asarray(img.resize((round(img.width * 240 / img.height), 240), Image.BOX), np.float32)
+        ref = np.asarray(Image.open(backdrop).convert("L"), np.float32)
+        w = img.shape[1]
+        self.check(w * 3 >= 240 * 7 - 3, "%s: the screenshot is 21:9 (%d x 240)" % (what, w))
+        mid = img[80:196, w * 3 // 10:w * 7 // 10]
+        found = cv2.matchTemplate(ref, mid, cv2.TM_CCOEFF_NORMED)
+        _, best, _, (x, y) = cv2.minMaxLoc(found)
+        x0, y0 = x - w * 3 // 10, y - 80                     # the view's top-left on the backdrop
+        self.check(x0 >= 0 and x0 + w <= ref.shape[1],     # characters stand in the middle: its match is only a locator
+                   "%s: the 4:3 middle sits on the backdrop at (%d, %d), NCC %.3f" % (what, x0, y0, best))
+        for name, sl in (("left", slice(0, w // 5)), ("right", slice(w * 4 // 5, w))):
+            a = img[80:196, sl]
+            b = ref[y0 + 80:y0 + 196, max(x0, 0):max(x0, 0) + w][:, sl]
+            ncc = 0.0
+            if a.shape == b.shape:
+                aa, bb = a - a.mean(), b - b.mean()
+                ncc = float((aa * bb).sum() / (np.sqrt((aa * aa).sum() * (bb * bb).sum()) or 1))
+            self.check(a.mean() > 20 and ncc >= SLIVER_NCC, "%s: the 21:9 %s edge is our backdrop: NCC %.3f, brightness %.0f"
+                       % (what, name, ncc, a.mean()))
 
     def keep_card(self, name, cards, out):
         """A copy of the card as this save left it, for the mod-off runs."""
