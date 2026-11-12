@@ -173,3 +173,13 @@ Expected: all PASS. **If anything fails on either route, stop: report which rout
 git add tools/verify_newmap.py tools/verify_newmap_files.py dw_ws_sliver.c docs/GAME.md docs/INTERNALS.md
 git commit -m "New maps: MMM.DAT files and DG rows 223+ proven in game"
 ```
+
+## Carried to plan 2 (from execution, 2026-11-12)
+
+Plan 1 finished at c44ef2e. These items were deferred, and plan 2 owns them:
+- The factory generator becomes the single owner of dw_newmaps_files.inc and the tail allocator. It retires or relocates the proof package, and it separates proof and factory resource ranges. Add a check that the .inc matches the package.
+- Make the sliver fallback gated, with the same lookup order as the hook. Check the DG script size and that the new rows are consecutive.
+- Stop gen_newmap_proof hard-coding the glade's MAPHEAD end (0x6084). Break the 21:9 sliver check once on purpose to see it fail.
+- check_dw15_compat no longer looks at entry-hooked functions (HOOK_OWNER[0x80112D34] is unused), and 0x800A31F8 is owned by the proof until a map ships. Hand it to the factory.
+- In verify_newmap_files, PROOF_BODY duplicates PROOF_STATE. The StopIteration control flow and the empty-state launch after a failed first phase also need tidying.
+- 1.5: DG rows cannot point backwards, new rows start at 227, there is no room right after 1.5's DG, MMM.DAT is unchanged on 1.5, and each edition has its own tail.
