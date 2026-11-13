@@ -210,27 +210,27 @@ MOD_PAYLOADS = {
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac1.dg":
         "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac1.map":
-        "7b60bb1e5eefd56b7e7055352a62ef8630ebe698246c39195f3a2cf62465eb17",
+        "92e11277055863325bbad4afd7f9233bfc4eea1b978a44fb208a49f4f70906e2",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac1.tfs":
-        "e322e21b1254568aa7292d93876071a56e5faf1ad7d589323955d7513840bae7",
+        "c3f31e9e5fb5b9f250d1f6940d16ab55bbec9fbd7463a07b62d5740dd5db1108",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac2.dg":
         "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac2.map":
-        "3c7e82bdb2f89e4d334b6fc8391775d53edb277846a1113cdca4f8a1bcb2f865",
+        "8d3bf559a8b9953f9852a988a71479ec8176179fc5ae3bd6d1d0a491946cf9c4",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac2.tfs":
-        "bdd021c40ca9e7f0e60c88c1fccf724e5bc44e2ab5fc1657e44c3e7e67524a08",
+        "c2529de48bc70bd90061dcd7307e33b7db8d156bcdc8f76cd8aacaafc05091e5",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac3.dg":
         "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac3.map":
-        "6ec4c0cbee3725e634706d4425b2518f8a95c992fe55dbd1f260075b21660f7b",
+        "a86456eff6b39519fa431af49031b3faae57d19254effef623f3580822855127",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac3.tfs":
-        "2e40daf979ea0f26515c23f2e283f48c9b3b2e57da953ae79b3ea3eae39cf30a",
+        "99cf632a77194cfda53c8a8046e6bee36c88a5fbe3cede09532dbf437ca5a4d8",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac4.dg":
         "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac4.map":
-        "13f8f8d8aa8007ecbaaa02073b61f0cb17c0e1696bf223c2e496157452e9a2eb",
+        "3aec9b098f8bc08f22619ab4f8d274de4cb89f79b843bcd919183d281ee0906f",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac4.tfs":
-        "b678fb356de35e22e9a469bbfc7f01725dbb102544523904531912fcbe581e09",
+        "d5cb786079d4524e408b97a28d15c90507137681be24c276e06e6452bd93a64e",
 }
 
 

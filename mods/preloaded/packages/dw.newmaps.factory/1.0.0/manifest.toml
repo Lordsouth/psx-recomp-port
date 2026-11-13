@@ -33,7 +33,7 @@ feature = "factory"
 target = "disc_user"
 offset = 304472064
 file = "assets/afac1.map"
-sha256 = "7b60bb1e5eefd56b7e7055352a62ef8630ebe698246c39195f3a2cf62465eb17"
+sha256 = "92e11277055863325bbad4afd7f9233bfc4eea1b978a44fb208a49f4f70906e2"
 
 # AFAC1.TFS at MMM.DAT sector 65 (LBA 148733)
 [[overlay]]
@@ -41,7 +41,7 @@ feature = "factory"
 target = "disc_user"
 offset = 304605184
 file = "assets/afac1.tfs"
-sha256 = "e322e21b1254568aa7292d93876071a56e5faf1ad7d589323955d7513840bae7"
+sha256 = "c3f31e9e5fb5b9f250d1f6940d16ab55bbec9fbd7463a07b62d5740dd5db1108"
 
 # AFAC2.MAP at MMM.DAT sector 258 (LBA 148926)
 [[overlay]]
@@ -49,7 +49,7 @@ feature = "factory"
 target = "disc_user"
 offset = 305000448
 file = "assets/afac2.map"
-sha256 = "3c7e82bdb2f89e4d334b6fc8391775d53edb277846a1113cdca4f8a1bcb2f865"
+sha256 = "8d3bf559a8b9953f9852a988a71479ec8176179fc5ae3bd6d1d0a491946cf9c4"
 
 # AFAC2.TFS at MMM.DAT sector 317 (LBA 148985)
 [[overlay]]
@@ -57,7 +57,7 @@ feature = "factory"
 target = "disc_user"
 offset = 305121280
 file = "assets/afac2.tfs"
-sha256 = "bdd021c40ca9e7f0e60c88c1fccf724e5bc44e2ab5fc1657e44c3e7e67524a08"
+sha256 = "c2529de48bc70bd90061dcd7307e33b7db8d156bcdc8f76cd8aacaafc05091e5"
 
 # AFAC3.MAP at MMM.DAT sector 510 (LBA 149178)
 [[overlay]]
@@ -65,7 +65,7 @@ feature = "factory"
 target = "disc_user"
 offset = 305516544
 file = "assets/afac3.map"
-sha256 = "6ec4c0cbee3725e634706d4425b2518f8a95c992fe55dbd1f260075b21660f7b"
+sha256 = "a86456eff6b39519fa431af49031b3faae57d19254effef623f3580822855127"
 
 # AFAC3.TFS at MMM.DAT sector 589 (LBA 149257)
 [[overlay]]
@@ -73,7 +73,7 @@ feature = "factory"
 target = "disc_user"
 offset = 305678336
 file = "assets/afac3.tfs"
-sha256 = "2e40daf979ea0f26515c23f2e283f48c9b3b2e57da953ae79b3ea3eae39cf30a"
+sha256 = "99cf632a77194cfda53c8a8046e6bee36c88a5fbe3cede09532dbf437ca5a4d8"
 
 # AFAC4.MAP at MMM.DAT sector 782 (LBA 149450)
 [[overlay]]
@@ -81,45 +81,45 @@ feature = "factory"
 target = "disc_user"
 offset = 306073600
 file = "assets/afac4.map"
-sha256 = "13f8f8d8aa8007ecbaaa02073b61f0cb17c0e1696bf223c2e496157452e9a2eb"
+sha256 = "3aec9b098f8bc08f22619ab4f8d274de4cb89f79b843bcd919183d281ee0906f"
 
-# AFAC4.TFS at MMM.DAT sector 819 (LBA 149487)
+# AFAC4.TFS at MMM.DAT sector 816 (LBA 149484)
 [[overlay]]
 feature = "factory"
 target = "disc_user"
-offset = 306149376
+offset = 306143232
 file = "assets/afac4.tfs"
-sha256 = "b678fb356de35e22e9a469bbfc7f01725dbb102544523904531912fcbe581e09"
+sha256 = "d5cb786079d4524e408b97a28d15c90507137681be24c276e06e6452bd93a64e"
 
-# AFAC1.DG at MMM.DAT sector 1012 (LBA 149680)
+# AFAC1.DG at MMM.DAT sector 1009 (LBA 149677)
+[[overlay]]
+feature = "factory"
+target = "disc_user"
+offset = 306538496
+file = "assets/afac1.dg"
+sha256 = "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d"
+
+# AFAC2.DG at MMM.DAT sector 1010 (LBA 149678)
+[[overlay]]
+feature = "factory"
+target = "disc_user"
+offset = 306540544
+file = "assets/afac2.dg"
+sha256 = "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d"
+
+# AFAC3.DG at MMM.DAT sector 1011 (LBA 149679)
+[[overlay]]
+feature = "factory"
+target = "disc_user"
+offset = 306542592
+file = "assets/afac3.dg"
+sha256 = "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d"
+
+# AFAC4.DG at MMM.DAT sector 1012 (LBA 149680)
 [[overlay]]
 feature = "factory"
 target = "disc_user"
 offset = 306544640
-file = "assets/afac1.dg"
-sha256 = "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d"
-
-# AFAC2.DG at MMM.DAT sector 1013 (LBA 149681)
-[[overlay]]
-feature = "factory"
-target = "disc_user"
-offset = 306546688
-file = "assets/afac2.dg"
-sha256 = "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d"
-
-# AFAC3.DG at MMM.DAT sector 1014 (LBA 149682)
-[[overlay]]
-feature = "factory"
-target = "disc_user"
-offset = 306548736
-file = "assets/afac3.dg"
-sha256 = "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d"
-
-# AFAC4.DG at MMM.DAT sector 1015 (LBA 149683)
-[[overlay]]
-feature = "factory"
-target = "disc_user"
-offset = 306550784
 file = "assets/afac4.dg"
 sha256 = "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d"
 
@@ -161,7 +161,7 @@ feature = "factory"
 target = "disc_user"
 offset = 292023164
 expected = "5c 53 43 4e 5c 4d 41 50 31 33 33 2e 53 43 4e 00 00 00 00 00"
-replace = "00 98 dd 00 00 a0 dd 00 00 a8 dd 00 00 b0 dd 00 00 b8 dd 00"
+replace = "00 80 dd 00 00 88 dd 00 00 90 dd 00 00 98 dd 00 00 a0 dd 00"
 
 # MAPHEAD sections 240-243 at 0x6084
 [[patch]]

@@ -319,7 +319,7 @@ def strip_targets(i):
     return {110: (ENTRY_X, BACK_STRIP_Z - 150), **({112: (int(door[0]), ZB + 50)} if door else {})}
 
 
-def check_screen(i, grid):
+def check_screen(i, grid, flat=None):
     """Every record position, spawn (and the partner beside it) and strip target is walkable, every strip is reachable
     from both spawns, and on a production floor the gap is exactly 3 cells wide, so exactly one column passes (the
     guardian's), and the only way to the forward strip."""
@@ -327,6 +327,10 @@ def check_screen(i, grid):
     for rec in scr.records:
         x, _, z = struct.unpack_from("<3h", rec, 4)              # species, type, then the position
         assert grid[cell(x, z)] == 0, "%s: the record at (%d, %d) must stand on floor" % (NAMES[i], x, z)
+    if flat is not None:                             # art may trim a doorway's edges, but not cut a strip down
+        assert ((flat == 110) <= (grid == 110)).all(), "%s: the art blocks cells of strip 110" % NAMES[i]
+        rows = sorted({r for r, _ in zip(*np.nonzero(flat == 112))})
+        assert all((grid[r] == 112).any() for r in rows) and (grid[rows[-1]] == 112).sum() >= 3 if rows else True,             "%s: strip 112 must keep every row and 3 cells of its first" % NAMES[i]
     for value, (x, z) in strip_targets(i).items():
         assert grid[cell(x, z)] == value, "%s: strip %d's target (%d, %d) must be on the strip" % (NAMES[i], value, x, z)
     s0 = cell(SPAWN0[0], SPAWN0[2])
@@ -377,11 +381,13 @@ def painted_map(i, rgb):
     # machine, a ring that walled every grate in. Within 5 px of both scene floor and scene grate, the scene's label holds.
     near = [cv2.dilate((lab_map == c).astype(np.uint8), np.ones((11, 11), np.uint8)).astype(bool) for c in scr.ground]
     painted = np.where(near[0] & near[1] & np.isin(lab_map, scr.ground), lab_map, painted)
-    # A painted line 1-2 px thick on the floor (a grate's lip, a seam) is not an obstacle, but lying along a cell row it
-    # takes three of the nine foot samples and walls the row (AFAC3 under its grate): on scene ground, what a 3x3
-    # opening removes from the non-ground mask is the scene's label again.
+    # A grate's painted lip, a line 1-2 px thick, is not an obstacle, but lying along a cell row it takes three of the
+    # nine foot samples and walls the row (AFAC3 under its grate): within 10 px of a scene grate, what a 3x3 opening
+    # removes from the non-ground mask is the scene's label again. Only there: elsewhere the opening would also wear
+    # away the speckled edges of painted props the classifier never learnt (an invented crate) and open cells on them.
     solid = ~np.isin(painted, scr.ground)
     thin = solid & ~cv2.morphologyEx(solid.astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)).astype(bool)
+    thin &= cv2.dilate((lab_map == 1).astype(np.uint8), np.ones((21, 21), np.uint8)).astype(bool)
     painted = np.where(thin & np.isin(lab_map, scr.ground), lab_map, painted)
     gl, pg = np.isin(lab_map, scr.ground), np.isin(painted, scr.ground)
     return painted, (gl & pg).sum() / (gl | pg).sum()
@@ -405,13 +411,14 @@ def built(i):
     else:
         rgb = E.guide(scr, prims)
     grid, order = E.collision(scr, prims, painted, fg)
+    flat = E.collision(scr, prims)[0] if painted is not None else None
     idx, day = E.quantise(rgb, painted)
     assert not (day[idx] == 0).any()
     rects, pages = E.build_sprites(scr, fg, order, idx, prims) if fg is not None else ([], [])
     if rects:                                        # cells the finished sprites would draw wrong
         grid[E.order_errors(scr, grid, fg, order, rects)] = 0x80
     try:
-        check_screen(i, grid)
+        check_screen(i, grid, flat)
     except AssertionError:                           # show what failed
         path = os.path.join(PREVIEWS, "failed_%s.png" % scr.name)
         os.makedirs(os.path.dirname(path), exist_ok=True)

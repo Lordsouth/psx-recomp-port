@@ -578,14 +578,16 @@ Four screens on rows 240-243, walked in a line, built by `tools/gen_factory.py` 
   glade's rule: ground painted under 7 of 9 foot samples), with the machines and pipes it shows cut into foreground
   sprites so characters walk behind them. Then every record position, spawn and partner spot is floor, the point the
   test walks onto on each strip is still that strip (the forward one is the doorway's first row: the painter may end a
-  doorway's floor short of the scene's), and each production floor's gap still has exactly one passable column, the
+  doorway's floor short of the scene's), strip 110 loses no cell and strip 112 keeps every row and three cells of its
+  first against the flat guide's grid, and each production floor's gap still has exactly one passable column, the
   guardian's. Without art a screen uses its flat guide. Two corrections to the classifier's map, on scene ground only
   (`gen_factory.painted_map`; the engine and the glade are untouched): within 5 px of both scene floor and scene grate
   the scene's label holds, because the blurred-colour feature read every flush grate's seam as machine and walled the
-  grates in; and non-ground lines 1-2 px thick (a 3x3 opening removes them) are ground again, because a grate's painted
-  lip lying along a cell row took three of the nine foot samples and walled the row.
+  grates in; and within 10 px of a scene grate, non-ground bits a 3x3 opening removes are ground again, because a
+  grate's painted lip (1-2 px) lying along a cell row took three of the nine foot samples and walled the row. Applied
+  everywhere, that opening also wore away the speckled edges of invented props and opened cells on an AFAC2 crate.
 - **The picks** (sweeps of seeds 1-4 per screen, AFAC2 also 4-9 on earlier prompts; `paint_factory.SEEDS`): AFAC1 4:4,
-  AFAC2 3:3, AFAC3 2:2, AFAC4 2:2 (qwen:z), ground IoU 0.866, 0.893, 0.846, 0.876. Each passed the art checks and showed
+  AFAC2 3:3, AFAC3 2:2, AFAC4 2:2 (qwen:z), ground IoU 0.858, 0.888, 0.840, 0.870. Each passed the art checks and showed
   the scene's props where they stand; most others lost a doorway strip, a spawn or AFAC4's arena to invented clutter.
   Re-running the painter reproduces each pick bit for bit.
 - **Warp slots.** Slot 0 is the arrival walking forward (0, -3500), and cell 110 leads back to the previous screen's exit 2
