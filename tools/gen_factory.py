@@ -16,18 +16,19 @@ spawn (no cell is 111, so it never fires); slot 2 is the arrival walking back an
 screen's exit 0. AFAC4 has no slot 2.
 
 The files go in the unused MMM.DAT area (docs/GAME.md 2.3) under names the game's file table does not have:
-dw_newmaps.c serves the names in dw_newmaps_files.inc, which this script owns and writes. Their DG scripts take
-new table rows 223-226, placed after the map files in MMM.DAT. The remaining writes are guarded patches: the four
-MAP_ENTRIES rows, the DG table rows, the MAPHEAD sections (after the glade's) and their pointers, and the
-entrance: a new exit on a Gear Savanna screen (HOST).
+dw_newmaps.c serves the names in dw_newmaps_files.inc, which this script owns and writes. Their DG scripts sit
+after the map files in MMM.DAT, and dw_newmaps.c's getScript hook serves their ids (SCRIPTS) from there by
+dw_newmaps_scripts.inc, also written here: DG.SCN's table is never written. The remaining writes are guarded
+patches: the four MAP_ENTRIES rows, the MAPHEAD sections (after the glade's) and their pointers, and the entrance:
+a new exit on a Gear Savanna screen (HOST).
 
     py -3.12 tools/gen_factory.py [--bin disc.bin] [--build build-debug] [--preview] [--check]
 
 Writes the package mods/preloaded/packages/dw.newmaps.factory/1.0.0/ (commit it, then update the MOD_PAYLOADS
-hashes in verify_setup_package.py), dw_newmaps_files.inc, and build/newmap/factory/: the painter's inputs
+hashes in verify_setup_package.py), dw_newmaps_files.inc, dw_newmaps_scripts.inc, and build/newmap/factory/: the painter's inputs
 (guide_<n>.png, labels_<n>.png), per-screen previews and spec.json, which verify_factory.py reads. --preview
 renders the previews only (no disc); --check builds in memory and compares the manifest, the assets and
-dw_newmaps_files.inc with what is committed.
+both .inc files with what is committed.
 """
 import argparse
 import functools
@@ -53,7 +54,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACKAGE, FEATURE = "dw.newmaps.factory", "factory"
 ROWS = (240, 241, 242, 243)
 NAMES = ("AFAC1", "AFAC2", "AFAC3", "AFAC4")
-SCRIPTS = (223, 224, 225, 226)        # DG table rows: table[223..227], each row's end the next row's start
+SCRIPTS = (227, 228, 229, 230)        # ids getScript serves from MMM.DAT (dw_newmaps_scripts.inc); later maps 231+
 MMM_LBA, MMM_SECTORS = 148668, 13500  # docs/GAME.md 2.3
 MAP_ENTRIES = 0x801292D4
 FILE_OFFSET_TABLE = 0x8011FE1C
@@ -825,14 +826,12 @@ def main():
     for row in ROWS:
         assert not any(exe[ram(MAP_ENTRIES + row * 16):][:16]), "MAP_ENTRIES row %d is not stock zeros" % row
     assert exe[ram(MAP_ENTRIES + LOADING_ROW * 16) + 15] == LOADING_NAME, "Gear Savanna's loadingName moved"
-    # DG rows 223..226 in MMM.DAT, after the map files
-    dgd, dg_lba = rd("DG.SCN"), files["DG.SCN"][0]
-    assert struct.unpack_from("<I", dgd, 222 * 4)[0] == files["DG.SCN"][1], "table[222] must be DG.SCN's size"
+    # script ids: past every row DG.SCN's table holds (table[222] is its size: script 221 is its last); the hook serves them
+    assert struct.unpack_from("<I", rd("DG.SCN"), 222 * 4)[0] == files["DG.SCN"][1], "table[222] must be DG.SCN's size"
+    assert min(SCRIPTS) > 222, "the factory's script ids must be past DG.SCN's table"
     dgs = lay[8:]
-    offs = [(MMM_LBA + s - dg_lba) * 2048 for _, s, _ in dgs] + [(MMM_LBA + used - dg_lba) * 2048]
     for k in range(4):
         assert dgs[k][0] == NAMES[k] + ".DG" and len(dgs[k][2]) <= 0x4000
-        assert offs[k + 1] - offs[k] == sectors(dgs[k][2]) * 2048, "DG rows must be consecutive, each ending where the next starts"
     # MAPHEAD: the factory's sections start where the glade's ends (its manifest), rounded up to even
     gdir = os.path.join(ROOT, "mods", "preloaded", "packages", "dw.newmaps", "1.0.0")
     gm = tomllib.load(open(os.path.join(gdir, "manifest.toml"), "rb"))
@@ -917,7 +916,8 @@ def main():
            'in Gear Savanna, on the screen with the signs and the campfire: walk east past the bucket, between the camp '
            'and the boulders. Needs the exact disc image listed in DISC.md. Not for Digimon World 1.5 yet."',
            'group = "New maps"', "default_enabled = false", 'conflicts = ["dw.1_5/dw15"]', "",
-           "# dw_newmaps.c: serves the screens' file names (dw_newmaps_files.inc) to the game's file lookup.",
+           "# dw_newmaps.c: serves the screens' file names (dw_newmaps_files.inc) to the game's file lookup and their",
+           "# scripts (dw_newmaps_scripts.inc) to getScript.",
            "[[plugin]]", 'feature = "%s"' % FEATURE, 'id = "%s"' % PACKAGE, ""]
     for name, s, blob in lay:
         out += ["# %s at MMM.DAT sector %d (LBA %d)" % (name, s, MMM_LBA + s), "[[overlay]]", 'feature = "%s"' % FEATURE,
@@ -931,10 +931,6 @@ def main():
     for i, row in enumerate(ROWS):
         entry = NAMES[i].encode().ljust(10, b"\0") + bytes([built(i)["n8"], 0, FLAGS, 0, 0, LOADING_NAME])
         patches.append(("MAP_ENTRIES[%d] = %s" % (row, NAMES[i]), patch("main_exe", MAP_ENTRIES + row * 16, bytes(16), entry)))
-    dg_base = files["DG.SCN"][0] * 2048
-    patches.append(("DG table[%d..%d]: the screens' scripts in MMM.DAT" % (SCRIPTS[0], SCRIPTS[-1] + 1),
-                    patch("disc_user", dg_base + SCRIPTS[0] * 4, dgd[SCRIPTS[0] * 4:SCRIPTS[0] * 4 + 20],
-                          struct.pack("<5I", *offs))))
     patches.append(("MAPHEAD sections %d-%d at 0x%x" % (ROWS[0], ROWS[-1], mh_at),
                     patch("disc_user", mh_base + mh_at, bytes(len(sections)), sections)))
     for row, (at, _) in zip(ROWS, placed):
@@ -954,7 +950,10 @@ def main():
         out += ["# " + why, "[[patch]]", 'feature = "%s"' % FEATURE, body, ""]
     manifest = "\n".join(out)
     inc = "".join('{"%s", %d, %d},\n' % (name, MMM_LBA + s, len(blob)) for name, s, blob in lay if not name.endswith(".DG"))
+    scripts_inc = "".join("{%d, %d, %d},\n" % (sid, MMM_LBA + s, sectors(blob) * 2048)
+                          for sid, (_, s, blob) in zip(SCRIPTS, dgs))
     inc_path, man_path = os.path.join(ROOT, "dw_newmaps_files.inc"), os.path.join(pkg, "manifest.toml")
+    scripts_path = os.path.join(ROOT, "dw_newmaps_scripts.inc")
     if a.check:
         bad = [n for n, blob in assets.items() if not os.path.exists(os.path.join(pkg, "assets", n))
                or open(os.path.join(pkg, "assets", n), "rb").read() != blob]
@@ -962,10 +961,12 @@ def main():
             bad.append("manifest.toml")
         if open(inc_path, encoding="utf-8").read().replace("\r\n", "\n") != inc:
             bad.append("dw_newmaps_files.inc")
+        if not os.path.exists(scripts_path) or open(scripts_path, encoding="utf-8").read().replace("\r\n", "\n") != scripts_inc:
+            bad.append("dw_newmaps_scripts.inc")
         if bad:
             print("DIFFERS: %s" % ", ".join(bad))
             return 1
-        print("factory package and dw_newmaps_files.inc identical to the committed ones")
+        print("factory package and both .inc files identical to the committed ones")
         return 0
     os.makedirs(os.path.join(pkg, "assets"), exist_ok=True)
     for name, blob in assets.items():
@@ -974,7 +975,9 @@ def main():
         fh.write(manifest)
     with open(inc_path, "w", newline="\n") as fh:
         fh.write(inc)
-    print("wrote %s and dw_newmaps_files.inc" % pkg)
+    with open(scripts_path, "w", newline="\n") as fh:
+        fh.write(scripts_inc)
+    print("wrote %s, dw_newmaps_files.inc and dw_newmaps_scripts.inc" % pkg)
     return 0
 
 

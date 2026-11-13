@@ -532,8 +532,13 @@ New maps beyond the stock file table need no table rows and no overlay patches.
 - **The sliver.** The 21:9 backdrop reads the TFS through the ISO directory, which a served name does not have. When
   that misses, `dw_ws_sliver.c` looks the name up in the same table and reads the TFS by sector (through a bounce buffer
   when the destination is smaller than the whole sectors).
-- **Scripts by row.** A DG table row 223+ pointing into MMM.DAT runs on stock code (GAME.md 4.1). The map's MAPHEAD
-  section names the row in its `FB` op.
+- **Scripts by id.** `dw_newmaps.c` also filters `getScript` (0x80106218, `src/main/script_interp.c:647`) for plans that
+  include `dw.newmaps.factory`. For an id listed in `dw_newmaps_scripts.inc` (`{id, lba, size}`, whole sectors) and not
+  already `ACTIVE_MAP_SCRIPT`, it reads the sectors with `psx_mod_read_disc_sectors`, copies them into the buffer
+  `MAP_SCRIPT_PTR` names, sets `ACTIVE_MAP_SCRIPT` and returns the buffer; a cached id, any other id and a failed read
+  run the stock body. No DG.SCN table row is written (GAME.md 2.3, 4.1). The map's MAPHEAD section names the id in its
+  `FB` op. A DG table row 223+ pointing into MMM.DAT also runs on stock code, but no package uses that route now: on 1.5
+  no row can reach MMM.DAT.
 - **The proof, retired.** Plan 1 proved the route with a local-only package (row 240 `FACT0`, the glade's own files and
   script in MMM.DAT, DG row 223). The Abandoned Factory (3.4) took over its rows, its .inc and its job; the generator and
   the `--proof` half of `verify_newmap_files.py` are gone. What it showed [run 2026-11-11]:
@@ -594,15 +599,16 @@ Four screens on rows 240-243, walked in a line, built by `tools/gen_factory.py` 
   (AFAC1: the host's slot 1). Slot 1 is the host gate's spawn, where a save will resume (no cell 111). Slot 2 is the
   arrival walking back, two rows in front of the doorway, and cell 112 leads on to the next screen's exit 0. AFAC4 has no
   slot 2. Arrivals stay two cells off their strips.
-- **Disc layout.** MMM.DAT from sector 0: AFAC1.MAP, AFAC1.TFS, ... AFAC4.TFS, then DG scripts 223-226, one sector each.
+- **Disc layout.** MMM.DAT from sector 0: AFAC1.MAP, AFAC1.TFS, ... AFAC4.TFS, then the DG scripts, one sector each at
+  sectors 1011-1014, served as ids 227-230 by the `getScript` hook (3.3).
   Each script is a section table: the arrival section 0xFE (`1E 00 FA 00 FE 00`, see the fights below), one talk section
   per fighter, and on AFAC4 the boss's. The MAPHEAD sections (bind the script, pstat 0xF5 = 0, `5D 16` as FACT01, the
   screen's LOAD_DIGIMON and SET_DIGIMON ops, end; 144 B in all, of the 180 B budget) follow the glade's section at 0x6084,
   read from the glade's manifest. The entrance is a new exit on `GIAS09` (GAME.md 3.1). Every patch's expected bytes are read from the
   disc; the generator asserts the names are new, the MMM.DAT sectors and the MAPHEAD tail are zero, the rows and their
-  MAPHEAD sections are stock, the DG rows are consecutive and table[222] untouched, the host slot is free, every spawn is
+  MAPHEAD sections are stock, the script ids lie past DG.SCN's table (table[222] its size), the host slot is free, every spawn is
   floor, every strip reachable, and each gap exactly three cells wide and the only way on. `--check` rebuilds in memory
-  and compares the package and `dw_newmaps_files.inc`.
+  and compares the package, `dw_newmaps_files.inc` and `dw_newmaps_scripts.inc`.
 - **The cast** (`CAST` in `gen_factory.py`, records as GAME.md 3.8). AFAC1: two Hagurumon and a Tinmon, workers that walk
   a loop and never fire (autotalk 2). AFAC2: two Guardromon pairs and the guardian Giromon (41). AFAC3: two Mamemon pairs
   and the guardian Megadramon (172). AFAC4: Machinedramon (115). The brief preferred a Tankmon pair on AFAC2 and a second

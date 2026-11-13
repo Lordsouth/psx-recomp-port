@@ -132,9 +132,43 @@ static int dw_newmaps_lookup(struct CPUState* cpu, uint32_t address) {
     return 1;
 }
 
+/* getScript(u16 a0) (script_interp.c:647-668): serve the script ids dw_newmaps_scripts.inc lists from MMM.DAT,
+ * so no DG.SCN table row is written (1.5 holds rows 222-225 itself and its DG.SCN lies past MMM.DAT). As the
+ * stock body does: an id already active is the buffer's (decline, the stock body returns it), else read the
+ * script into the buffer MAP_SCRIPT_PTR names and make it active. Decline every other id, and a failed read. */
+#define DW_GET_SCRIPT       0x80106218u
+#define DW_ACTIVE_MAP_SCRIPT 0x80134FC2u   /* u16 */
+#define DW_MAP_SCRIPT_PTR    0x80134FB4u   /* u8* */
+typedef struct { uint16_t id; uint32_t lba, size; } DwScript;   /* size: whole sectors, within the 0x4000 B buffer */
+static const DwScript k_scripts[] = {
+#include "dw_newmaps_scripts.inc"
+};
+
+static int dw_newmaps_get_script(struct CPUState* cpu, uint32_t address) {
+    uint8_t buf[0x4000];
+    const uint16_t id = (uint16_t)cpu->gpr[4];
+    (void)address;
+    for (uint32_t i = 0; i < sizeof k_scripts / sizeof *k_scripts; i++) {
+        const DwScript* s = &k_scripts[i];
+        if (s->id != id)
+            continue;
+        if (id == psx_mod_read_half(DW_ACTIVE_MAP_SCRIPT) || s->size > sizeof buf
+                || !psx_mod_read_disc_sectors(s->lba, s->size / 2048, buf))
+            return 0;
+        const uint32_t dst = psx_mod_read_word(DW_MAP_SCRIPT_PTR);
+        for (uint32_t o = 0; o < s->size; o += 4)
+            psx_mod_write_word(dst + o, (uint32_t)buf[o] | buf[o + 1] << 8 | buf[o + 2] << 16 | (uint32_t)buf[o + 3] << 24);
+        psx_mod_write_half(DW_ACTIVE_MAP_SCRIPT, id);
+        cpu->gpr[2] = dst;
+        return 1;
+    }
+    return 0;
+}
+
 PSX_MOD_CONSTRUCTOR(dw_newmaps_register) {
     for (uint32_t i = 0; i < sizeof DW_FILE_PLUGINS / sizeof *DW_FILE_PLUGINS; i++)
         psx_mod_register_function_filter_plugin(DW_FILE_PLUGINS[i], DW_LOOKUP_FILE_TABLE, dw_newmaps_lookup);
+    psx_mod_register_function_filter_plugin("dw.newmaps.factory", DW_GET_SCRIPT, dw_newmaps_get_script);
     psx_mod_register_function_entry_plugin(k_maps[0].plugin, DW_CHECKSUM, dw_newmaps_pre_checksum);
     psx_mod_register_function_entry_plugin(k_maps[1].plugin, DW_CHECKSUM, dw_newmaps_factory_pre_checksum);
 }

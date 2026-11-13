@@ -9,7 +9,7 @@ and the glade's own plan, not the hook). Run it before the hook exists and after
 
     py -3.12 tools/verify_newmap_files.py --seed <card dir> [--port N] [--build DIR]
 
-The new-name route (files served from MMM.DAT, DG rows 223+) is the Abandoned Factory's to prove now:
+The new-name route (files and scripts served from MMM.DAT by the lookupFileTable and getScript hooks) is the Abandoned Factory's to prove now:
 tools/verify_factory.py walk and walk --wide.
 
 Writes build/mods/state.toml. Verdicts are guest-memory reads.

@@ -103,18 +103,26 @@ only room proven so far [run], or 28 pairs at 241 + 241; the windows in 2.4 stil
 - A new name needs no table row: `dw_newmaps.c`'s hook on `lookupFileTable` answers for the names in `dw_newmaps_files.inc`
   (lba, size) while a plan includes the `dw.newmaps` plugin, and passes every other name to the stock table. The
   widescreen sliver reads a served TFS by sector, since it has no ISO record. The factory's eight files sit at MMM.DAT
-  sectors 0-795 (each MAP 6 sectors, each TFS 193), were resident in `GENERAL_BUFFER` on each screen, and were drawn at
+  sectors 0-1010 (each TFS 193 sectors), were resident in `GENERAL_BUFFER` on each screen, and were drawn at
   21:9 with both edges matching the screen's own backdrop (`verify_factory.py walk --wide`) [run 2026-11-12]. The names
   must be in neither `FILE_OFFSET_TABLE` nor the ISO directory (the generator asserts it), so the hook never serves a stock
   name and the order of the two lookups cannot matter. `tools/gen_factory.py` owns `dw_newmaps_files.inc` and lays out
   MMM.DAT; its `--check` compares the .inc with the package.
+- A new script needs no table row either: `dw_newmaps.c`'s filter hook on `getScript` (0x80106218) answers for the ids in
+  `dw_newmaps_scripts.inc` (id, lba, size in whole sectors). For a listed id that is not `ACTIVE_MAP_SCRIPT` (0x80134FC2,
+  u16) it reads the sectors into the buffer `MAP_SCRIPT_PTR` (0x80134FB4) names, sets `ACTIVE_MAP_SCRIPT` and returns
+  the buffer; a cached id and every other id run the stock body. The factory's ids 227-230 sit at MMM.DAT sectors
+  1011-1014, one sector each, and each screen's arrival ran from them going in and coming back (`verify_factory.py walk`)
+  [run 2026-11-13: `verify_factory.py walk`, `fights`, `boss`]. `getScript` is the only reader of `SCRIPT_OFFSET_TABLE` (`src/main/script_interp.c:647-668`), so no DG.SCN row
+  is written: on 1.5, whose DG.SCN (LBA 162388) lies past MMM.DAT and whose table holds rows 222-225, no row could reach
+  MMM.DAT.
 - New DG scripts at rows 223+ [run 2026-11-11, row 223]: nothing bounds a row (`src/main/script_interp.c:663-665,2810`), but the 0x2000 B table holds 2048 and rows 512+ are entry 0's bytes. A row is an offset
   from `DG.SCN`'s start, so `(148668-142589)*2048 = 12,449,792` plus the sector offset, in whole sectors, and needs
   both `table[N]` and `table[N+1]`. Never touch `table[222]`: it is the file's end and script 221's size.
   `table[223]` on holds stale ASCII a guard must expect. `tools/scan_trigger_ids.py` stops at row 222.
-  Rows 223-226 are the factory's (one sector each, at MMM.DAT sectors 796-799, each row ending where the next starts);
-  each screen's arrival ran from them on stock code [run 2026-11-12]. The proof first ran the glade's boss dialogue
-  and battle from row 223 [run 2026-11-11].
+  The factory's screens ran from rows 223-226 on stock code [run 2026-11-12], and the proof first ran the glade's boss
+  dialogue and battle from row 223 [run 2026-11-11]. Since plan 3 no package writes a row: the factory's scripts are
+  served by the `getScript` hook (the bullet above), so rows 223-226 are free on stock. Digimon World 1.5 holds 222-225.
 
 ### 2.4 Where each file lands in RAM
 | File | Destination | Room |
@@ -388,7 +396,7 @@ blocked line keeps an NPC out of a fight (`src/main/btl.c:109`); 0x8F no drops (
 | NPC models | `LOADED_DIGIMON_MODELS` holds 8 and drops the rest (`src/main/script_interp.c:2561-2571`), but `NPC_MODELS` has 5 slots (`src/main/model.c:2698`). Same species shares a slot. Index k maps to page 0x16+k/2, CLUT `((k+2)*16, 488)` (`src/main/model.c:3400-3403`) | Read. Index 4 overlaps `SBOY.TIM`'s pixels and `SYSTEM_W.TIM`'s CLUT, so 4 are clean. A sixth returns NULL [not run] |
 | Heap | `_end` to stack: 197,520 B (0x801BFB70-0x801EFF00, `src/main/main.c:3537-3538`). A map needs MMDs in whole sectors, plus bones x (0x88 + 0x52) per placed Digimon (`src/main/model.c:2829-2830`), plus 0x4800 while loading (`src/main/model.c:3299`). A failed `malloc3` reads to NULL (`src/main/model.c:3410-3414`). Only `model.c` and `std_setup.c` call it | Read. Stock free heap is 40.2 KB to 192.9 KB by screen [Horizon]. Vice's randomizer re-rolls two-group areas until combined model weight is at most 152,000, unit not stated [Vice]. The factory's screens by this formula (`heap_estimate` in `tools/gen_factory.py`, bones from `DIGIMON_DATA`, the field `model.c:2815` reads): AFAC1 56,954 B (3 workers), AFAC2 145,942 B (4 Guardromon, Giromon), AFAC3 137,578 B (4 small Mamemon, small Megadramon), AFAC4 105,280 B (Machinedramon, 78,588 B of MMD). Every model loaded, two-enemy fights were won on AFAC2 and AFAC3, and Machinedramon loaded and fought on AFAC4 [run 2026-11-13]. A Guardromon pair, a Tankmon pair and even the small Giromon (161) come to 165,550 B |
 | MAPHEAD tail | 0x6070-0x61A8: 312 B for all new sections; the glade's takes 20. Every row has a table entry to repoint. Free rows hold a filler binding script 180, a real cutscene: never ship one | Read. 1.5 puts its own new sections in the tail, up to 0x60DE; the glade's 1.5 edition goes after them |
-| DG script | 0x4000 B. No slot is free: MAPHEAD binds 1-198, cross-calls reach 199-221 | Read. Rows 223+ in MMM.DAT [run 2026-11-11] |
+| DG script | 0x4000 B. No slot is free: MAPHEAD binds 1-198, cross-calls reach 199-221 | Read. Ids 227+ served from MMM.DAT by the `getScript` hook (2.3) [run 2026-11-13: `verify_factory.py walk`, `fights`, `boss`]; rows 223+ in MMM.DAT also run [run 2026-11-11] |
 
 Unknown, and not to be assumed either way:
 - What fails first on a busy map: heap, the 0x41000 effect heap, VRAM or SPU. Nobody has measured free memory on row 239
@@ -422,7 +430,8 @@ script runs into `SCRIPT_STATE` [inferred].
 - Id 0 means MAPHEAD, already in RAM (`:653`). Its block at 0x800 is a redundant copy; 0x2000..0x6FFF is never read.
 - 1..198 are all bound by MAPHEAD rows (stock decode). 199..221 are library scripts, reached only by file jumps (`14`, `17`).
 - table[222] = 0xC4800, the file's end, sets script 221's read size: never change it. table[223..511] is stale ASCII and zeros: a guard must expect it.
-- 223..226 are the Abandoned Factory's screens (table[223..227], in MMM.DAT, `tools/gen_factory.py`). Later maps start at 227. Each ran on arrival [run 2026-11-13: `verify_factory.py walk`, `fights`, `boss`].
+- 223..226 are free on stock: no package writes the table. Digimon World 1.5 owns 222-225 (its `table[222..226]`, 0xC5800..0xCD000, the last its file's size).
+- 227..230 are the Abandoned Factory's screens, never in the table: `dw_newmaps.c`'s `getScript` hook serves them from MMM.DAT sectors 1011-1014 (`dw_newmaps_scripts.inc`, `tools/gen_factory.py`). Later maps start at 231. Each ran on arrival [run 2026-11-13: `verify_factory.py walk`, `fights`, `boss`].
 
 Both files share one layout: u16 first-body offset (0x468 in MAPHEAD), then {u16 section, u16 offset from the script
 start} pairs ended by 0xFFFF, then the bodies. Only `setMapHeadActive` reads the first word (`:671-689`, `:2181-2188`).
@@ -692,7 +701,7 @@ FE 00                                     +12 section FE: the arrival END
 FE 00  FF 00                              end of section; end of file
 ```
 - **Trap: the DG slot is shared.** Slot 118 also serves row 122, which has no map Digimon or script tiles, so only its FE runs: FE must stay
-  a bare END. The generator checks the stock bytes and the 0x800 fit (`dg_new` in `tools/gen_newmap.py`). A next map needs a table row 223+ (4.1).
+  a bare END. The generator checks the stock bytes and the 0x800 fit (`dg_new` in `tools/gen_newmap.py`). A next map takes a script id 231+ served by the `getScript` hook (2.3, 4.1).
 
 **7. Decide about flags.** The boss sets none, though a loss still sets trigger 0x29, as any stock battle does. To add one, put
 `1C 00 tt tt` straight after `66 00`: a flee and a loss never return there (`src/main/script_interp.c:1919-1941`). To hide the NPC
@@ -1487,7 +1496,7 @@ The port translates the stock EXE ahead of time. It can change data, apply guard
 |---|---|---|
 | Format facts: MAP, TFS, entities, sprites, DG, MAPHEAD, text, MMD, VAB, SEQ | Horizon `docs/reference/`, `docs/mods/` | Agree with the decomp where other sections cite them. For stock opcodes cite `include/dw/script.h`, not Horizon: its IF kind 0x28, sub-values 6 and 7, and ops 0x80-0x9F are mod-only. |
 | `MMM.DAT` as free disc space | Horizon `docs/reference/disc.md`, `tools/dwmap.py` (`mmm`, `file-entry`) | Disc: LBA 148668, 13,500 all-zero Form 1 sectors, named only in table row 817. A `disc_user` overlay applies there [run 2026-11-11]. Moving a map takes four location patches, not two: skip the two ISO records and 21:9 shows black edges (INTERNALS 3.2); a new name needs none of them (INTERNALS 3.3). |
-| DG script rows 223 and up | `src/main/script_interp.c:647-668,2204,2783-2815` | No bounds check, so a row can point into `MMM.DAT` [run 2026-11-11, row 223]. Sizes must be whole sectors, a row needs `table[N]` and `table[N+1]`, `table[222]` must not change, and guards must expect stale ASCII from 223 on. `tools/scan_trigger_ids.py` stops at row 222 and would not audit them. |
+| DG script rows 223 and up | `src/main/script_interp.c:647-668,2204,2783-2815` | No bounds check, so a row can point into `MMM.DAT` [run 2026-11-11, row 223]. Sizes must be whole sectors, a row needs `table[N]` and `table[N+1]`, `table[222]` must not change, and guards must expect stale ASCII from 223 on. `tools/scan_trigger_ids.py` stops at row 222 and would not audit them. No package uses them since plan 3: the factory's scripts come from the `getScript` hook (2.3). |
 | More file names | Scan of the decomp and all `*_REL.BIN` | 25 rows have no `lookupFileTable` consumer; with MGEN17's two that is 27 rows, or 13 new map names [inferred]. Overlay rows are not free (`src/main/utils2.c:382`). |
 | Relayout of existing rows | Horizon `tools/build-disc.py --relayout` | Rewriting table sectors and sizes, plus ISO records for `CdSearchFile` users, is data on stock code. Only rows past 819 need a rebuilt table. |
 | Script assembler | Horizon `tools/dws/bytecode/` | `dis`, `asm`, `check`, `libres`, offline. Not standalone: it imports Horizon's tools package. 105 stock ops and 32 of its own. Byte-exact on all 222 scripts plus MAPHEAD [Horizon]. |

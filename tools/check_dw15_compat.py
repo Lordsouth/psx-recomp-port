@@ -83,8 +83,9 @@ NOT_SHIPPED = {"dw.vanilla.vice"}
 WS = "psx.enhancement.widescreen/widescreen"
 ROSTER = "dw.vanilla.roster/roster"
 
-# Who owns each game.toml hook. A hook missing here is an error, so a new
-# hook cannot slip past this check unowned.
+# Who owns each game.toml hook: a feature, or a tuple of them when several
+# features' plugins use it. A hook missing here is an error, so a new hook
+# cannot slip past this check unowned.
 HOOK_OWNER = {
     0x800E56EC: WS,      # dw_ws_backdrop.c  setPosDataPolyFT4
     0x800B8928: WS,      # dw_ws_backdrop.c  renderRectPolyFT4
@@ -107,7 +108,9 @@ HOOK_OWNER = {
     0x800E2544: "dw.vanilla.evolution/native-evolution",  # dw_evolution.c
     0x80112D34: "dw.newmaps/glade",  # dw_newmaps.c  createSavegameChecksum
     # lookupFileTable: a filter hook serving the new map names in dw_newmaps_files.inc (gen_factory.py)
-    0x800A31F8: "dw.newmaps.factory/factory",  # dw_newmaps.c  lookupFileTable (filter)
+    0x800A31F8: ("dw.newmaps.factory/factory",),  # dw_newmaps.c  lookupFileTable (filter)
+    # getScript: a filter hook serving the factory's script ids in dw_newmaps_scripts.inc (gen_factory.py)
+    0x80106218: ("dw.newmaps.factory/factory",),  # dw_newmaps.c  getScript (filter)
 }
 
 # Code and data the widescreen plugins read or write besides their hooks
@@ -385,14 +388,16 @@ def main():
     for key in ("mod_function_exit_funcs", "mod_function_replace_funcs"):
         for s in rec.get(key, []):
             addr = int(s, 16)
-            owner = HOOK_OWNER.get(addr)
-            if owner is None:
+            owners = HOOK_OWNER.get(addr)
+            if owners is None:
                 print("error: game.toml hook 0x%08X has no owner in "
                       "HOOK_OWNER; add it" % addr)
                 return 2
             end = next((x for x in starts if x > addr), addr + 4)
             hit = exe_changed(addr, end)
-            if hit is not None:
+            if hit is None:
+                continue
+            for owner in (owners,) if isinstance(owners, str) else owners:
                 flag(owner, "%s 0x%08X: function changed at 0x%08X"
                      % (key.replace("mod_function_", "").replace("_funcs", ""),
                         addr, hit))

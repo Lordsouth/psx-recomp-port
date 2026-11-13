@@ -83,6 +83,8 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file dw_evolution.c \
   --project-file dw_cheats.c --project-file dw_cheats_data.inc \
   --project-file dw_dw15.c --project-file dw_newmaps.c \
+  --project-file dw_newmaps_files.c --project-file dw_newmaps_files.h \
+  --project-file dw_newmaps_files.inc --project-file dw_newmaps_scripts.inc \
   --project-file README.md --project-file DISC.md --project-file cheats.txt \
   --project-file DEVELOPING.md \
   --project-file CHANGELOG.md \

@@ -22,7 +22,8 @@ group = "New maps"
 default_enabled = false
 conflicts = ["dw.1_5/dw15"]
 
-# dw_newmaps.c: serves the screens' file names (dw_newmaps_files.inc) to the game's file lookup.
+# dw_newmaps.c: serves the screens' file names (dw_newmaps_files.inc) to the game's file lookup and their
+# scripts (dw_newmaps_scripts.inc) to getScript.
 [[plugin]]
 feature = "factory"
 id = "dw.newmaps.factory"
@@ -155,21 +156,13 @@ address = 0x8012A204
 expected = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
 replace = "41 46 41 43 34 00 00 00 00 00 01 00 c8 00 00 1e"
 
-# DG table[223..227]: the screens' scripts in MMM.DAT
-[[patch]]
-feature = "factory"
-target = "disc_user"
-offset = 292023164
-expected = "5c 53 43 4e 5c 4d 41 50 31 33 33 2e 53 43 4e 00 00 00 00 00"
-replace = "00 90 dd 00 00 98 dd 00 00 a0 dd 00 00 a8 dd 00 00 b0 dd 00"
-
 # MAPHEAD sections 240-243 at 0x6084
 [[patch]]
 feature = "factory"
 target = "disc_user"
 offset = 292851844
 expected = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
-replace = "fb 00 df 00 f0 00 1e 00 f5 00 5d 16 46 7a 46 7b 47 7a 00 02 47 7a 01 02 47 7b 02 02 fe 00 fb 00 e0 00 f1 00 1e 00 f5 00 5d 16 46 5c 47 5c 00 00 47 5c 01 00 47 5c 02 00 47 5c 03 00 19 00 01 00 73 02 18 00 d2 60 19 00 46 29 47 29 04 00 fe 00 fb 00 e1 00 f2 00 1e 00 f5 00 5d 16 46 89 47 89 00 00 47 89 01 00 47 89 02 00 47 89 03 00 19 00 01 00 74 02 18 00 04 61 19 00 46 ac 47 ac 04 00 fe 00 fb 00 e2 00 f3 00 1e 00 f5 00 5d 16 46 73 47 73 00 00 fe 00"
+replace = "fb 00 e3 00 f0 00 1e 00 f5 00 5d 16 46 7a 46 7b 47 7a 00 02 47 7a 01 02 47 7b 02 02 fe 00 fb 00 e4 00 f1 00 1e 00 f5 00 5d 16 46 5c 47 5c 00 00 47 5c 01 00 47 5c 02 00 47 5c 03 00 19 00 01 00 73 02 18 00 d2 60 19 00 46 29 47 29 04 00 fe 00 fb 00 e5 00 f2 00 1e 00 f5 00 5d 16 46 89 47 89 00 00 47 89 01 00 47 89 02 00 47 89 03 00 19 00 01 00 74 02 18 00 04 61 19 00 46 ac 47 ac 04 00 fe 00 fb 00 e6 00 f3 00 1e 00 f5 00 5d 16 46 73 47 73 00 00 fe 00"
 
 # MAPHEAD section 240 -> 0x6084
 [[patch]]
