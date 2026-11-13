@@ -108,9 +108,9 @@ HOOK_OWNER = {
     0x800E2544: "dw.vanilla.evolution/native-evolution",  # dw_evolution.c
     0x80112D34: "dw.newmaps/glade",  # dw_newmaps.c  createSavegameChecksum
     # lookupFileTable: a filter hook serving the new map names in dw_newmaps_files.inc (gen_factory.py)
-    0x800A31F8: ("dw.newmaps.factory/factory",),  # dw_newmaps.c  lookupFileTable (filter)
+    0x800A31F8: ("dw.newmaps.factory/factory", "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  lookupFileTable (filter)
     # getScript: a filter hook serving the factory's script ids in dw_newmaps_scripts.inc (gen_factory.py)
-    0x80106218: ("dw.newmaps.factory/factory",),  # dw_newmaps.c  getScript (filter)
+    0x80106218: ("dw.newmaps.factory/factory", "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  getScript (filter)
 }
 
 # Code and data the widescreen plugins read or write besides their hooks
@@ -381,6 +381,12 @@ def main():
     with open(os.path.join(ROOT, "game.toml"), "rb") as f:
         rec = tomllib.load(f)["recompiler"]
     starts = function_starts()
+    # Every hook needs an owner, entry hooks and filters too, though only exit and replace hooks are checked below.
+    for key in ("mod_function_entry_funcs", "mod_function_exit_funcs", "mod_function_replace_funcs"):
+        for s in rec.get(key, []):
+            if int(s, 16) not in HOOK_OWNER:
+                print("error: game.toml hook %s (%s) has no owner in HOOK_OWNER; add it" % (s, key))
+                return 2
     # Only the kinds that die when the function runs interpreted are checked: generated code
     # fires exit and replace hooks, but dirty_ram_interp.c fires only psx_mod_function_entry
     # (entry callbacks and filters) and psx_mod_try_function_replacement. An entry hook
@@ -388,11 +394,7 @@ def main():
     for key in ("mod_function_exit_funcs", "mod_function_replace_funcs"):
         for s in rec.get(key, []):
             addr = int(s, 16)
-            owners = HOOK_OWNER.get(addr)
-            if owners is None:
-                print("error: game.toml hook 0x%08X has no owner in "
-                      "HOOK_OWNER; add it" % addr)
-                return 2
+            owners = HOOK_OWNER[addr]
             end = next((x for x in starts if x > addr), addr + 4)
             hit = exe_changed(addr, end)
             if hit is None:

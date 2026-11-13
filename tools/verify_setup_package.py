@@ -227,6 +227,8 @@ MOD_PAYLOADS = {
         "99cf632a77194cfda53c8a8046e6bee36c88a5fbe3cede09532dbf437ca5a4d8",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac4.dg":
         "a54111a978138819fbf4af793c3c491d18ecd45a8477f0ea3239364249f3d49b",
+    "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac4_15.dg":
+        "c8c665c4ac769afe4a2e90751ddd7ac9057ee57784b73de4ff61e6d889dbba24",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac4.map":
         "b342cf7fa735e6f826131f4b2c5e6b4c17b57b26fb21828c0638ec6c049b6b45",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac4.tfs":

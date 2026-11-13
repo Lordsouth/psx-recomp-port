@@ -135,7 +135,9 @@ static int dw_newmaps_lookup(struct CPUState* cpu, uint32_t address) {
 /* getScript(u16 a0) (script_interp.c:647-668): serve the script ids dw_newmaps_scripts.inc lists from MMM.DAT,
  * so no DG.SCN table row is written (1.5 holds rows 222-225 itself and its DG.SCN lies past MMM.DAT). As the
  * stock body does: an id already active is the buffer's (decline, the stock body returns it), else read the
- * script into the buffer MAP_SCRIPT_PTR names and make it active. Decline every other id, and a failed read. */
+ * script into the buffer MAP_SCRIPT_PTR names and make it active. Decline every other id. A failed read fails
+ * closed: the stock body would read DG.SCN's table past its end (rows 227+ are not real) and could overrun the
+ * 0x4000 B buffer, so the call is consumed and returns the buffer as it is, the active id unchanged. */
 #define DW_GET_SCRIPT       0x80106218u
 #define DW_ACTIVE_MAP_SCRIPT 0x80134FC2u   /* u16 */
 #define DW_MAP_SCRIPT_PTR    0x80134FB4u   /* u8* */
@@ -152,14 +154,15 @@ static int dw_newmaps_get_script(struct CPUState* cpu, uint32_t address) {
         const DwScript* s = &k_scripts[i];
         if (s->id != id)
             continue;
-        if (id == psx_mod_read_half(DW_ACTIVE_MAP_SCRIPT) || s->size > sizeof buf
-                || !psx_mod_read_disc_sectors(s->lba, s->size / 2048, buf))
+        if (id == psx_mod_read_half(DW_ACTIVE_MAP_SCRIPT))
             return 0;
         const uint32_t dst = psx_mod_read_word(DW_MAP_SCRIPT_PTR);
+        cpu->gpr[2] = dst;
+        if (s->size > sizeof buf || !psx_mod_read_disc_sectors(s->lba, s->size / 2048, buf))
+            return 1;
         for (uint32_t o = 0; o < s->size; o += 4)
             psx_mod_write_word(dst + o, (uint32_t)buf[o] | buf[o + 1] << 8 | buf[o + 2] << 16 | (uint32_t)buf[o + 3] << 24);
         psx_mod_write_half(DW_ACTIVE_MAP_SCRIPT, id);
-        cpu->gpr[2] = dst;
         return 1;
     }
     return 0;

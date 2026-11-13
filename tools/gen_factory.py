@@ -25,7 +25,9 @@ a new exit on a Gear Savanna screen (HOST).
     py -3.12 tools/gen_factory.py [--bin disc.bin] [--build build-debug] [--preview] [--check]
 
 Writes the package mods/preloaded/packages/dw.newmaps.factory/1.0.0/ (commit it, then update the MOD_PAYLOADS
-hashes in verify_setup_package.py), dw_newmaps_files.inc, dw_newmaps_scripts.inc, and build/newmap/factory/: the painter's inputs
+hashes in verify_setup_package.py; its assets include afac4_15.dg, the AFAC4 script with 1.5's name for item 127,
+which tools/gen_newmap_dw15.py --package factory swaps into factory-15 below the manifest's marker, a block this
+script keeps), dw_newmaps_files.inc, dw_newmaps_scripts.inc, and build/newmap/factory/: the painter's inputs
 (guide_<n>.png, labels_<n>.png), per-screen previews and spec.json, which verify_factory.py reads. --preview
 renders the previews only (no disc); --check builds in memory and compares the manifest, the assets and
 both .inc files with what is committed.
@@ -255,7 +257,13 @@ MIN_PICKS = dict(regular=30, guardian=30, boss=60)   # a fleeable fight spends m
 REWARD = (127, 23, 24, 25, 26, 27, 28)
 REWARD_NAMES = (("METALBANANA", "Metalbanana"), ("OFF_CHIP", "Off. Chip"), ("DEF_CHIP", "Def. Chip"),
                 ("BRAIN_CHIP", "Brain Chip"), ("QUICK_CHIP", "Quick Chip"), ("HP_CHIP", "HP Chip"), ("MP_CHIP", "MP Chip"))
-PAID_LINES = ("The machines fall silent.", "Got Metalbanana and 6 chips!")
+DW15_REWARD_NAME = "Glimpup Gem"         # item 127 on Digimon World 1.5 (gen_newmap_dw15.py asserts it on the 1.5 image)
+
+
+def paid_lines(reward_name):
+    return ("The machines fall silent.", "Got %s and 6 chips!" % reward_name)
+
+
 FULL_LINES = ("Your bag is full.", "Make room and come back.")
 ITEM_PARA = 0x801269DC               # 128 x 32 B, the name first (char[20], USA)
 
@@ -635,15 +643,16 @@ def say(owner, lines):
     return bytes([0x1B, owner, 0x1A, 0]) + E.dialog_text(lines) + b"\x0d\x00\x00\x00"
 
 
-def boss_section(rec, at):
+def boss_section(rec, at, reward_name=REWARD_NAMES[0][1]):
     """The boss's talk section, placed at offset `at` in its DG script (its jumps are offsets from the script's start).
     It speaks, then a fight that is not predefined (nothing can join on an empty screen, and it plays the boss's own
     music). A flee or a loss never comes back here. A win pays the reward once, all or nothing (docs/GAME.md 6.2): with
     trigger 629 set it ends; otherwise each item is given (GIVE_ITEM sets trigger 0 when the bag cannot take it, clears it
     when it can) and a failed give jumps to the rollback for that position, which takes back the items already given,
-    says the bag is full and ends with 629 still clear. Only when all seven are in does 629 get set."""
+    says the bag is full and ends with 629 still clear. Only when all seven are in does 629 get set. reward_name is
+    item 127's name in the paid line (1.5 renames the item)."""
     head = say(rec.script_id, [LINES[rec.species]]) + bytes.fromhex("2700 6700 0100 6600")
-    paid = b"\x1c\x00" + struct.pack("<H", REWARD_TRIGGER) + say(0xFF, PAID_LINES) + b"\xfe\x00"
+    paid = b"\x1c\x00" + struct.pack("<H", REWARD_TRIGGER) + say(0xFF, paid_lines(reward_name)) + b"\xfe\x00"
     rollback = [b"".join(bytes([0x29, 0, item, 1]) for item in REWARD[:k]) + say(0xFF, FULL_LINES) + b"\xfe\x00"
                 for k in range(len(REWARD))]
     give = lambda item, to: bytes([0x28, 0, item, 1]) + jump_if_set(0, to)
@@ -654,7 +663,7 @@ def boss_section(rec, at):
     return s + b"".join(rollback)
 
 
-def dg_script(i):
+def dg_script(i, reward_name=REWARD_NAMES[0][1]):
     """Screen i's DG script: the section table, the arrival section (0xFE) and a talk section per record (a worker's is one line, never run: autotalk 2). Every
     screen's arrival clears 0xFA: a flee lands on the screen before, AFAC1 included."""
     fighters = CAST[ROWS[i]]
@@ -663,7 +672,7 @@ def dg_script(i):
     for r in fighters:
         at = head + len(body)
         table += struct.pack("<HH", r.script_id, at)
-        body += (boss_section(r, at) if r.role == "boss" else say(r.script_id, [LINES[r.species]]) + b"\xfe\x00"
+        body += (boss_section(r, at, reward_name) if r.role == "boss" else say(r.script_id, [LINES[r.species]]) + b"\xfe\x00"
                  if r.role == "worker" else talk_section(ROWS[i], r))
     s = struct.pack("<H", head) + table + b"\xff\xff" + body
     assert len(s) <= 0x4000
@@ -902,6 +911,10 @@ def main():
     # the package
     pkg = os.path.join(ROOT, "mods", "preloaded", "packages", PACKAGE, "1.0.0")
     assets = {name.lower(): blob for name, _, blob in lay}
+    # factory-15's AFAC4 script (gen_newmap_dw15.py swaps it in): 1.5 names item 127 in the paid line. getScript
+    # serves the same sectors for both (dw_newmaps_scripts.inc), so it must take as many.
+    assets["afac4_15.dg"] = dg_script(3, DW15_REWARD_NAME)
+    assert sectors(assets["afac4_15.dg"]) == sectors(assets["afac4.dg"]), "afac4_15.dg must fill afac4.dg's sectors"
     out = ["# The Abandoned Factory. Generated by tools/gen_factory.py: regenerate rather than hand-editing, so every guard",
            "# stays byte-exact. assets/ is this port's own maps and scripts (no game art or data); regenerating means updating",
            "# MOD_PAYLOADS in tools/verify_setup_package.py.",
@@ -914,8 +927,9 @@ def main():
            "[[feature]]", 'id = "%s"' % FEATURE, 'name = "Abandoned Factory"',
            'description = "A new area to explore: an abandoned factory of four screens whose machines still run. Find it '
            'in Gear Savanna, on the screen with the signs and the campfire: walk east past the bucket, between the camp '
-           'and the boulders. Needs the exact disc image listed in DISC.md. Not for Digimon World 1.5 yet."',
-           'group = "New maps"', "default_enabled = false", 'conflicts = ["dw.1_5/dw15"]', "",
+           'and the boulders. Needs the exact disc image listed in DISC.md. Works with Digimon World 1.5 too: there it '
+           'runs a 1.5 edition by itself."',
+           'group = "New maps"', "default_enabled = false", "",
            "# dw_newmaps.c: serves the screens' file names (dw_newmaps_files.inc) to the game's file lookup and their",
            "# scripts (dw_newmaps_scripts.inc) to getScript.",
            "[[plugin]]", 'feature = "%s"' % FEATURE, 'id = "%s"' % PACKAGE, ""]
@@ -954,11 +968,14 @@ def main():
                           for sid, (_, s, blob) in zip(SCRIPTS, dgs))
     inc_path, man_path = os.path.join(ROOT, "dw_newmaps_files.inc"), os.path.join(pkg, "manifest.toml")
     scripts_path = os.path.join(ROOT, "dw_newmaps_scripts.inc")
+    marker = "# ---- generated by tools/gen_newmap_dw15.py below this line"   # factory-15, kept as gen_newmap.py does
+    old = open(man_path, encoding="utf-8").read().replace("\r\n", "\n") if os.path.exists(man_path) else ""
+    tail = marker + old.split(marker, 1)[1] if marker in old else ""     # the 1.5 edition: rerun gen_newmap_dw15.py
     if a.check:
         bad = [n for n, blob in assets.items() if not os.path.exists(os.path.join(pkg, "assets", n))
                or open(os.path.join(pkg, "assets", n), "rb").read() != blob]
-        if not os.path.exists(man_path) or open(man_path, encoding="utf-8").read().replace("\r\n", "\n") != manifest:
-            bad.append("manifest.toml")
+        if old.split(marker, 1)[0].rstrip() != manifest.rstrip():   # gen_newmap_dw15.py owns the seam's blank lines
+            bad.append("manifest.toml (above the marker)")
         if open(inc_path, encoding="utf-8").read().replace("\r\n", "\n") != inc:
             bad.append("dw_newmaps_files.inc")
         if not os.path.exists(scripts_path) or open(scripts_path, encoding="utf-8").read().replace("\r\n", "\n") != scripts_inc:
@@ -972,7 +989,7 @@ def main():
     for name, blob in assets.items():
         open(os.path.join(pkg, "assets", name), "wb").write(blob)
     with open(man_path, "w", newline="\n") as fh:
-        fh.write(manifest)
+        fh.write(manifest.rstrip("\n") + "\n\n" + tail if tail else manifest)
     with open(inc_path, "w", newline="\n") as fh:
         fh.write(inc)
     with open(scripts_path, "w", newline="\n") as fh:
