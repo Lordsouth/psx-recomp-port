@@ -86,7 +86,8 @@ offsets are cached in RAM, so a savestate holds stale copies: test disc changes 
 ### 2.3 MMM.DAT: free space, proven in game
 **Map files placed in MMM.DAT load in game under a new name [run 2026-11-12].** The Abandoned Factory
 (`tools/gen_factory.py`, package `dw.newmaps.factory`) puts its four screens' MAP and TFS files in MMM.DAT as `AFAC1`..`AFAC4`
-on rows 240-243, and its DG scripts after them; `verify_factory.py walk` and `walk --wide` pass on it (INTERNALS 3.4). A
+on rows 240-243, and its DG scripts after them; `verify_factory.py walk` and `walk --wide` pass on it, the 21:9 edges at NCC
+1.000 with the cast's boxes left out of the comparison (INTERNALS 3.4) [run 2026-11-13]. A
 throwaway proof (the glade's files as `FACT0` on row 240, plan 1) first showed the route [run 2026-11-11]; the factory
 replaced it. The rest of the file's facts are read from the disc.
 

@@ -424,7 +424,7 @@ def main():
             files(sc)
             if a.wide:
                 g.advance(60)
-                f.slivers(shot("wide_" + sc["name"]), sc["backdrop"], sc["name"])
+                f.slivers("wide_" + sc["name"], sc["backdrop"], sc["name"])
             else:
                 shot(sc["name"])
             if not vec:                                # one camera for all four screens

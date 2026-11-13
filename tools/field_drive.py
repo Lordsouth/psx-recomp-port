@@ -34,6 +34,8 @@ ENEMY_COUNT = 0x80134D6C                              # i16: how many of them ar
 PARTNER_LIVES = 0x801557A8 + 0x7C                     # PartnerEntity.lives, i8
 INVENTORY = 0x8013D474                                # types[30], amounts[30], names[30], size u8 (docs/GAME.md 6.2)
 SLIVER_NCC = 0.9      # plan 1 measured 0.991 and 1.000 for a served map's edges; a black or missing edge is far below
+SPECIES, PARTNER = 0x8012CEB4, 0x801557A8             # DIGIMON_DATA (52 B each: radius, height i16 at +24); PARTNER_ENTITY
+TAMER_SIZE = (100, 350)                               # the tamer's radius (docs/GAME.md 3.9) and a height over his head
 
 
 class Field:
@@ -248,14 +250,44 @@ class Field:
         clut0 = list(struct.unpack_from("<256H", tfs, 8))
         check(live == clut0, "our day palette is the live CLUT (VRAM row 480)")
 
-    def slivers(self, shot, backdrop, what):
-        """At 21:9, the edges past the 4:3 view are our backdrop. The middle of the screenshot (drawn by the stock tile
-        ring) finds where the view sits on the backdrop; then each outer fifth must match the backdrop there (NCC at
-        least SLIVER_NCC) and be lit. dw_ws_sliver.c draws those edges from a disc copy of the TFS, which for a
-        served map it reads by sector: black or missing edges fail. Rows 80-195 keep the clock and the bars out."""
+    def figures(self):
+        """Boxes (x0, y0, x1, y1) in the 4:3 view's pixels round the tamer, the partner and every NPC on the map: each
+        one's radius-by-height cylinder (DIGIMON_DATA) projected through the live camera (docs/GAME.md 3.4)."""
+        import numpy as np
+        g = self.g
+        cam = np.array(struct.unpack("<6i", g.d.read(GS_VIEWPOINT, 24)), float)
+        vp, h = cam[:3], self.i32(VIEWPORT_DISTANCE)
+        cx, cy = struct.unpack("<2h", g.d.read(CAMERA, 4))
+        W, H = g.d.read(CAMERA + 4, 2)
+        f = (cam[3:] - vp) / np.linalg.norm(cam[3:] - vp)
+        r = np.array([f[2], 0.0, -f[0]]) / np.hypot(f[0], f[2])
+        d = np.cross(f, r)
+        size = lambda species: struct.unpack("<2h", g.d.read(SPECIES + 52 * species + 24, 4))
+        who = [(self.pos(TAMER), TAMER_SIZE), (self.pos(PARTNER), size(self.i32(PARTNER)))]
+        who += [(n["pos"], size(n["type"])) for n in map(self.npc, range(8)) if n and n["on_map"] and n["pos"]]
+        boxes = []
+        for p, (rad, ht) in who:
+            if p is None:
+                continue
+            q = np.array([(p[0] + dx, p[1] + y, p[2] + dz) for dx in (-rad, rad) for dz in (-rad, rad)
+                          for y in (0, -ht)], float) - vp
+            u, v = 64 * W + h * (q @ r) / (q @ f) - cx, 64 * H + h * (q @ d) / (q @ f) - cy
+            boxes.append((u.min(), v.min(), u.max(), v.max()))
+        return boxes
+
+    def slivers(self, name, backdrop, what):
+        """At 21:9, the edges past the 4:3 view are our backdrop. Takes screenshot `name`. The middle of the screenshot
+        (drawn by the stock tile ring) finds where the view sits on the backdrop; then each outer fifth must match the
+        backdrop there (NCC at least SLIVER_NCC) and be lit. Characters may stand in the edges (that is what the wide
+        view is for), so the pixels of every figure's box, read just before and after the shot, are left out; at
+        least a third of each edge must remain. dw_ws_sliver.c draws those edges from a disc copy of the TFS, which
+        for a served map it reads by sector: black or missing edges fail. Rows 80-195 keep the clock and the bars out."""
         import cv2
         import numpy as np
         from PIL import Image
+        boxes = self.figures()
+        shot = self.shot(name)
+        boxes += self.figures()
         img = Image.open(shot).convert("L")
         img = np.asarray(img.resize((round(img.width * 240 / img.height), 240), Image.BOX), np.float32)
         ref = np.asarray(Image.open(backdrop).convert("L"), np.float32)
@@ -267,15 +299,20 @@ class Field:
         x0, y0 = x - w * 3 // 10, y - 80                     # the view's top-left on the backdrop
         self.check(x0 >= 0 and x0 + w <= ref.shape[1],     # characters stand in the middle: its match is only a locator
                    "%s: the 4:3 middle sits on the backdrop at (%d, %d), NCC %.3f" % (what, x0, y0, best))
-        for name, sl in (("left", slice(0, w // 5)), ("right", slice(w * 4 // 5, w))):
-            a = img[80:196, sl]
+        keep = np.ones(img.shape, bool)
+        for bx0, by0, bx1, by1 in boxes:                   # 4 px for anti-aliasing and a step between the reads
+            sx = (w - 320) / 2                             # the 4:3 view sits in the middle
+            keep[max(0, int(by0) - 4):max(0, int(by1) + 5), max(0, int(bx0 + sx) - 4):max(0, int(bx1 + sx) + 5)] = False
+        for side, sl in (("left", slice(0, w // 5)), ("right", slice(w * 4 // 5, w))):
+            k = keep[80:196, sl]
+            a = img[80:196, sl][k]
             b = ref[y0 + 80:y0 + 196, max(x0, 0):max(x0, 0) + w][:, sl]
-            ncc = 0.0
-            if a.shape == b.shape:
-                aa, bb = a - a.mean(), b - b.mean()
+            ncc, lit = 0.0, a.mean() if a.size else 0.0
+            if b.shape == k.shape and a.size * 3 >= k.size:
+                aa, bb = a - a.mean(), b[k] - b[k].mean()
                 ncc = float((aa * bb).sum() / (np.sqrt((aa * aa).sum() * (bb * bb).sum()) or 1))
-            self.check(a.mean() > 20 and ncc >= SLIVER_NCC, "%s: the 21:9 %s edge is our backdrop: NCC %.3f, brightness %.0f"
-                       % (what, name, ncc, a.mean()))
+            self.check(lit > 20 and ncc >= SLIVER_NCC, "%s: the 21:9 %s edge is our backdrop: NCC %.3f, brightness %.0f, "
+                       "%d%% left out for figures" % (what, side, ncc, lit, 100 - 100 * a.size // k.size))
 
     def keep_card(self, name, cards, out):
         """A copy of the card as this save left it, for the mod-off runs."""

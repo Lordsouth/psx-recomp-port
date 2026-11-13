@@ -631,16 +631,24 @@ Four screens on rows 240-243, walked in a line, built by `tools/gen_factory.py` 
   `dw_tfs_read_served` made to return 0 in a scratch build, `walk --wide` failed both edges on AFAC1 (NCC 0.53 and 0.26),
   so the check sees the sector fallback.
 - **What ran on the painted screens** [run 2026-11-13]: `walk` PASS (77 checks, now also each screen's foreground
-  sprites loaded as map objects and their texels in VRAM) and `walk --wide` PASS (both edges NCC 1.000 on all four).
+  sprites loaded as map objects and their texels in VRAM) and `walk --wide` PASS (both edges NCC 1.000 on all four, with no
+  cast on the screens yet; the cast made it fail until the check left characters out, see the sweep below).
   Two earlier `walk` runs failed on walls that existed only in the classifier's map (the grate rims, a grate's 1 px
   lip along a cell row), which led to the two corrections above.
 - **The full sweep with the cast** [run 2026-11-13]: factory `walk`, `saves`, `off`, `fights` and `boss` PASS; glade `run1`,
   `run2`, both `off` cards and `fight` PASS; `verify_newmap_files.py`, `verify_dw15_states.py` and `verify_roster15.py` PASS
-  (1.5 unharmed); the gates and both `--check`s pass. `walk --wide` FAILS, twice and the same each time (ports 5813, 5814):
-  with the cast on the screens, AFAC1's right edge reads NCC 0.87-0.88 and AFAC2's left and right edges 0.69 and 0.76
-  against the 0.9 bar (AFAC3 and AFAC4 pass; everything else in the run passes). Last passed before the cast was added
-  (NCC 1.000, above), so the likely cause is the workers and Guardromon standing in the outer fifths of the screenshot, which
-  `Field.slivers` compares with the bare backdrop. Not yet confirmed, and `glade fight --wide` was not run.
+  (1.5 unharmed); the gates and both `--check`s pass. `walk --wide` failed twice, the same each time (ports 5813, 5814):
+  AFAC1's right edge read NCC 0.87-0.88 and AFAC2's left and right edges 0.69 and 0.76 against the 0.9 bar.
+- **Why `walk --wide` failed, and the fix** [run 2026-11-13]: the cast stood in the edges, and the sliver was right. Set
+  against the backdrop crop, those screenshots differ only where a worker (AFAC1, right) or a Guardromon (AFAC2, both
+  edges) is drawn, plus the HUD clock and bars outside the judged rows. Everywhere else the difference is zero.
+  Characters in the wide view are what 21:9 is for, so the test changed, not the cast. `Field.slivers` now takes the shot
+  itself. Just before and after the shot it projects the tamer, the partner and every on-map NPC through the live camera
+  (`GS_VIEWPOINT`, `VIEWPORT_DISTANCE`, `cameraX/Y`, GAME.md 3.4), each as a cylinder of its `DIGIMON_DATA` radius and
+  height (the tamer 100 x 350). It leaves those boxes, plus 4 px, out of the edge NCC and the brightness, and fails an edge
+  of which under a third remains. With `dw_tfs_read_served` returning 0 in a scratch build, the masked check failed all
+  eight edges (NCC 0.37-0.87, port 5921). Restored and rebuilt, `walk --wide` PASS with every edge at NCC 1.000 (AFAC2
+  25% and 29% left out; port 5922). Then glade `fight --wide` PASS (5923) and factory `walk` PASS (5924).
 
 ---
 
