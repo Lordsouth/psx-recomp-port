@@ -16,6 +16,8 @@ cd "$(dirname "$0")/.."
 
 PSXRECOMP_URL="https://github.com/Lordsouth/psxrecomp.git"
 PSXRECOMP_REF="feat/dw15-mod"
+# The exact framework commit this tree is tested against (on PSXRECOMP_REF).
+PSXRECOMP_COMMIT="078b2e22"
 # Fork of mstan/recomp-ui: the Mods page shows what a toggle turned off.
 RECOMP_UI_URL="https://github.com/Lordsouth/recomp-ui.git"
 RECOMP_UI_REF="feat/dw15-mod"
@@ -23,8 +25,9 @@ RECOMP_UI_REF="feat/dw15-mod"
 if [[ -e psxrecomp ]]; then
   echo "psxrecomp/ already present -- leaving it alone"
 else
-  echo "cloning psxrecomp (${PSXRECOMP_REF})"
+  echo "cloning psxrecomp (${PSXRECOMP_REF} at ${PSXRECOMP_COMMIT})"
   git clone --branch "${PSXRECOMP_REF}" "${PSXRECOMP_URL}" psxrecomp
+  git -C psxrecomp checkout --detach "${PSXRECOMP_COMMIT}"
 fi
 # Rewind's snap ring is a psxrecomp submodule. Without it the game still
 # builds, with Rewind silently left out (0.4.0 shipped that way). Only fetch
