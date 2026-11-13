@@ -11,6 +11,15 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ## Unreleased
 
+**A second new map: the Abandoned Factory, on the stock disc.** Tick it under
+**Mods → New maps**, go to the dead end with the signs on Gear Savanna and walk
+east through the gap past the camp. Four screens lead into an old factory: an entry
+hall with workers, two floors with machine Digimon and a guardian each who holds the
+way until beaten, and a chamber with Machinedramon. Beating Machinedramon pays out a
+Metalbanana and six chips once, all or nothing: with a full bag it takes nothing and
+says so. Saving inside the factory works, and the card loads on the stock game. The
+1.5 edition follows; for now the factory is off while 1.5 is on.
+
 **Every mod now works with Digimon World 1.5.** Expanded Roster, Hidden Glade,
 Guaranteed Item Drops and Evolution Unbound switch to versions made for 1.5 while
 it is on, the new Digimon included, and back when you untick 1.5. On 1.5 the roster

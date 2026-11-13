@@ -595,13 +595,34 @@ Four screens on rows 240-243, walked in a line, built by `tools/gen_factory.py` 
   arrival walking back, two rows in front of the doorway, and cell 112 leads on to the next screen's exit 0. AFAC4 has no
   slot 2. Arrivals stay two cells off their strips.
 - **Disc layout.** MMM.DAT from sector 0: AFAC1.MAP, AFAC1.TFS, ... AFAC4.TFS, then DG scripts 223-226, one sector each.
-  Each script is a section table with one arrival section 0xFE (a bare END for now). The MAPHEAD sections (bind the
-  script, pstat 0xF5 = 0 and `5D 16` as FACT01, end; 14 bytes each) follow the glade's section at 0x6084, read from the
-  glade's manifest. The entrance is a new exit on `GIAS09` (GAME.md 3.1). Every patch's expected bytes are read from the
+  Each script is a section table: the arrival section 0xFE (`1E 00 FA 00 FE 00`, see the fights below), one talk section
+  per fighter, and on AFAC4 the boss's. The MAPHEAD sections (bind the script, pstat 0xF5 = 0, `5D 16` as FACT01, the
+  screen's LOAD_DIGIMON and SET_DIGIMON ops, end; 144 B in all, of the 180 B budget) follow the glade's section at 0x6084,
+  read from the glade's manifest. The entrance is a new exit on `GIAS09` (GAME.md 3.1). Every patch's expected bytes are read from the
   disc; the generator asserts the names are new, the MMM.DAT sectors and the MAPHEAD tail are zero, the rows and their
   MAPHEAD sections are stock, the DG rows are consecutive and table[222] untouched, the host slot is free, every spawn is
   floor, every strip reachable, and each gap exactly three cells wide and the only way on. `--check` rebuilds in memory
   and compares the package and `dw_newmaps_files.inc`.
+- **The cast** (`CAST` in `gen_factory.py`, records as GAME.md 3.8). AFAC1: two Hagurumon and a Tinmon, workers that walk
+  a loop and never fire (autotalk 2). AFAC2: two Guardromon pairs and the guardian Giromon (41). AFAC3: two Mamemon pairs
+  and the guardian Megadramon (172). AFAC4: Machinedramon (115). The brief preferred a Tankmon pair on AFAC2 and a second
+  species on AFAC3, but the heap rules them out (165,550 B and 164,810 B against 152,000), so the cast is what fits.
+  `heap_estimate` and `check_cast` assert the heap, at most 8 records and 4 species a screen, every move against the
+  species' own list and its EFE lists, MP for at least 30 picks (60 for the boss), and that nothing that fights stands
+  within reach of a spawn. Fighter numbers are in the generator's comment, with `tools/fight_sim.py --factory` as the
+  estimate (regulars 100 %, guardians 79.5 % and 83.0 %, the boss 62.0 %, against the glade boss's 80.8 %).
+- **Fights** (GAME.md 6, 6.1). Every regular and guardian fight is fleeable (trigger 1 clear) and predefined: the talk
+  section writes pstat 0xFA = 1 and the group's script ids to 0xFB..0xFD, so only that group fights. A flee never returns
+  to the talk section, so every screen's arrival section clears 0xFA first. Each guardian stands on the middle column of
+  the gap in its machinery wall and holds the way until beaten; its win sets 627 or 628, and the row section's `46`/`47`
+  IF then keeps it from loading. The tests read the enemy list only up to `ENEMY_COUNT`, since entries past it are stale.
+- **Machinedramon and the reward** (GAME.md 6.2). The boss is not predefined and is fleeable, and it comes back on every
+  visit. Its win path gives Metalbanana and the six chips once, all or nothing: each give is tested by trigger 0, a
+  failure takes back what went in and says so, and 629 is set only after the seventh. The dialogue is narrated with `1B FF`,
+  28 characters a line. The ids are asserted against the disc's item table and, when there is a checkout, `dw_decomp`.
+- **Saves.** The package registers its own entry callback in `dw_newmaps.c`'s `k_maps[]` (rows 240-243, host row 78,
+  warp slot 1, stock exit 0), so a card saved inside the factory names the gate on Gear Savanna and loads on the stock
+  game (GAME.md 9.3).
 - **What ran** [run 2026-11-12]: `verify_factory.py walk` warps to the host, walks east through the gate and checks on each
   screen that it is `CURRENT_SCREEN`, that its served MAP and TFS (LBA and size from the .inc) are the ones in memory, the
   camera, grid and palette; walks three floor spots and the forward strip (through the gap's middle column); then walks
@@ -613,6 +634,13 @@ Four screens on rows 240-243, walked in a line, built by `tools/gen_factory.py` 
   sprites loaded as map objects and their texels in VRAM) and `walk --wide` PASS (both edges NCC 1.000 on all four).
   Two earlier `walk` runs failed on walls that existed only in the classifier's map (the grate rims, a grate's 1 px
   lip along a cell row), which led to the two corrections above.
+- **The full sweep with the cast** [run 2026-11-13]: factory `walk`, `saves`, `off`, `fights` and `boss` PASS; glade `run1`,
+  `run2`, both `off` cards and `fight` PASS; `verify_newmap_files.py`, `verify_dw15_states.py` and `verify_roster15.py` PASS
+  (1.5 unharmed); the gates and both `--check`s pass. `walk --wide` FAILS, twice and the same each time (ports 5813, 5814):
+  with the cast on the screens, AFAC1's right edge reads NCC 0.87-0.88 and AFAC2's left and right edges 0.69 and 0.76
+  against the 0.9 bar (AFAC3 and AFAC4 pass; everything else in the run passes). Last passed before the cast was added
+  (NCC 1.000, above), so the likely cause is the workers and Guardromon standing in the outer fifths of the screenshot, which
+  `Field.slivers` compares with the bare backdrop. Not yet confirmed, and `glade fight --wide` was not run.
 
 ---
 

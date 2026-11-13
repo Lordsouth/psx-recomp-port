@@ -144,11 +144,12 @@ the stock disc. Taken: 239 by the Hidden Glade, 240-243 by the Abandoned Factory
 Savanna's loadingName 30). Free for later maps: 244-246, 250-252.
 
 The factory's entrance is warp slot 1 of row 78 (`GIAS09`, Gear Savanna's dead end with the signs), cells 111 at
-columns 53-54 (stock floor, then stock wall), rows 30-35; it comes back to spawn (50, 1750) facing west, and the factory's
-slot 1 points a save at stock exit 0 instead. That edge because past the campfire and its bucket the grass visibly runs on between the
-camp and the boulders toward the open savanna, where stock walls you off and no warp goes. Gear Savanna's other screens were
-ruled out: their edges either carry stock exits or show no way on, and rows 75 and 131 are one place in two story states
-[inferred: both are GIAS06, and row 70 leads to 131].
+columns 53-54 (stock floor, then stock wall), rows 30-35; it comes back to spawn (50, 1750) facing west, and the
+factory's slot 1 points a save at stock exit 0 instead. The tamer walks in through it and back out to that spawn
+[run 2026-11-13: `verify_factory.py walk`]. This edge was chosen because, past the campfire and its bucket, the grass
+visibly runs on between the camp and the boulders toward the open savanna, where stock walls you off and no warp goes.
+Gear Savanna's other screens were ruled out: their edges either carry stock exits or show no way on, and rows 75 and 131
+are one place in two story states [inferred: both are GIAS06, and row 70 leads to 131].
 Only MGEN17 has a file and no row. Rows 50 and 61 name files not on the disc and row 65 names `YAKA25`, which belongs
 to row 232; no warp reaches those three, so they may be reusable, though two `TELEPORT` ops were not traced [inferred].
 Live: `CURRENT_SCREEN` 0x80134DA8 (u8), `PREVIOUS_SCREEN` +1, `CURRENT_EXIT` +2, `PREVIOUS_EXIT` +3, `TARGET_MAP` 0x80134DE0.
@@ -391,7 +392,7 @@ script runs into `SCRIPT_STATE` [inferred].
 - Id 0 means MAPHEAD, already in RAM (`:653`). Its block at 0x800 is a redundant copy; 0x2000..0x6FFF is never read.
 - 1..198 are all bound by MAPHEAD rows (stock decode). 199..221 are library scripts, reached only by file jumps (`14`, `17`).
 - table[222] = 0xC4800, the file's end, sets script 221's read size: never change it. table[223..511] is stale ASCII and zeros: a guard must expect it.
-- 223..226 are the Abandoned Factory's screens (table[223..227], in MMM.DAT, `tools/gen_factory.py`). Later maps start at 227.
+- 223..226 are the Abandoned Factory's screens (table[223..227], in MMM.DAT, `tools/gen_factory.py`). Later maps start at 227. Each ran on arrival [run 2026-11-13: `verify_factory.py walk`, `fights`, `boss`].
 
 Both files share one layout: u16 first-body offset (0x468 in MAPHEAD), then {u16 section, u16 offset from the script
 start} pairs ended by 0xFFFF, then the bodies. Only `setMapHeadActive` reads the first word (`:671-689`, `:2181-2188`).
@@ -505,8 +506,8 @@ so it calls the bands C owns free.
 | 200..311 | 0xC8 + species, recruited or beaten. **Arena pools and cup unlocks read this band, all of it for a cup with no species list** (`src/main/utils2.c:602-618`, `src/dget/dget.c:375-387`); prosperity reads species 3..58 (`src/main/main.c:3908-3909`) |
 | 364..382; 384..511 | Medals; shop stock (`src/main/script_common.c:3026-3036,1636-1641`) |
 | 512..574; 575..626 | Raised, 0x200 + species below 63 (`:3011-3024`); Jijimon's recruit lines, 0x23C + species (`dw_roster_flags.c:10-13`) |
-| 627, 628 | The Abandoned Factory's floor guardians beaten, AFAC2's and AFAC3's (`GUARD_TRIGGER` in `tools/gen_factory.py`): set in the win path, tested by an IF around the guardian's `46`/`47` in its row section |
-| 629 | The Abandoned Factory's reward paid (`REWARD_TRIGGER`): set in Machinedramon's win path only once all seven items are in the bag, tested at its start so a later win pays bits only (6, the all-or-nothing give). The boss itself comes back on every visit |
+| 627, 628 | The Abandoned Factory's floor guardians beaten, AFAC2's and AFAC3's (`GUARD_TRIGGER` in `tools/gen_factory.py`): set in the win path, tested by an IF around the guardian's `46`/`47` in its row section [run 2026-11-13: `verify_factory.py fights` read each clear before its win and set after it] |
+| 629 | The Abandoned Factory's reward paid (`REWARD_TRIGGER`): set in Machinedramon's win path only once all seven items are in the bag, tested at its start so a later win pays bits only (6, the all-or-nothing give). The boss itself comes back on every visit [run 2026-11-13: `verify_factory.py boss`] |
 | 640; 650..716 | Energy threshold met (`src/main/partner_impl.c:1546-1548`); chests opened. 716 is the top id any stock script names |
 | 717..799 | **The Expanded Roster's raised flags**, 0x2CD + species - 63 (`dw_roster_flags.c:33-38`). Cards are shared, so a flag here marks a species raised. Horizon's allocator calls 717..788 free: not in this port |
 
@@ -694,7 +695,7 @@ to 0 after it, and every loss route reaches script 212, which clears it. A flee 
 A fight of a group: each member's talk section is the same, `1B id`, one line, `27 00 67 00 01 00`, `1E 00 FA 01`, `1E 00 FB/FC/FD` the group's script ids (0xFF padded), `66 00`, then the win path `1E 00 FA 00 FE 00` (`talk_section` in `tools/gen_factory.py`). The battle's enemy list (`COMBAT_DATA.player.entityIds`, 0x8013DCAC) held exactly the group, never a worker on screen [run 2026-11-13]. Only its first `ENEMY_COUNT` (i16 0x80134D6C) entries after the partner's are this battle's: the rest are stale from the last battle, so a reader must stop there (`Field.enemies` in `tools/field_drive.py`) [run 2026-11-13].
 
 ### 6.2 A reward paid once, all or nothing
-`GIVE_ITEM` (`28 00 item amount`) sets trigger 0 when `giveItem` fails and clears it when it succeeds, every time (`src/main/script_interp.c:1106-1113`), so nothing need clear trigger 0 before a give. `giveItem` stacks onto the item's slot if the bag has one, failing only when that stack is at 99; otherwise it takes the first free slot (type 0xFF) and the first unused name index, failing when none is free (`src/main/item.c:2562-2614`). `REMOVE_ITEM` (`29 00 item amount`, `src/main/script_interp.c:1115-1118`) takes the amount off that stack and frees the slot when it reaches 0, type and name back to 0xFF, amount 0 (`src/main/item.c:2616-2637`). So taking back what was given leaves the bag byte for byte as it was. The bag is `INVENTORY` 0x8013D474: types[30], amounts[30], names[30], then the size u8 (`include/dw/item.h:39-48`, `config/us/symbols.txt`); only slots below the size are used.
+`GIVE_ITEM` (`28 00 item amount`) sets trigger 0 when `giveItem` fails and clears it when it succeeds, every time (`src/main/script_interp.c:1106-1113`), so nothing need clear trigger 0 before a give. `giveItem` stacks onto the item's slot if the bag has one, failing only when that stack is at 99; otherwise it takes the first free slot (type 0xFF) and the first unused name index, failing when none is free (`src/main/item.c:2562-2614`). So a bag with free slots can still fail a give, when the player already holds 99 of that item: the factory's "Your bag is full." is then the wrong cause, and the reward can't be taken until that stack is used [inferred from the code, not run]. `REMOVE_ITEM` (`29 00 item amount`, `src/main/script_interp.c:1115-1118`) takes the amount off that stack and frees the slot when it reaches 0, type and name back to 0xFF, amount 0 (`src/main/item.c:2616-2637`). So taking back what was given leaves the bag byte for byte as it was. The bag is `INVENTORY` 0x8013D474: types[30], amounts[30], names[30], then the size u8 (`include/dw/item.h:39-48`, `config/us/symbols.txt`); only slots below the size are used.
 
 Stock gives one item and, on a failure, says the bag is full, opens the discard menu (routine 0, `openDiscardItem`, `src/main/script_interp.c:423-425`) and gives again. For several items as one reward, Machinedramon's win path (`boss_section` in `tools/gen_factory.py`):
 ```
@@ -1048,7 +1049,7 @@ The Abandoned Factory's tiers, measured the same way (`tools/verify_factory.py m
 | AFAC2 guardian, Giromon | 79.5 % | 0 of 1 | 64 s, guardian left on 4777 of 7600 HP, all heals used, its finisher once |
 | AFAC4 boss, Machinedramon | 62.0 % | 0 of 1 | 87 s, boss left on 3991 of 9000 HP, all heals used, Infinity Cannon once |
 
-Single runs are too few to rank the three. All lost on a cell where the sim gives 62-81 %, as the glade's four runs above did, so the sim is as kind to the factory's fighters as to the glade boss.
+Single runs are too few to rank the three. All lost on a cell where the sim gives 62-81 %, as the glade's four runs above did, so the sim is kind to every tier, which the runs here cannot size per tier: the guardian was left on 63 % of its HP, the boss on 44 % and the glade boss on 31 %, out of the order the sim gives [inferred].
 
 ---
 
