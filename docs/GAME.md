@@ -355,7 +355,7 @@ blocked line keeps an NPC out of a fight (`src/main/btl.c:109`); 0x8F no drops (
 | Sprites | 3 8bpp pages, 180 definitions, 188 instances, 8 frames each | Read. Nothing checks them |
 | Map Digimon | 8 records (`src/main/overworld.c:1161`); species below 0xB4 (`src/main/model.c:3369`) | Read. Count unchecked |
 | NPC models | `LOADED_DIGIMON_MODELS` holds 8 and drops the rest (`src/main/script_interp.c:2561-2571`), but `NPC_MODELS` has 5 slots (`src/main/model.c:2698`). Same species shares a slot. Index k maps to page 0x16+k/2, CLUT `((k+2)*16, 488)` (`src/main/model.c:3400-3403`) | Read. Index 4 overlaps `SBOY.TIM`'s pixels and `SYSTEM_W.TIM`'s CLUT, so 4 are clean. A sixth returns NULL [not run] |
-| Heap | `_end` to stack: 197,520 B (0x801BFB70-0x801EFF00, `src/main/main.c:3537-3538`). A map needs MMDs in whole sectors, plus bones x (0x88 + 0x52) per placed Digimon (`src/main/model.c:2829-2830`), plus 0x4800 while loading (`src/main/model.c:3299`). A failed `malloc3` reads to NULL (`src/main/model.c:3410-3414`). Only `model.c` and `std_setup.c` call it | Read. Stock free heap is 40.2 KB to 192.9 KB by screen [Horizon]. Vice's randomizer re-rolls two-group areas until combined model weight is at most 152,000, unit not stated [Vice] |
+| Heap | `_end` to stack: 197,520 B (0x801BFB70-0x801EFF00, `src/main/main.c:3537-3538`). A map needs MMDs in whole sectors, plus bones x (0x88 + 0x52) per placed Digimon (`src/main/model.c:2829-2830`), plus 0x4800 while loading (`src/main/model.c:3299`). A failed `malloc3` reads to NULL (`src/main/model.c:3410-3414`). Only `model.c` and `std_setup.c` call it | Read. Stock free heap is 40.2 KB to 192.9 KB by screen [Horizon]. Vice's randomizer re-rolls two-group areas until combined model weight is at most 152,000, unit not stated [Vice]. The factory's screens by this formula (`heap_estimate` in `tools/gen_factory.py`, bones from `DIGIMON_DATA`, the field `model.c:2815` reads): AFAC1 56,954 B (3 workers), AFAC2 145,942 B (4 Guardromon, Giromon), AFAC3 137,578 B (4 small Mamemon, small Megadramon), AFAC4 18,432 B. Every model loaded and two-enemy fights were won on AFAC2 and AFAC3 [run 2026-11-13]. A Guardromon pair, a Tankmon pair and even the small Giromon (161) come to 165,550 B |
 | MAPHEAD tail | 0x6070-0x61A8: 312 B for all new sections; the glade's takes 20. Every row has a table entry to repoint. Free rows hold a filler binding script 180, a real cutscene: never ship one | Read. 1.5 puts its own new sections in the tail, up to 0x60DE; the glade's 1.5 edition goes after them |
 | DG script | 0x4000 B. No slot is free: MAPHEAD binds 1-198, cross-calls reach 199-221 | Read. Rows 223+ in MMM.DAT [run 2026-11-11] |
 
@@ -491,7 +491,7 @@ target ahead on the positive side by less than its duration never finishes, as t
 | 45..99 | **Free, not saved.** Raw byte scans here are false hits. Also 104, 114, 115, 118, 124..199, 201..242 |
 | 0xC8; 0xF3, 0xF4, 0xF6..0xF9 | Item stacks lost on the last defeat (`src/main/script_common.c:1350-1351`); routine outputs, other C use |
 | 0xF5 | Music mode, set before `5D`: 0 day and night variants, 1 fixed, 2..10 forced pairs (`src/main/script_interp.c:1584-1637`) |
-| 0xFA; 0xFB..0xFD; 0xFE; 0xFF | Predefined battle; its fighters as script ids, 0xFF none (`src/main/btl.c:232-241`); routine argument; last outcome: 0xFF lost, 0 fled, 1 won (`src/main/script_interp.c:1918`) |
+| 0xFA; 0xFB..0xFD; 0xFE; 0xFF | Predefined battle; its fighters as script ids, 0xFF none, which `START_BATTLE` turns into entity ids in place before the battle reads them (`src/main/script_interp.c:1902-1911`, `src/main/btl.c:232-241`); routine argument; last outcome: 0xFF lost, 0 fled, 1 won (`src/main/script_interp.c:1918`) |
 
 ### 4.8 Triggers
 800 bits at 0x801BDFCD: bit N is byte base + N/8, mask 1 << (N%8), all saved. `tools/scan_trigger_ids.py` sees only scripts,
@@ -505,10 +505,11 @@ so it calls the bands C owns free.
 | 200..311 | 0xC8 + species, recruited or beaten. **Arena pools and cup unlocks read this band, all of it for a cup with no species list** (`src/main/utils2.c:602-618`, `src/dget/dget.c:375-387`); prosperity reads species 3..58 (`src/main/main.c:3908-3909`) |
 | 364..382; 384..511 | Medals; shop stock (`src/main/script_common.c:3026-3036,1636-1641`) |
 | 512..574; 575..626 | Raised, 0x200 + species below 63 (`:3011-3024`); Jijimon's recruit lines, 0x23C + species (`dw_roster_flags.c:10-13`) |
+| 627, 628 | The Abandoned Factory's floor guardians beaten, AFAC2's and AFAC3's (`GUARD_TRIGGER` in `tools/gen_factory.py`): set in the win path, tested by an IF around the guardian's `46`/`47` in its row section. 629 is planned for the factory's reward |
 | 640; 650..716 | Energy threshold met (`src/main/partner_impl.c:1546-1548`); chests opened. 716 is the top id any stock script names |
 | 717..799 | **The Expanded Roster's raised flags**, 0x2CD + species - 63 (`dw_roster_flags.c:33-38`). Cards are shared, so a flag here marks a species raised. Horizon's allocator calls 717..788 free: not in this port |
 
-For a new flag use **627..639 or 641..649**: no decoded script, C constant, computed path or plugin reaches them, so they stay
+For a new flag use **630..639 or 641..649** (627..629 are the factory's): no decoded script, C constant, computed path or plugin reaches them, so they stay
 inert on a shared card with the mod off [not run]. `hasDigimonRaised` reaches them only for species 115 up, which stock never asks.
 
 ### 4.9 Text
@@ -531,7 +532,7 @@ tamer name, 06 partner name, 07/08/09 Digimon/move/item name from a pstat, 0A bi
 - The dialog box is 262x59 with 4 rows, the first being the speaker's name, so 3 rows of text (`:923-926`, `:1076-1095`).
 - Nothing wraps. The limit is pixels: a glyph starting at x >= 244 is not drawn (`src/main/font.c:21,1576`). By these widths
   stock's widest row is 248 px and only 2 rows pass 244 (stock decode, not measured on screen).
-- `boss_script` asserts 28 characters and `[A-Za-z0-9 .!?]` (`boss_script` in `tools/gen_newmap.py`); 28 capitals are still 336 px. Its
+- `dialog_text` asserts 28 characters and `[A-Za-z0-9 .!?]` (`tools/newmap_engine.py`, used by `boss_script` and the factory's talk sections); 28 capitals are still 336 px. Its
   encode route cannot reach 81 75, since Shift-JIS has no fullwidth apostrophe. For an apostrophe or hyphen, emit the bytes.
 
 ### 4.10 The dialog owner
@@ -607,7 +608,7 @@ is `66` in it. Stock decode: row sections hold 476 `SET_DIGIMON` sites with auto
 A map has 8 entity slots but only **5 NPC model slots**. `LOAD_DIGIMON` takes one of 8 `LOADED_DIGIMON_MODELS` entries
 (`src/main/script_interp.c:2561-2572`), then `loadMMD` shares or takes one of 5 `NPC_MODELS`: the same species shares, a sixth
 returns 0 (`src/main/model.c:3374-3398`). **Slot 4 overlaps `SBOY.TIM`'s pixels and `SYSTEM_W`'s CLUT** (page 0x16 + k/2, CLUT x
-(k+2)*16, y 488, `:3400-3403`), so 4 models are safe. The boss takes one: the glade has 3 left. The heap they allocate from is 197,520 bytes
+(k+2)*16, y 488, `:3400-3403`), so 4 models are safe. The VRAM index is k, the first free `NPC_MODEL_TAKEN`, not the `NPC_MODELS` entry: a new species takes the last free entry, so the first one loaded sits in entry 4 with k 0 (`:3376-3399`) [run 2026-11-13]. The boss takes one: the glade has 3 left. The heap they allocate from is 197,520 bytes
 (`src/main/main.c:3532-3540`, values from the EXE), with HKAB.MMD at 95,960 and the largest model a stock row section loads at 86,248 (one scene in script 51 loads 88,448); which limit fails first is unknown. Load in the row section: a second
 `LOAD_DIGIMON` in a talk is reported to hang [Horizon], but stock loads two in one section after text boxes (scripts 43, 123, section 0x33), so no cause is known.
 
@@ -627,7 +628,7 @@ animation table's offset, indexed by anim id, and `startAnimation` ignores an id
 - **Trap: EFE lists.** The effect file comes from the raw list entry, here 93 (`src/main/btl.c:469`). Each file (EFEDAT.EFE sector +
   id*10, `src/main/efe.c:1043-1052`) has a list of 10-byte entries, i16 type, bone, x, y, z, ended by a negative type. If
   `getOriginalType(type)` is not listed the script aborts (`src/btl/battle_effect.c:4660-4678`): the animation plays, MP is paid, nothing
-  can hit [inferred]. Moves 47, 33, 35, 93 all list 60. The generator has no assert; add one before changing moves.
+  can hit [inferred]. Moves 47, 33, 35, 93 all list 60. `Disc.efe_lists` in `tools/dw_tables.py` reads a move's lists: each is the list pushed (op 0x0C, offset from the script head at +0x34) just before sub-op 0, `BTL_checkTechCompatibility` (word 0x000E) (`src/btl/battle_effect.c:1093-1112,4765-4796`). It finds Tankmon's Spit Fire off its list, as 12.2 says. `check_cast` in `tools/gen_factory.py` asserts every factory move against it; `gen_newmap.py` still has no assert.
 
 **3. Set the numbers.** All i16. Keep currentHP = HP, currentMP = MP, brain above 296. With no flag the bits repeat: an open decision.
 - **Trap: fleeable fights spend the enemy's MP.** With trigger 1 clear each pick costs `mpCost*3` (`src/btl/battle_main.c:2546-2550`):
@@ -687,7 +688,9 @@ freezes the result box only with Battle End Freeze Fix off, see 12.1 [run]; `fig
 
 Press-to-fight with fleeing is new: all 9 stock autotalk 0 records whose section reaches `66` set trigger 1 first (rows 1, 2, 27, 40, 86, 95, 139, 220; stock decode). `1E 00 FA 01` with
 fighters in 0xFB..0xFD makes a predefined battle: no join rolls, music track 0 (`src/main/btl.c:232-261,360-377`). Stock writes 0xFA back
-to 0 after it, and every loss route reaches script 212, which clears it, so no guard against stale state is needed.
+to 0 after it, and every loss route reaches script 212, which clears it. A flee is the hole: the fled section never resumes and the flee's map change runs no section that clears it (`src/main/script_interp.c:1929-1941`), so a fleeable predefined fight leaves 0xFA at 1 and the next fight anywhere would run predefined with stale fighters [inferred]. The factory's fights are fleeable and predefined, so every factory screen's arrival section (DG 0xFE) is `1E 00 FA 00 FE 00`, AFAC1 included, since a flee lands on the screen before. After flees from AFAC2's pair and both guardians, 0xFA read 0 where they landed [run 2026-11-13].
+
+A fight of a group: each member's talk section is the same, `1B id`, one line, `27 00 67 00 01 00`, `1E 00 FA 01`, `1E 00 FB/FC/FD` the group's script ids (0xFF padded), `66 00`, then the win path `1E 00 FA 00 FE 00` (`talk_section` in `tools/gen_factory.py`). The battle's enemy list (`COMBAT_DATA.player.entityIds`, 0x8013DCAC) held exactly the group, never a worker on screen [run 2026-11-13].
 
 ---
 

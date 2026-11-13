@@ -38,6 +38,7 @@ NOT_SHIPPED = {"dw.vanilla.vice"}
 EDITIONS = set()      # {frozenset(("pkg/edition", "pkg/original"))}: the runtime never runs both
 NEEDS = {}            # "pkg/feature" -> what it requires: requires_feature, unconditional [[requirement]]
 GIVES_WAY = {}        # "pkg/original" -> what its edition requires: while that is on, the original is off
+CONFLICTS = {}        # "pkg/feature" -> its feature conflicts (symmetric in the runtime: features_conflict)
 
 
 def load_patches(include_all):
@@ -57,6 +58,9 @@ def load_patches(include_all):
                     NEEDS.setdefault("%s/%s" % (pkg, r["feature"]), set()).add(
                         "%s/%s" % (r["package"], r["requires_feature"]))
             for feat in m.get("feature", []):
+                for c in feat.get("conflicts", []):
+                    CONFLICTS.setdefault("%s/%s" % (pkg, feat["id"]), set()).add(c)
+                    CONFLICTS.setdefault(c, set()).add("%s/%s" % (pkg, feat["id"]))
                 if feat.get("edition_of"):
                     EDITIONS.add(frozenset(("%s/%s" % (pkg, feat["id"]), feat["edition_of"])))
                     GIVES_WAY.setdefault(feat["edition_of"], set()).add("%s/%s" % (pkg, feat["id"]))
@@ -77,7 +81,8 @@ def load_patches(include_all):
 
 def mutually_exclusive(a, b):
     """Two patches of the same feature gated on different values of one option
-    can never both be live; nor can a feature and its edition (edition_of)."""
+    can never both be live; nor can a feature and its edition (edition_of), nor
+    two features one of which conflicts with the other or with what it needs."""
     ka, kb = "%s/%s" % (a["pkg"], a["feature"]), "%s/%s" % (b["pkg"], b["feature"])
     if frozenset((ka, kb)) in EDITIONS:
         return True
@@ -86,6 +91,11 @@ def mutually_exclusive(a, b):
     for orig, other in ((ka, kb), (kb, ka)):
         need = set().union(*(NEEDS.get(e, set()) for e in GIVES_WAY.get(orig, ())))
         if need and (other in need or NEEDS.get(other, set()) & need):
+            return True
+    # The runtime never runs two conflicting features together, nor a feature beside one that needs what it
+    # conflicts with (say, a stock-only map beside anything that needs 1.5).
+    for one, other in ((ka, kb), (kb, ka)):
+        if CONFLICTS.get(one, set()) & ({other} | NEEDS.get(other, set())):
             return True
     if a["pkg"] != b["pkg"] or a["feature"] != b["feature"]:
         return False

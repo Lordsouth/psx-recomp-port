@@ -27,6 +27,11 @@ BATTLE = (1, 2, 3)                                # GAME_STATE: 3 loading, 2 sta
 END_BUFFER, END_LINES = 0x80073EA0, 0x801350B0        # the box's text; lines expected, then rows drawn
 MP_BONUS = {700: 5, 800: 10, 900: 15, 999: 20}        # Brains reached: the percent its message names
 PSTAT_BASE, TRIGGER_BASE = 0x801BE031, 0x801BDFCD     # docs/GAME.md 4.7, 4.8
+NPC_BASE, NPC_SIZE = 0x80155828, 0x68                 # NPC_ENTITIES[8]: type i32 +0, isOnMap +0x34, currentHP +0x4C, scriptId +0x65
+NPC_MODELS = 0x80137140                               # 5 x 0x1C: useCount, modelPtr, animTablePtr, mmdPtr, .., digiType i16 +0x18
+ENEMY_IDS = 0x8013D640 + 0x66C                        # COMBAT_DATA.player.entityIds[4]: 1 (partner), then enemy entity ids
+ENEMY_COUNT = 0x80134D6C                              # i16: how many of them are this battle's (the rest are stale)
+PARTNER_LIVES = 0x801557A8 + 0x7C                     # PartnerEntity.lives, i8
 SLIVER_NCC = 0.9      # plan 1 measured 0.991 and 1.000 for a served map's edges; a black or missing edge is far below
 
 
@@ -68,6 +73,57 @@ class Field:
 
     def trigger(self, n):
         return bool(self.g.d.read(TRIGGER_BASE + n // 8, 1)[0] >> (n % 8) & 1)
+
+    def set_trigger(self, n):
+        b = self.g.d.read(TRIGGER_BASE + n // 8, 1)[0]
+        self.g.d.write_bytes(bytes([b | 1 << (n % 8)]), TRIGGER_BASE + n // 8)
+
+    def npc(self, slot):
+        """Map NPC slot `slot` as the game holds it, or None when no entity is placed there (ENTITY_TABLE[slot + 2])."""
+        if struct.unpack("<I", self.g.d.read(NPC0 + 4 * slot, 4))[0] == 0:
+            return None
+        b = self.g.d.read(NPC_BASE + NPC_SIZE * slot, NPC_SIZE)
+        return dict(type=struct.unpack_from("<i", b)[0], on_map=b[0x34], hp=struct.unpack_from("<h", b, 0x4C)[0],
+                    script=b[0x65], pos=self.pos(NPC_BASE + NPC_SIZE * slot))
+
+    def model(self, species):
+        """The VRAM index k (modelId, 0..4) of the NPC model holding `species` with its MMD and model loaded, or None
+        (docs/GAME.md 5.5: k 4 overlaps SBOY.TIM)."""
+        for e in range(5):
+            b = self.g.d.read(NPC_MODELS + 0x1C * e, 0x1C)
+            use, mdl, _, mmd = struct.unpack_from("<4I", b)
+            k, kind = struct.unpack_from("<hh", b, 0x16)
+            if use and mdl and mmd and kind == species:
+                return k
+        return None
+
+    def enemies(self):
+        """The battle's enemies as map NPC slots (COMBAT_DATA.player.entityIds after the partner's 1)."""
+        n = struct.unpack("<h", self.g.d.read(ENEMY_COUNT, 2))[0]
+        return [e - 2 for e in self.g.d.read(ENEMY_IDS, 4)[1:1 + n]]
+
+    def win_group(self, slots, bits, row):
+        """A maxed partner; every enemy in `slots` on 1 HP until it falls. The fight ends on this map with the bits of
+        all of them paid, and each has left the map (its run-off)."""
+        g, check, gstate = self.g, self.check, self.gstate
+        self.partner(999, 9999)
+        money, done = self.i32(MONEY), False
+        end = time.time() + 240
+        while time.time() < end and not (done and gstate() == 0 and g.tamer_state == 0 and self.i32(IS_SCRIPT_PAUSED) == 1):
+            if gstate() not in BATTLE:
+                done = True
+            else:
+                for s in slots:
+                    if struct.unpack("<h", g.d.read(NPC_BASE + NPC_SIZE * s + 0x4C, 2))[0] > 1:
+                        g.d.write_bytes(struct.pack("<h", 1), NPC_BASE + NPC_SIZE * s + 0x4C)
+            g.route("4:cross,20:none")
+        check(done and gstate() == 0 and g.tamer_state == 0 and self.screen() == row,
+              "won: the run-off ended, player in control, still on map %d" % row)
+        check(self.i32(MONEY) - money == bits, "the bits were paid: %d -> %d (%d expected)" % (money, self.i32(MONEY), bits))
+        left = [s for s in slots if self.npc(s) and self.npc(s)["on_map"]]
+        check(not left, "every enemy has left the map (still on it: slots %s)" % left)
+        g.advance(30)
+        self.shot("won_%s" % "_".join(map(str, slots)))
 
     def pad(self, mask):
         self.g.d.cmd("set_input", layer="host", buttons="0x%04X" % (0xFFFF & ~mask))

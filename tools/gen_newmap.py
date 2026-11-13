@@ -44,7 +44,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import struct
 import sys
 
@@ -251,10 +250,7 @@ def boss_script():
     """The glade's DG script: section table, the bare END section map arrival runs, the boss's section.
     Text is fullwidth Shift-JIS. 1B 05 pauses the game (it must come first), 1A 00 shows the text and waits
     for confirm, 27 00 closes the box, 67 00 01 00 waits a frame, 66 00 starts the battle, FE 00 ends."""
-    wide = {32: 0x3000, 46: 0x3002, **{c: c + 0xFEE0 for c in range(33, 127) if c != 46}}
-    # the font has no glyph behind other symbols (they draw a triangle), and Shift-JIS has no fullwidth apostrophe
-    assert all(len(line) <= 28 and re.fullmatch(r"[A-Za-z0-9 .!?]*", line) for line in BOSS_LINES)
-    text = b"\x0d\x00".join(line.translate(wide).encode("shift_jis") for line in BOSS_LINES)
+    text = E.dialog_text(BOSS_LINES)
     return (struct.pack("<6H", 12, 0xFE, 12, BOSS_DG_SECTION, 14, 0xFFFF) + b"\xfe\x00"
             + bytes.fromhex("1b05 1a00") + text + bytes.fromhex("0d00 0000 2700 6700 0100 6600 fe00 ff00"))
 

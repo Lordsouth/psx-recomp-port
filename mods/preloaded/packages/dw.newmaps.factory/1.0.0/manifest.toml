@@ -33,7 +33,7 @@ feature = "factory"
 target = "disc_user"
 offset = 304472064
 file = "assets/afac1.map"
-sha256 = "92e11277055863325bbad4afd7f9233bfc4eea1b978a44fb208a49f4f70906e2"
+sha256 = "80e4e7f4f2ffdad08bcbd8e03a1a5ee9af796ed1e2a567f419a90d20761bd554"
 
 # AFAC1.TFS at MMM.DAT sector 65 (LBA 148733)
 [[overlay]]
@@ -49,79 +49,79 @@ feature = "factory"
 target = "disc_user"
 offset = 305000448
 file = "assets/afac2.map"
-sha256 = "8d3bf559a8b9953f9852a988a71479ec8176179fc5ae3bd6d1d0a491946cf9c4"
+sha256 = "3010baf33aba0fa912ab39f66714ed37cd80191f602a7fb540fd2fc960eec678"
 
-# AFAC2.TFS at MMM.DAT sector 317 (LBA 148985)
+# AFAC2.TFS at MMM.DAT sector 318 (LBA 148986)
 [[overlay]]
 feature = "factory"
 target = "disc_user"
-offset = 305121280
+offset = 305123328
 file = "assets/afac2.tfs"
 sha256 = "c2529de48bc70bd90061dcd7307e33b7db8d156bcdc8f76cd8aacaafc05091e5"
 
-# AFAC3.MAP at MMM.DAT sector 510 (LBA 149178)
+# AFAC3.MAP at MMM.DAT sector 511 (LBA 149179)
 [[overlay]]
 feature = "factory"
 target = "disc_user"
-offset = 305516544
+offset = 305518592
 file = "assets/afac3.map"
-sha256 = "a86456eff6b39519fa431af49031b3faae57d19254effef623f3580822855127"
+sha256 = "c95e8624cac0eee2efef33219c7dc28d3fc3b314b8051105b97c090e46f9608a"
 
-# AFAC3.TFS at MMM.DAT sector 589 (LBA 149257)
+# AFAC3.TFS at MMM.DAT sector 591 (LBA 149259)
 [[overlay]]
 feature = "factory"
 target = "disc_user"
-offset = 305678336
+offset = 305682432
 file = "assets/afac3.tfs"
 sha256 = "99cf632a77194cfda53c8a8046e6bee36c88a5fbe3cede09532dbf437ca5a4d8"
 
-# AFAC4.MAP at MMM.DAT sector 782 (LBA 149450)
+# AFAC4.MAP at MMM.DAT sector 784 (LBA 149452)
 [[overlay]]
 feature = "factory"
 target = "disc_user"
-offset = 306073600
+offset = 306077696
 file = "assets/afac4.map"
 sha256 = "3aec9b098f8bc08f22619ab4f8d274de4cb89f79b843bcd919183d281ee0906f"
 
-# AFAC4.TFS at MMM.DAT sector 816 (LBA 149484)
+# AFAC4.TFS at MMM.DAT sector 818 (LBA 149486)
 [[overlay]]
 feature = "factory"
 target = "disc_user"
-offset = 306143232
+offset = 306147328
 file = "assets/afac4.tfs"
 sha256 = "d5cb786079d4524e408b97a28d15c90507137681be24c276e06e6452bd93a64e"
 
-# AFAC1.DG at MMM.DAT sector 1009 (LBA 149677)
-[[overlay]]
-feature = "factory"
-target = "disc_user"
-offset = 306538496
-file = "assets/afac1.dg"
-sha256 = "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d"
-
-# AFAC2.DG at MMM.DAT sector 1010 (LBA 149678)
-[[overlay]]
-feature = "factory"
-target = "disc_user"
-offset = 306540544
-file = "assets/afac2.dg"
-sha256 = "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d"
-
-# AFAC3.DG at MMM.DAT sector 1011 (LBA 149679)
+# AFAC1.DG at MMM.DAT sector 1011 (LBA 149679)
 [[overlay]]
 feature = "factory"
 target = "disc_user"
 offset = 306542592
-file = "assets/afac3.dg"
-sha256 = "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d"
+file = "assets/afac1.dg"
+sha256 = "7bffcf628af464edcf0d3bb4370ff7b92513eade368a4cfe8dc637e412d1837a"
 
-# AFAC4.DG at MMM.DAT sector 1012 (LBA 149680)
+# AFAC2.DG at MMM.DAT sector 1012 (LBA 149680)
 [[overlay]]
 feature = "factory"
 target = "disc_user"
 offset = 306544640
+file = "assets/afac2.dg"
+sha256 = "0974540f274f910dcd4fe4ce48a546b25c89a71fbc29efe348abafbf1ca2db94"
+
+# AFAC3.DG at MMM.DAT sector 1013 (LBA 149681)
+[[overlay]]
+feature = "factory"
+target = "disc_user"
+offset = 306546688
+file = "assets/afac3.dg"
+sha256 = "0d484d61b726f18a591011400ca87e08787eebfc36ba1cc4cb964c4d39a6ed38"
+
+# AFAC4.DG at MMM.DAT sector 1014 (LBA 149682)
+[[overlay]]
+feature = "factory"
+target = "disc_user"
+offset = 306548736
 file = "assets/afac4.dg"
-sha256 = "fe5edaee1229afb9a87ccdecbb0f34ab37e9232e36398eca6d95320bcbb1af9d"
+sha256 = "7bffcf628af464edcf0d3bb4370ff7b92513eade368a4cfe8dc637e412d1837a"
 
 # MAP_ENTRIES[240] = AFAC1
 [[patch]]
@@ -161,15 +161,15 @@ feature = "factory"
 target = "disc_user"
 offset = 292023164
 expected = "5c 53 43 4e 5c 4d 41 50 31 33 33 2e 53 43 4e 00 00 00 00 00"
-replace = "00 80 dd 00 00 88 dd 00 00 90 dd 00 00 98 dd 00 00 a0 dd 00"
+replace = "00 90 dd 00 00 98 dd 00 00 a0 dd 00 00 a8 dd 00 00 b0 dd 00"
 
 # MAPHEAD sections 240-243 at 0x6084
 [[patch]]
 feature = "factory"
 target = "disc_user"
 offset = 292851844
-expected = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
-replace = "fb 00 df 00 f0 00 1e 00 f5 00 5d 16 fe 00 fb 00 e0 00 f1 00 1e 00 f5 00 5d 16 fe 00 fb 00 e1 00 f2 00 1e 00 f5 00 5d 16 fe 00 fb 00 e2 00 f3 00 1e 00 f5 00 5d 16 fe 00"
+expected = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+replace = "fb 00 df 00 f0 00 1e 00 f5 00 5d 16 46 7a 46 7b 47 7a 00 02 47 7a 01 02 47 7b 02 02 fe 00 fb 00 e0 00 f1 00 1e 00 f5 00 5d 16 46 5c 47 5c 00 00 47 5c 01 00 47 5c 02 00 47 5c 03 00 19 00 01 00 73 02 18 00 d2 60 19 00 46 29 47 29 04 00 fe 00 fb 00 e1 00 f2 00 1e 00 f5 00 5d 16 46 89 47 89 00 00 47 89 01 00 47 89 02 00 47 89 03 00 19 00 01 00 74 02 18 00 04 61 19 00 46 ac 47 ac 04 00 fe 00 fb 00 e2 00 f3 00 1e 00 f5 00 5d 16 fe 00"
 
 # MAPHEAD section 240 -> 0x6084
 [[patch]]
@@ -179,29 +179,29 @@ offset = 292828100
 expected = "58 35"
 replace = "84 60"
 
-# MAPHEAD section 241 -> 0x6092
+# MAPHEAD section 241 -> 0x60a2
 [[patch]]
 feature = "factory"
 target = "disc_user"
 offset = 292828104
 expected = "66 35"
-replace = "92 60"
+replace = "a2 60"
 
-# MAPHEAD section 242 -> 0x60a0
+# MAPHEAD section 242 -> 0x60d4
 [[patch]]
 feature = "factory"
 target = "disc_user"
 offset = 292828108
 expected = "74 35"
-replace = "a0 60"
+replace = "d4 60"
 
-# MAPHEAD section 243 -> 0x60ae
+# MAPHEAD section 243 -> 0x6106
 [[patch]]
 feature = "factory"
 target = "disc_user"
 offset = 292828112
 expected = "82 35"
-replace = "ae 60"
+replace = "06 61"
 
 # entrance: GIAS09 warp 1 field 0 = 50
 [[patch]]

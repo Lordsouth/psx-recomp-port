@@ -32,6 +32,14 @@ def assert_in_k_maps(src, plugin, first_row, last_row, host_row, host_exit, stoc
     assert entry in flat, "dw_newmaps.c k_maps disagrees on " + plugin
 
 
+def dialog_text(lines):
+    """`1A`'s text (docs/GAME.md 4.9): fullwidth Shift-JIS rows joined by 0D 00, without the end code. The font has
+    no glyph behind other symbols (they draw a triangle), and Shift-JIS has no fullwidth apostrophe."""
+    wide = {32: 0x3000, 46: 0x3002, **{c: c + 0xFEE0 for c in range(33, 127) if c != 46}}
+    assert all(len(line) <= 28 and re.fullmatch(r"[A-Za-z0-9 .!?]*", line) for line in lines)
+    return b"\x0d\x00".join(line.translate(wide).encode("shift_jis") for line in lines)
+
+
 def _flat_albedo(x, z):
     col = np.zeros(np.shape(x) + (3,))
     col[:] = (104, 140, 60)

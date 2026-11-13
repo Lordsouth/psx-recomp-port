@@ -38,6 +38,7 @@ import struct
 import sys
 import tomllib
 from collections import deque
+from typing import NamedTuple
 
 import numpy as np
 from PIL import Image
@@ -213,6 +214,148 @@ def boss_chamber():
 SCENES = (entry_hall, production_floor_1, production_floor_2, boss_chamber)
 
 
+# ---- the cast ------------------------------------------------------------------
+# Who stands on each screen (docs/GAME.md 3.8, 5, 6). Workers wander and never fight: Hagurumon and Tinmon have walk
+# animations but no battle ones, so they take autotalk 2 (never fires) and no fight names them. Every fight is a press
+# of confirm (autotalk 0) with trigger 1 clear, so it can be fled, and predefined (pstat 0xFA = 1, the group's script
+# ids in 0xFB..0xFD), so nothing else on screen joins. Regulars stand aside from the path and come back on every
+# visit; a guardian holds its floor's gap until beaten, then a trigger keeps it away for good.
+#
+# The cast is what fits the heap (HEAP_BUDGET, heap_estimate): the plan's Guardromon pair, Tankmon pair and Giromon on
+# AFAC2 comes to 165,550 B even with the small Giromon (161), so AFAC2 has two Guardromon pairs and the full Giromon
+# (41), and AFAC3 two pairs of the small Mamemon (137) with the small Megadramon (172) as its guardian.
+#
+# How hard, from tools/fight_sim.py --factory, one fighter at a time against the average Ultimate with 3 x 5000 heals
+# (2000 fights each; the glade boss: 80.8 %, 81.2 % in the 500-fight table): a Guardromon 100 %, Giromon 79.5 %, a
+# Mamemon 100 %, Megadramon 83.0 %. Regulars must stay at 90 % or more, guardians within 10 points of the glade boss.
+class Rec(NamedTuple):
+    species: int
+    slot: int                        # the record's index, SET_DIGIMON's slot
+    script_id: int                   # its DG talk section and its id in scripts
+    role: str                        # "worker", "regular", "guardian" or "boss"
+    xyz: tuple
+    words: tuple                     # the map record, i16 (docs/GAME.md 3.8)
+    group: int = 0                   # regulars who fight together share a group; a guardian fights alone
+
+
+GUARD_TRIGGER = {241: 627, 242: 628}  # set when that floor's guardian is beaten (docs/GAME.md 4.8)
+LINES = {92: "Intruder detected. Engage!", 41: "None shall pass this line!", 137: "This floor belongs to us!",
+         172: "The deep works are mine!"}
+REGULAR_RANGE, GUARD_RANGE = 800, 600     # trackingRange: how near it turns to face you (followMode 2); starts nothing
+HEAP_BUDGET = 152000                 # per screen, Vice's combined model weight (docs/GAME.md 3.11)
+MIN_PICKS = 30                       # a fleeable fight spends mpCost * 3 per pick: MP for at least this many
+
+
+def fighter(species, at, script_id, stats, moves, weights, flee, rng):
+    """followMode 2 (stands, turns to face you), one wait step over 127 frames so it never walks (docs/GAME.md 5.2).
+    stats: HP, MP, offense, defense, speed, brains, bits. moves: four anims (0x2E + index into its species' move list,
+    a finisher only in the last), weights for the first three. flee: the bearing (x, z) it runs off on when beaten."""
+    hp, mp, off, de, spd, brain, bits = stats
+    return (species, 2, at[0], 0, at[1], 0, 0, 0, rng, 0, script_id, hp, mp, hp, mp, off, de, spd, brain, bits, 1, 1,
+            *moves, *weights, flee[0], 0, flee[1], 1, 0, -1, -1, -1, -1, -1, -1, -1, 350, 0, at[1])
+
+
+def worker(species, a, b, script_id):
+    """followMode 1 (waypoints only): walk to b, wait, walk back to a, wait, again (anim 2, docs/GAME.md 3.8)."""
+    return (species, 1, a[0], 0, a[1], 0, 0, 0, 0, 0, script_id, 500, 500, 500, 500, 50, 50, 50, 300, 0, 1, 1,
+            0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 4, 1, 0, 1, 0, -1, -1, -1, -1,
+            b[0], 0, b[1], 60, 0, 0, a[0], 0, a[1], 60, 0, 0)
+
+
+GUARDROMON = ((3200, 9900, 600, 420, 250, 400, 700), (0x2E, 0x2F, 0x31, 0xFF), (35, 35, 30, 0))
+# Prominence Beam, Megaton Punch, All Range Beam; no finisher in its list
+GIROMON = ((7600, 9900, 800, 620, 500, 400, 3000), (0x2F, 0x30, 0x32, 0x3B), (35, 35, 30, 0))
+# Buster Dive, Megalo Spark, Thunder Justice, finisher Deadly Bomb
+MAMEMON = ((3400, 7800, 640, 470, 420, 400, 900), (0x2E, 0x2F, 0x30, 0x32), (40, 35, 25, 0))
+# Megaton Punch, Buster Dive, Metal Sprinter, finisher Smiley Bomb
+MEGADRAMON = ((9000, 12600, 870, 690, 550, 400, 4000), (0x2E, 0x2F, 0x30, 0x31), (35, 40, 25, 0))
+# Megaton Punch, Giga Freeze, DG Dimension, finisher Genoside Attack
+
+
+def cast():
+    """{row: [Rec]}. Positions are fixed against the scenes above: regulars on open floor away from the walk test's
+    spots and the lines between them, guardians on the middle column of the gap (AFAC2's at its mouth, the one row
+    of it far enough from spawn 2), workers looping clear of the route."""
+    out = {}
+    plan = {
+        240: [("worker", 122, (-2600, -2400), (-2600, -1200)), ("worker", 122, (2200, -3300), (2200, -2700)),
+              ("worker", 123, (-2200, 400), (-1500, 400))],
+        241: [("regular", 92, (-2000, -2700), GUARDROMON, (-3400, -2700), 1),
+              ("regular", 92, (-1500, -2700), GUARDROMON, (-3400, -2700), 1),
+              ("regular", 92, (1800, -2900), GUARDROMON, (3400, -2900), 2),
+              ("regular", 92, (2300, -2900), GUARDROMON, (3400, -2900), 2),
+              ("guardian", 41, (550, 320), GIROMON, (3400, 320), 0)],
+        242: [("regular", 137, (-2600, -950), MAMEMON, (-3400, -950), 1),
+              ("regular", 137, (-2100, -950), MAMEMON, (-3400, -950), 1),
+              ("regular", 137, (2400, -2600), MAMEMON, (3400, -2600), 2),
+              ("regular", 137, (2400, -2100), MAMEMON, (3400, -2100), 2),
+              ("guardian", 172, (-850, -300), MEGADRAMON, (-3400, -300), 0)],
+        243: [],
+    }
+    for row, recs in plan.items():
+        out[row] = []
+        for slot, p in enumerate(recs):
+            sid = 5 + slot                   # scriptId: stock numbers talk sections 5..12 by slot
+            if p[0] == "worker":
+                words = worker(p[1], p[2], p[3], sid)
+                out[row].append(Rec(p[1], slot, sid, "worker", (p[2][0], 0, p[2][1]), words))
+            else:
+                role, species, at, (stats, moves, weights), flee, group = p
+                words = fighter(species, at, sid, stats, moves, weights, flee,
+                                GUARD_RANGE if role == "guardian" else REGULAR_RANGE)
+                out[row].append(Rec(species, slot, sid, role, (at[0], 0, at[1]), words, group))
+    return out
+
+
+CAST = cast()
+
+
+def heap_estimate(row, disc):
+    """Bytes the screen's models take from the 197,520 B heap (docs/GAME.md 3.11): each species' MMD in whole sectors
+    (model.c:3409), DIGIMON_DATA's bone count x (0x88 + 0x52) per placed Digimon (model.c:2815,2829-2830), and the
+    0x4800 texture buffer loading takes (model.c:3299)."""
+    mmd = lambda sp: disc.files[disc.species(sp)["code"].upper() + ".MMD"][1]
+    return (sum(-(-mmd(sp) // 2048) * 2048 for sp in {r.species for r in CAST[row]})
+            + sum(disc.species(r.species)["bones"] * (0x88 + 0x52) for r in CAST[row]) + 0x4800)
+
+
+def check_cast(disc):
+    """Per screen: at most 8 records, 4 species, the heap estimate within HEAP_BUDGET. Workers have their walk.
+    Fighters (docs/GAME.md 6): field and battle anims, moves from their own list, each on its EFE list, a finisher only
+    in slot 3, current = base HP and MP, brains over 296, MP for MIN_PICKS of their dearest move. Returns the estimates."""
+    from dw_tables import is_finisher
+    heaps = {}
+    for row, recs in CAST.items():
+        assert len(recs) <= 8 and len({r.species for r in recs}) <= 4, "row %d: at most 8 records and 4 species" % row
+        assert [r.slot for r in recs] == list(range(len(recs))) and len({r.script_id for r in recs}) == len(recs)
+        heaps[row] = heap_estimate(row, disc)
+        assert heaps[row] <= HEAP_BUDGET, "row %d: heap estimate %d B over %d" % (row, heaps[row], HEAP_BUDGET)
+        for r in recs:
+            sp = disc.species_row(r.species)
+            w = dict(zip(("hp", "mp", "chp", "cmp", "off", "def", "spd", "brain"), r.words[11:19]))
+            if r.role == "worker":
+                assert not {"0", "2"} & set(sp["missing_anims"]), "%s must have idle and walk anims" % sp["name"]
+                continue
+            assert not sp["missing_anims"], "%s lacks anims %s" % (sp["name"], sp["missing_anims"])
+            assert (w["chp"], w["cmp"]) == (w["hp"], w["mp"]) and w["brain"] >= 297, "%s: current HP, MP, brains" % sp["name"]
+            cost = []
+            for k, anim in enumerate(r.words[22:26]):
+                if anim == 0xFF:
+                    assert r.words[26 + k] == 0, "%s: an empty slot must weigh 0" % sp["name"]
+                    continue
+                move = sp["moves"][anim - 0x2E] if 0 <= anim - 0x2E < 16 else 0xFF
+                assert move != 0xFF, "%s: anim 0x%x is not in its move list" % (sp["name"], anim)
+                assert k == 3 or not is_finisher(move), "%s: a finisher only in slot 3" % sp["name"]
+                types = disc.efe_lists(move)
+                assert types and all(disc.original_type(r.species) in t for t in types), \
+                    "%s: move %d's EFE list lacks its type %d" % (sp["name"], move, disc.original_type(r.species))
+                if not is_finisher(move) and r.words[26 + k]:
+                    cost.append(disc.move(move)["mp"] * 3)
+            assert cost and w["mp"] >= MIN_PICKS * max(cost), "%s: MP %d is under %d picks of %d" \
+                % (sp["name"], w["mp"], MIN_PICKS, max(cost))
+    return heaps
+
+
 # ---- the screens -------------------------------------------------------------
 def in_rects(x, z, rects):
     m = np.zeros(np.shape(x), bool)
@@ -281,7 +424,8 @@ def make_screen(i):
         strips[112] = lambda x, z, door=door: in_door(x, z, door) & (z > ZB)
     return Screen(name=NAMES[i].lower(), row=ROWS[i], vp=VP, vr=VR, h=H_PROJ, grid=GRID, paint=PAINT, lights=LIGHTS,
                   labels=LABELS, ground=GROUND, mats=MATS, flat=FLAT, fg_mats=("machine", "pipe"), painted_props=(),
-                  floor=floor_fn(door), strips=strips, warps=warps(i), records=[], regions=REGIONS,
+                  floor=floor_fn(door), strips=strips, warps=warps(i), regions=REGIONS,
+                  records=[struct.pack("<%dh" % len(r.words), *r.words) for r in CAST[ROWS[i]]],
                   albedo=albedo_fn(grates, door), floor_label=floor_label_fn(grates, door), sun=SUN)
 
 
@@ -369,6 +513,24 @@ def check_screen(i, grid, flat=None):
             assert got == want, "%s: row %d across the line has walkable columns %s, not the gap's %s" % (NAMES[i], r, sorted(got), sorted(want))
         assert not set(zip(*np.nonzero(grid == 112))) & reach(grid, s0, [(r, c) for r in rows for c in want]), \
             "%s: the gap must be the only way to the forward strip" % NAMES[i]
+    guards = [r for r in CAST[ROWS[i]] if r.role == "guardian"]
+    assert len(guards) == (1 if line else 0), "%s: a production floor has one guardian, other screens none" % NAMES[i]
+    for g in guards:                                 # in a row of the narrow passage, on its middle column
+        r, c = cell(g.xyz[0], g.xyz[2])
+        assert c == mid and set(np.nonzero(grid[r] != 0x80)[0]) == want, \
+            "%s: the guardian at %s must stand on the gap's middle column, %d" % (NAMES[i], g.xyz, mid)
+    for rec in CAST[ROWS[i]]:                        # an encounter must not start during the arrival's fade (GAME.md 6)
+        if rec.role == "worker":                     # its walk is a straight line over floor: waypoint 0 and back
+            bx, bz = rec.words[42], rec.words[44]
+            for t in np.linspace(0, 1, 50):
+                x, z = rec.xyz[0] + t * (bx - rec.xyz[0]), rec.xyz[2] + t * (bz - rec.xyz[2])
+                assert grid[cell(x, z)] == 0, "%s: the worker's walk from %s crosses a wall at (%d, %d)" % (NAMES[i], rec.xyz, x, z)
+        else:
+            for w in (0, 2):
+                if scr.warps[4, w] >= 0:
+                    d = np.hypot(rec.xyz[0] - scr.warps[0, w], rec.xyz[2] - scr.warps[2, w])
+                    assert d > rec.words[8] + 300, "%s: the %d at %s is %d from spawn %d, not over its range %d + 300" \
+                        % (NAMES[i], rec.species, rec.xyz, d, w, rec.words[8])
 
 
 def painted_map(i, rgb):
@@ -432,21 +594,63 @@ def built(i):
     return dict(prims=prims, grid=grid, map=mapb, tfs=tfsb, idx=idx, day=day, rects=rects, n8=len(tims), iou=iou)
 
 
+ARRIVAL = bytes.fromhex("1e00 fa00 fe00")       # pstat 0xFA = 0, end: a fled predefined fight never clears it
+
+
+def talk_section(row, rec):
+    """A fighter's talk section (docs/GAME.md 4.10, 6, 6.1): it speaks one line, the box closes, a frame passes, then
+    a predefined fight of its group (0xFB..0xFD: their script ids, 0xFF padded) starts. A flee or a loss never comes
+    back here; a win goes on: a guardian sets its trigger, and 0xFA goes back to 0."""
+    ids = [r.script_id for r in CAST[row] if r.role == rec.role and r.group == rec.group] if rec.role == "regular" \
+        else [rec.script_id]
+    assert rec.script_id in ids and len(ids) <= 3
+    ids += [0xFF] * (3 - len(ids))
+    win = (b"\x1c\x00" + struct.pack("<H", GUARD_TRIGGER[row]) if rec.role == "guardian" else b"") + ARRIVAL
+    return (bytes([0x1B, rec.script_id, 0x1A, 0]) + E.dialog_text([LINES[rec.species]])
+            + bytes.fromhex("0d00 0000 2700 6700 0100 1e00 fa01")
+            + b"".join(bytes([0x1E, 0, 0xFB + k, v]) for k, v in enumerate(ids)) + b"\x66\x00" + win)
+
+
 def dg_script(i):
-    """Screen i's DG script: the section table and one arrival section (0xFE), a bare END for now."""
-    s = struct.pack("<4H", 8, 0xFE, 8, 0xFFFF) + b"\xfe\x00"
+    """Screen i's DG script: the section table, the arrival section (0xFE) and a talk section per fighter. Every
+    screen's arrival clears 0xFA: a flee lands on the screen before, AFAC1 included."""
+    secs = [(0xFE, ARRIVAL)] + [(r.script_id, talk_section(ROWS[i], r)) for r in CAST[ROWS[i]]
+                                if r.role in ("regular", "guardian")]
+    head = 2 + 4 * len(secs) + 2
+    table, body = b"", b""
+    for sid, b in secs:
+        table += struct.pack("<HH", sid, head + len(body))
+        body += b
+    s = struct.pack("<H", head) + table + b"\xff\xff" + body
     assert len(s) <= 0x4000
     return s
 
 
-def section(i):
-    return (bytes([0xFB, 0]) + struct.pack("<HH", SCRIPTS[i], ROWS[i]) + bytes([0x1E, 0, 0xF5, BGM_PSTAT, 0x5D, BGM])
-            + b"\xfe\x00")
+def section(i, at):
+    """Row i's MAPHEAD section, at offset `at` in MAPHEAD.SCN: bind the script, set the music, load each species and
+    place each record. A guardian's load and place sit in the IF of docs/GAME.md 4.3, which jumps past them (an
+    offset from MAPHEAD's start) once its trigger is set, so a beaten guardian stays away and its model unloaded."""
+    recs = CAST[ROWS[i]]
+    head = (bytes([0xFB, 0]) + struct.pack("<HH", SCRIPTS[i], ROWS[i]) + bytes([0x1E, 0, 0xF5, BGM_PSTAT, 0x5D, BGM]))
+    plain = [r for r in recs if r.role != "guardian"]
+    body = b"".join(bytes([0x46, sp]) for sp in dict.fromkeys(r.species for r in plain))
+    body += b"".join(bytes([0x47, r.species, r.slot, 2 if r.role == "worker" else 0]) for r in plain)
+    for g in (r for r in recs if r.role == "guardian"):
+        assert g.species not in {r.species for r in plain}, "a guardian's species must be its own (its load is skipped)"
+        inner = bytes([0x46, g.species, 0x47, g.species, g.slot, 0])
+        skip = at + len(head) + len(body) + 12 + len(inner)
+        body += (b"\x19\x00\x01\x00" + struct.pack("<H", GUARD_TRIGGER[ROWS[i]]) + b"\x18\x00" + struct.pack("<H", skip)
+                 + b"\x19\x00" + inner)
+    return head + body + b"\xfe\x00"
 
 
-def mh_sections():
-    """The four MAPHEAD row sections, back to back: bind the script, set the music, end."""
-    return b"".join(section(i) for i in range(4))
+def mh_sections(at):
+    """The four MAPHEAD row sections, back to back from offset `at`: [(offset, bytes)]."""
+    out = []
+    for i in range(4):
+        out.append((at, section(i, at)))
+        at += len(out[-1][1])
+    return out
 
 
 def layout():
@@ -518,7 +722,11 @@ def previews(out):
             strip_back=strip_targets(i)[110], strip_fwd=strip_targets(i).get(112), via=via,
             walk=[deep_floor(grid, w) for w in walk_at],
             camera=dict(vp=VP.tolist(), vr=VR.tolist(), h=H_PROJ, gw=GRID[0], gh=GRID[1]),
-            backdrop=os.path.join(d, "backdrop_day.png")))
+            backdrop=os.path.join(d, "backdrop_day.png"),
+            cast=[dict(species=r.species, slot=r.slot, script=r.script_id, role=r.role, group=r.group,
+                       at=[r.xyz[0], r.xyz[2]], hp=r.words[11], mp=r.words[12], bits=r.words[19],
+                       trigger=GUARD_TRIGGER.get(scr.row) if r.role == "guardian" else None)
+                  for r in CAST[scr.row]]))
         if b["rects"]:                               # Field.loaded_files checks the sprites are live
             spec["screens"][-1]["fg"] = dict(count=len(b["rects"]))
         print("%s: %s, walkable cells %d, strips %s, colours %d, foreground sprites %d (%d pages), MAP %d B, TFS %d B "
@@ -589,7 +797,8 @@ def main():
                 and p["replace"].startswith("fb 00"))
     mh_at = gsec["offset"] - mh_base + len(bytes.fromhex(gsec["replace"]))
     mh_at += mh_at & 1
-    sections = mh_sections()
+    placed = mh_sections(mh_at)
+    sections = b"".join(b for _, b in placed)
     assert len(sections) <= MH_BUDGET and mh_at + len(sections) <= MH_BUFFER, "the sections must fit the MAPHEAD tail"
     tail = b"".join(sector(f, files["MAPHEAD.SCN"][0] + s) for s in range((mh_at + len(sections)) // 2048 + 1))
     assert len(mh) <= mh_at and not any(tail[len(mh):mh_at + len(sections)]), "the MAPHEAD tail past EOF is not zero"
@@ -625,6 +834,11 @@ def main():
         assert tx <= floor_col - 1, "the return spawn must stay off the strip"
     E.assert_in_k_maps(open(os.path.join(ROOT, "dw_newmaps.c"), encoding="utf-8").read(), PACKAGE, ROWS[0], ROWS[-1],
                        HOST["row"], HOST["warp"], HOST["save_exit"])
+    # the cast: species that can fight, moves they can use, models the heap holds
+    from dw_tables import Disc
+    heaps = check_cast(Disc(a.bin))
+    print("heap estimates (budget %d B): %s" % (HEAP_BUDGET, ", ".join("%s %d B" % (NAMES[ROWS.index(r)], b)
+                                                                       for r, b in heaps.items())))
     h = hashlib.sha256()
     f.seek(0)
     for block in iter(lambda: f.read(1 << 22), b""):
@@ -669,11 +883,9 @@ def main():
                           struct.pack("<5I", *offs))))
     patches.append(("MAPHEAD sections %d-%d at 0x%x" % (ROWS[0], ROWS[-1], mh_at),
                     patch("disc_user", mh_base + mh_at, bytes(len(sections)), sections)))
-    at = mh_at
-    for i, row in enumerate(ROWS):
+    for row, (at, _) in zip(ROWS, placed):
         patches.append(("MAPHEAD section %d -> 0x%x" % (row, at),
                         patch("disc_user", mh_base + ptr[row] + 2, mh[ptr[row] + 2:ptr[row] + 4], struct.pack("<H", at))))
-        at += len(section(i))
     new_slot = HOST["spawn"] + (ROWS[0], 0)                       # arrives at AFAC1's spawn 0
     for t, value in enumerate(new_slot):
         if value != hw(t, HOST["warp"]):

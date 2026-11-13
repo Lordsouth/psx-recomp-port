@@ -7,17 +7,26 @@
            to the screen's three floor spots, then take the forward strip (on the production floors through the
            gap). From AFAC4 walk back through every screen to the host, landing at each previous screen's spawn 2
            and at the host's return spawn.
-           --wide does it at 21:9 and checks each screen's edges against its backdrop (Field.slivers).
+           --wide does it at 21:9 and checks each screen's edges against its backdrop (Field.slivers). It sets both
+           guardians' triggers first, so the way through the gaps is open.
     saves  fresh sandbox card, Save Anywhere on: walk in and save on AFAC1, save on AFAC2..AFAC4, then walk out to the
            host and save there. Every card names the host, the stock exit and the gate's return spawn, and no card
            names a row 240-243. The card saved inside is kept as factory-inside.
     off    the factory OFF, on the stock game: Continue from factory-inside loads the host and the player walks.
+    fights fresh sandbox card, HP poked as verify_newmap.py fight does. models_loaded: on AFAC1..AFAC3 every record
+           is on the map with its model loaded. no_worker_fights: every fight's enemies are exactly its group, never a
+           worker. AFAC2's first regular pair: standing by it starts nothing, confirm starts a 2-enemy fight you can
+           run from; won (bits paid, both leave), back after walking out and in; fled (AFAC1's spawn 2); lost (row
+           205 or 218). Each guardian: holding toward the forward strip for 10 s never reaches it; fled (the screen
+           before's spawn 2, pstat 0xFA 0: flee_clears_predefined); lost; won (its trigger set, it runs off), then
+           through the gap to the next screen and back: it stays away and the gap is open. AFAC3's second pair: won.
 
     py -3.12 tools/gen_factory.py
     cmake --build build-debug --target psx-runtime      (stages the bundled package)
     py -3.12 -I tools/verify_factory.py walk --seed <card dir> [--port N] [--wide]
     py -3.12 -I tools/verify_factory.py saves --seed <card dir> [--port N]
     py -3.12 -I tools/verify_factory.py off [--port N]
+    py -3.12 -I tools/verify_factory.py fights --seed <card dir> [--port N] [--wide]
 
 The seed is any card dir whose slot 1 holds a Digimon World file. It writes build/mods/state.toml. Verdicts are
 guest-memory reads (and at 21:9 the screenshot's edges against our own backdrop).
@@ -33,7 +42,7 @@ import tomllib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game  # noqa: E402
-from field_drive import Field, TAMER, RIGHT, LEFT, IS_SCRIPT_PAUSED, PREVIOUS_SCREEN  # noqa: E402
+from field_drive import Field, TAMER, RIGHT, LEFT, IS_SCRIPT_PAUSED, PREVIOUS_SCREEN, PARTNER_LIVES  # noqa: E402
 from newmap_engine import tile_of  # noqa: E402
 
 PACKAGE, FEATURE = "dw.newmaps.factory", "factory"
@@ -46,10 +55,14 @@ WIDE = ('\n[[package]]\nid = "psx.enhancement.widescreen"\nversion = "1.0.0"\n\n
         '[feature.values]\naspect = "21:9"\n')
 
 
+class Stop(Exception):
+    pass
+
+
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=("walk", "saves", "off"))
+    ap.add_argument("mode", choices=("walk", "saves", "off", "fights"))
     ap.add_argument("--wide", action="store_true", help="at 21:9, with each screen's edges checked")
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
     ap.add_argument("--port", type=int, default=4450)
@@ -68,6 +81,8 @@ def main():
         print(("PASS " if cond else "FAIL ") + msg, flush=True)
         if not cond:
             fails.append(msg)
+            if a.mode == "fights":                     # each step plays on what the last left: stop at a failure
+                raise Stop(msg)
 
     staged = os.path.exists(os.path.join(pkg, "manifest.toml"))
     check(staged, "the factory package is staged in %s" % pkg)
@@ -196,15 +211,148 @@ def main():
         time.sleep(2)
         check(g.d.frame() > f0 + 60, "game running")
 
+    def members(i, role, group=0):
+        return [r for r in screens[i]["cast"] if r["role"] == role and r["group"] == group]
+
+    def models_loaded(i):
+        """Every record of screen i is placed, on the map, with its model in an NPC model slot; fighters stand home."""
+        for r in screens[i]["cast"]:
+            n = f.npc(r["slot"])
+            home = r["role"] == "worker" or (n and n["pos"] and (n["pos"][0], n["pos"][2]) == tuple(r["at"]))
+            check(bool(n) and n["on_map"] == 1 and n["type"] == r["species"] and n["script"] == r["script"] and home
+                  and f.model(r["species"]) in (0, 1, 2, 3),
+                  "models_loaded: %s slot %d, the %d (%s), placed %s, model k %s"
+                  % (screens[i]["name"], r["slot"], r["species"], r["role"], n, f.model(r["species"])))
+
+    def come_in(i):
+        """Onto screen i from the screen before's forward strip, so a flee goes back to that screen's spawn 2."""
+        g.warp(screens[i - 1]["row"], 2)
+        settled_on(screens[i - 1]["row"])
+        leave(screens[i - 1]["strip_fwd"], screens[i]["row"], "%s, the forward strip" % screens[i - 1]["name"])
+        arrived(screens[i]["row"], screens[i]["spawn"][0], "%s, walking in" % screens[i]["name"])
+        settled_on(screens[i]["row"])
+
+    def through_gap(i):
+        sc = screens[i]
+        go(tuple(sc["via"][0]), lambda: near(*sc["via"][0]), limit=60, vec=vec)
+        align(sc["via"][0][0])
+        check(go(tuple(sc["via"][1]), lambda: near(*sc["via"][1]), limit=30, vec=vec),
+              "%s: through the gap to %s (at %s)" % (sc["name"], sc["via"][1], pos(TAMER)))
+
+    def talk(i, r):
+        """Up to fighter r from below and press confirm: Field.talk, then no_worker_fights on the battle it starts."""
+        x, z = r["at"]
+        f.talk(vec, (x, 0, z), (x, z - 700))         # straight to the spot below it, then up
+        group = members(i, r["role"], r["group"]) if r["role"] == "regular" else [r]
+        got = f.enemies()
+        kinds = [(f.npc(s) or {}).get("type") for s in got]
+        check(sorted(got) == sorted(m["slot"] for m in group) and not {122, 123} & set(kinds),
+              "no_worker_fights: %s's fight is slots %s, species %s (its group: slots %s)"
+              % (screens[i]["name"], got, kinds, [m["slot"] for m in group]))
+        return group
+
+    def back_at(i, what):
+        """A flee from screen i lands on the screen before's spawn 2, with the predefined fight cleared."""
+        sc = screens[i - 1]
+        f.flee(sc["row"], (sc["spawn"][2][0], sc["spawn"][2][2]))
+        check(f.pstat(0xFA) == 0, "flee_clears_predefined: %s, pstat 0xFA reads %d on %s" % (what, f.pstat(0xFA), sc["name"]))
+        settled_on(sc["row"])
+
+    def lose(i):
+        f.g.d.write_bytes(bytes([3]), PARTNER_LIVES)       # a loss costs a life; the last one would end in death
+        f.lose(screens[i]["row"])
+
+    def guardian(i):
+        sc, r = screens[i], members(i, "guardian")[0]
+        come_in(i)
+        go(tuple(sc["via"][0]), lambda: near(*sc["via"][0]), limit=60, vec=vec)
+        align(sc["via"][0][0])
+        north = max(vec, key=lambda d: vec[d][1])
+        f.pad(north)
+        time.sleep(10)
+        f.pad(0)
+        p = pos(TAMER)
+        check(screen() == sc["row"] and p[2] < r["at"][1], "%s: held toward the forward strip for 10 s, stopped by the "
+              "guardian at %s (at %s)" % (sc["name"], r["at"], p))
+        talk(i, r)
+        back_at(i, "the %s guardian" % sc["name"])
+        leave(screens[i - 1]["strip_fwd"], sc["row"], "%s, back to %s" % (screens[i - 1]["name"], sc["name"]))
+        settled_on(sc["row"])
+        talk(i, r)
+        lose(i)
+        come_in(i)
+        check(not f.trigger(r["trigger"]), "%s: trigger %d still clear before the win" % (sc["name"], r["trigger"]))
+        talk(i, r)
+        f.win_group([r["slot"]], r["bits"], sc["row"])
+        check(f.trigger(r["trigger"]), "%s: the win set trigger %d" % (sc["name"], r["trigger"]))
+        through_gap(i)
+        leave(sc["strip_fwd"], screens[i + 1]["row"], "%s, the forward strip" % sc["name"])
+        arrived(screens[i + 1]["row"], screens[i + 1]["spawn"][0], "%s, walking in" % screens[i + 1]["name"])
+        if i + 1 < 3:
+            settled_on(screens[i + 1]["row"])
+            models_loaded(i + 1)
+        settled_on(screens[i + 1]["row"])
+        leave(screens[i + 1]["strip_back"], sc["row"], "%s, the strip back" % screens[i + 1]["name"])
+        arrived(sc["row"], sc["spawn"][2], "%s, walking back" % sc["name"])
+        settled_on(sc["row"])
+        check(f.npc(r["slot"]) is None and f.model(r["species"]) is None,
+              "%s: the beaten guardian stays away (slot %d %s, model k %s)"
+              % (sc["name"], r["slot"], f.npc(r["slot"]), f.model(r["species"])))
+        go(tuple(sc["via"][1]), lambda: near(*sc["via"][1]), limit=60, vec=vec)
+        check(go(tuple(sc["via"][0]), lambda: near(*sc["via"][0]), limit=30, vec=vec),
+              "%s: the gap is open, walked back through it to %s (at %s)" % (sc["name"], sc["via"][0], pos(TAMER)))
+        shot("open_" + sc["name"])
+
+    def fights():
+        g.warp(screens[0]["row"], 0)
+        settled_on(screens[0]["row"])
+        models_loaded(0)
+        vec.update(f.calibrate())
+        # AFAC2's first regular pair
+        come_in(1)
+        models_loaded(1)
+        pair = members(1, "regular", 1)
+        talk(1, pair[0])
+        f.win_group([m["slot"] for m in pair], sum(m["bits"] for m in pair), screens[1]["row"])
+        leave(screens[1]["strip_back"], screens[0]["row"], "AFAC2, the strip back")
+        arrived(screens[0]["row"], screens[0]["spawn"][2], "AFAC1, walking back")
+        settled_on(screens[0]["row"])
+        leave(screens[0]["strip_fwd"], screens[1]["row"], "AFAC1, the forward strip")
+        settled_on(screens[1]["row"])
+        for m in pair:
+            n = f.npc(m["slot"])
+            check(bool(n) and n["on_map"] == 1 and n["hp"] == m["hp"], "AFAC2: the pair is back after walking out and "
+                  "in (slot %d: %s)" % (m["slot"], n))
+        talk(1, pair[0])
+        back_at(1, "AFAC2's pair")
+        leave(screens[0]["strip_fwd"], screens[1]["row"], "AFAC1, back to AFAC2")
+        settled_on(screens[1]["row"])
+        talk(1, pair[0])
+        lose(1)
+        guardian(1)
+        # AFAC3: a two-enemy fight on the second floor too, then its guardian
+        through_gap(1)
+        leave(screens[1]["strip_fwd"], screens[2]["row"], "AFAC2, the forward strip")
+        settled_on(screens[2]["row"])
+        pair = members(2, "regular", 2)
+        talk(2, pair[0])
+        f.win_group([m["slot"] for m in pair], sum(m["bits"] for m in pair), screens[2]["row"])
+        guardian(2)
+
     try:
         f.enter()
         g.settle(timeout_frames=1800)
-        if a.mode in ("saves", "off"):
-            (saves if a.mode == "saves" else off)()
+        if a.mode in ("saves", "off", "fights"):
+            try:
+                {"saves": saves, "off": off, "fights": fights}[a.mode]()
+            except Stop:
+                pass
             print("RESULT factory %s: %s" % (a.mode, "FAIL %s" % fails if fails else "PASS"))
             return 1 if fails else 0
         for sc in screens:
             check(g.map_record(sc["row"])["file"] == sc["name"], "row %d holds %s (is %s enabled?)" % (sc["row"], sc["name"], PACKAGE))
+        for r in (r for sc in screens for r in sc["cast"] if r["trigger"]):
+            f.set_trigger(r["trigger"])                # the guardians beaten: the route through the gaps is open
         g.warp(host["row"], host["exit"])
         arrived(host["row"], host["spawn"], "the gate's spawn on %s" % host["file"])
         walk_in()

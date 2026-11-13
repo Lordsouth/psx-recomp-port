@@ -3,6 +3,7 @@
 
     py -3.12 tools/fight_sim.py [--bin disc.bin]       # win rates against the current boss and four stock bosses
     py -3.12 tools/fight_sim.py [--bin disc.bin] --check
+    py -3.12 tools/fight_sim.py [--bin disc.bin] --factory     # the Abandoned Factory's fighters against the plan's bounds
 
 The boss's stats come from BOSS in gen_newmap.py (so this needs numpy and Pillow, as that does); moves, species,
 type factors and the stock bosses' records come from your disc. The partners are made-up archetypes.
@@ -309,15 +310,51 @@ def check(disc):
     print("fight_sim check: ok")
 
 
+def win_rate(make_enemy, partner_name="average Ultimate", items=3, heal=5000, runs=4 * RUNS):
+    """The reference cell: the plan judges the factory's fighters against the glade boss on this one."""
+    random.seed(1)
+    return 100 * sum(fight(partner(partner_name), make_enemy(), items, heal)[0] == 1 for _ in range(runs)) / runs
+
+
+def factory():
+    """The same table for every distinct fighter of gen_factory.py's CAST (one per stat record), then the plan's
+    bounds against the average Ultimate with 3 x 5000 heals: regulars 90 % or more, guardians within 10 points of
+    the glade boss. Fights of a pair are judged one fighter at a time, as this sim has one enemy."""
+    from gen_factory import CAST, NAMES, ROWS
+    glade = win_rate(boss)
+    seen, bad = {}, []
+    for row, recs in CAST.items():
+        for r in recs:
+            if r.role in ("regular", "guardian"):
+                seen.setdefault(r.words[11:30] + (r.species, r.role), []).append("%s slot %d" % (NAMES[ROWS.index(row)], r.slot))
+    for key, where in seen.items():
+        words = next(r.words for recs in CAST.values() for r in recs if r.words[11:30] + (r.species, r.role) == key)
+        role = key[-1]
+        print()
+        table("%s %s (%s)" % (role.capitalize(), SP[words[0]]["name"], ", ".join(where)), lambda: enemy_from(words))
+        rate = win_rate(lambda: enemy_from(words))
+        ok = rate >= 90 if role == "regular" else abs(rate - glade) <= 10
+        print("  -> %.1f %% against the average Ultimate with 3 x 5000 heals (glade boss %.1f %%): %s"
+              % (rate, glade, "ok" if ok else "OUT OF BOUNDS"))
+        if not ok:
+            bad.append(SP[words[0]]["name"])
+    print("\nfactory: %s" % ("every fighter within the plan's bounds" if not bad else "out of bounds: %s" % bad))
+    return not bad
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default=DEFAULT_BIN)
     ap.add_argument("--check", action="store_true", help="assert the worked numbers and stop")
+    ap.add_argument("--factory", action="store_true", help="the Abandoned Factory's fighters (gen_factory.py CAST)")
     a = ap.parse_args()
     disc = load(a.bin)
     if a.check:
         check(disc)
         return
+    if a.factory:
+        print("AN ESTIMATE: nothing here was measured. See this tool's docstring for what it leaves out.")
+        sys.exit(0 if factory() else 1)
     print("AN ESTIMATE: nothing here was measured. See this tool's docstring for what it leaves out.\n")
     table("Current boss: " + boss().name, boss)
     for label, words in stock_bosses(disc):

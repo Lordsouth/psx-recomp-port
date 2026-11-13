@@ -39,6 +39,7 @@ MOVE_NAMES = 0x80126054              # char* per tech
 MOVE_DATA = 0x8012623C               # 16 bytes each
 ITEMS = 0x801269DC                   # 32 bytes each, name first
 TYPE_FACTORS = 0x80125F70            # 7x7 bytes
+ORIGINAL_TYPES = 0x8012A84C          # i16 per species: the key every tech's EFE list is searched with (getOriginalType)
 NUM_ROWS, NUM_SPECIES, NUM_MOVES = 255, 180, 122
 # The 42 fixed words of a map record. BOSS in gen_newmap.py has this layout too.
 REC = ("species_id followMode x y z rx ry rz tracking unk2 script hp mp curHP curMP off defense speed brains bits "
@@ -87,6 +88,33 @@ class Disc:
         dist, power = struct.unpack_from("<ih", b)
         return dict(id=i, name=self.str_at(MOVE_NAMES, i), dist=dist, power=power, mp=b[6], iframes=b[7], range=b[8],
                     special=b[9], status=b[10], acc=b[11], statusChance=b[12], flags=b[13])
+
+    def original_type(self, species):
+        """getOriginalType (src/main/effect_common.c:320-334): -1 above 0xB0, the species itself for a -1 row."""
+        if not 0 <= species <= 0xB0:
+            return -1
+        t = struct.unpack("<h", self.ex(ORIGINAL_TYPES + 2 * species, 2))[0]
+        return species if t < 0 else t
+
+    def efe_lists(self, move):
+        """The species lists of a move's EFE script: EFEDAT.EFE's 10 sectors at move * 10 (src/main/efe.c:1043-1049),
+        script words from +0x34. BTL_checkTechCompatibility is sub-op 0 (word 0x000E) and pops the list that the op
+        before it pushed: 0x0C, offset, nonzero (from the script head) (src/btl/battle_effect.c:4660-4678,4782-4796).
+        A list is 10-byte entries, i16 type first, ended by a negative type. Lists with an entry above 176 are not
+        species lists (a false match of the pattern) and are left out."""
+        lba = self.files["EFEDAT.EFE"][0]
+        b = b"".join(sector(self.f, lba + move * 10 + k) for k in range(10))
+        out = []
+        for p in range(0x34, len(b) - 8, 2):
+            op, off, head, nxt = struct.unpack_from("<HhhH", b, p)
+            if op & 0xFF == 0x0C and head and nxt == 0x000E:
+                q, types = 0x34 + off, []
+                while 0 <= q < len(b) - 2 and struct.unpack_from("<h", b, q)[0] >= 0:
+                    types.append(struct.unpack_from("<h", b, q)[0])
+                    q += 10
+                if types and max(types) <= 176:
+                    out.append(types)
+        return out
 
     def map_records(self):
         """Every record of the maps a row loads with flag 0x80; the others ignore their block."""
