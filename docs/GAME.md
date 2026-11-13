@@ -113,7 +113,7 @@ only room proven so far [run], or 28 pairs at 241 + 241; the windows in 2.4 stil
   u16) it reads the sectors into the buffer `MAP_SCRIPT_PTR` (0x80134FB4) names, sets `ACTIVE_MAP_SCRIPT` and returns
   the buffer; a cached id and every other id run the stock body. A failed read of a listed id runs no stock body (it
   would read the table past its end): the buffer gets an empty section table, `04 00 FF FF`, on which `getScriptSection`
-  returns 0 for every section (`src/main/script_interp.c:676-688`), and `ACTIVE_MAP_SCRIPT` stays as it was. The factory's ids 227-230 sit at MMM.DAT sectors
+  returns 0 for every section (`src/main/script_interp.c:676-688`), and `ACTIVE_MAP_SCRIPT` becomes 0xFFFF, the interpreter's own nothing-cached value (`:2214-2215`), so no id is served the emptied buffer and the next call reads again. The factory's ids 227-230 sit at MMM.DAT sectors
   1011-1014, one sector each, and each screen's arrival ran from them going in and coming back (`verify_factory.py walk`)
   [run 2026-11-13: `verify_factory.py walk`, `fights`, `boss`]. `getScript` is the only reader of `SCRIPT_OFFSET_TABLE` (`src/main/script_interp.c:647-668`), so no DG.SCN row
   is written: on 1.5, whose DG.SCN (LBA 162388) lies past MMM.DAT and whose table holds rows 222-225, no row could reach

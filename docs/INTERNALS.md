@@ -538,7 +538,7 @@ New maps beyond the stock file table need no table rows and no overlay patches.
   `MAP_SCRIPT_PTR` names, sets `ACTIVE_MAP_SCRIPT` and returns the buffer; a cached id and any other id run the stock
   body. A failed read fails closed: the stock body would read DG.SCN's table past its end, so the hook writes an empty
   section table (`04 00 FF FF`) at the buffer's start, so that `getScriptSection` finds no section and the previous
-  screen's script cannot run, leaves `ACTIVE_MAP_SCRIPT` unchanged so the next call reads again, and returns the
+  screen's script cannot run, sets `ACTIVE_MAP_SCRIPT` to 0xFFFF (nothing cached) so no id is served the emptied buffer and the next call reads again, and returns the
   buffer. No DG.SCN table row is written (GAME.md 2.3, 4.1). The map's MAPHEAD section names the id in its
   `FB` op. A DG table row 223+ pointing into MMM.DAT also runs on stock code, but no package uses that route now: on 1.5
   no row can reach MMM.DAT.

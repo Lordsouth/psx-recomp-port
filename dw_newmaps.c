@@ -162,6 +162,7 @@ static int dw_newmaps_get_script(struct CPUState* cpu, uint32_t address) {
         cpu->gpr[2] = dst;
         if (s->size > sizeof buf || !psx_mod_read_disc_sectors(s->lba, s->size / 2048, buf)) {
             psx_mod_write_word(dst, 0xFFFF0004u);   /* 04 00 FF FF: an empty section table, getScriptSection -> 0 */
+            psx_mod_write_half(DW_ACTIVE_MAP_SCRIPT, 0xFFFF);   /* nothing cached: no id serves the emptied buffer */
             return 1;
         }
         for (uint32_t o = 0; o < s->size; o += 4)
