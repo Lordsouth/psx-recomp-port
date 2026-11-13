@@ -43,7 +43,10 @@ python tools/stage_overlay_toolchain.py build-release
 ```
 
 `generate` reads your disc and emits ~1.8M lines of C (47 shards); the build
-then compiles them. Expect 10–30 minutes the first time.
+then compiles them. Expect 10–30 minutes the first time. Run `generate` again
+after changing a `game.toml` hook list: a build from stale `generated/` lacks the
+new hook (without the `getScript` entry hook, a ticked factory makes the stock
+body read garbage DG table rows).
 
 The last line puts `overlay_toolchain/` (embedded Python, TinyCC, the
 recompiler) beside the exe, which is what the setup wizard's rebuild does for

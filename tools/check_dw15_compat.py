@@ -129,6 +129,8 @@ EXTRA_EXE = [
     (0x800B4460, 0x800B446C, WS, "renderMapOverlays sprite cull (relative_x_bound sites)"),
     (0x800DD2A4, 0x800DD5E0, WS, "renderGameClock (bracketed)"),
     (0x800A936C, 0x800A97E0, WS, "renderStatusBars (bracketed)"),
+    # dw_newmaps.c's getScript filter hard-codes the ACTIVE_MAP_SCRIPT and MAP_SCRIPT_PTR the stock body uses
+    (0x80106218, 0x8010629C, "dw.newmaps.factory/factory", "getScript (the factory's filter assumes its globals)"),
 ]
 EXTRA_FILE = [
     ("/BTL_REL.BIN", 0x80052AE0, 0x80073280, 16, WS, "BTL bar slide table"),

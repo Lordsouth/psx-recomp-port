@@ -535,8 +535,11 @@ New maps beyond the stock file table need no table rows and no overlay patches.
 - **Scripts by id.** `dw_newmaps.c` also filters `getScript` (0x80106218, `src/main/script_interp.c:647`) for plans that
   include `dw.newmaps.factory`. For an id listed in `dw_newmaps_scripts.inc` (`{id, lba, size}`, whole sectors) and not
   already `ACTIVE_MAP_SCRIPT`, it reads the sectors with `psx_mod_read_disc_sectors`, copies them into the buffer
-  `MAP_SCRIPT_PTR` names, sets `ACTIVE_MAP_SCRIPT` and returns the buffer; a cached id, any other id and a failed read
-  run the stock body. No DG.SCN table row is written (GAME.md 2.3, 4.1). The map's MAPHEAD section names the id in its
+  `MAP_SCRIPT_PTR` names, sets `ACTIVE_MAP_SCRIPT` and returns the buffer; a cached id and any other id run the stock
+  body. A failed read fails closed: the stock body would read DG.SCN's table past its end, so the hook writes an empty
+  section table (`04 00 FF FF`) at the buffer's start, so that `getScriptSection` finds no section and the previous
+  screen's script cannot run, leaves `ACTIVE_MAP_SCRIPT` unchanged so the next call reads again, and returns the
+  buffer. No DG.SCN table row is written (GAME.md 2.3, 4.1). The map's MAPHEAD section names the id in its
   `FB` op. A DG table row 223+ pointing into MMM.DAT also runs on stock code, but no package uses that route now: on 1.5
   no row can reach MMM.DAT.
 - **The proof, retired.** Plan 1 proved the route with a local-only package (row 240 `FACT0`, the glade's own files and

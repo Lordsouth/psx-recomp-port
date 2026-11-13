@@ -256,7 +256,7 @@ Regulars use followMode 2 or 12, stand on open floor beside the path, and come b
 | Break the 21:9 sliver check once on purpose | Task 3 Step 5: in a scratch build, make `dw_tfs_read_served` in `dw_ws_sliver.c` return 0, show `walk --wide` fails its sliver check, restore it, and note it in the report |
 | `HOOK_OWNER[0x800A31F8]` | Task 3: `dw.newmaps.factory/factory` |
 | `PROOF_BODY` duplication, StopIteration flow, empty-state launch | Moot: Task 3 deletes the `--proof` half |
-| Compat no longer checks entry-hooked functions (`HOOK_OWNER[0x80112D34]` unused) | Plan 3: the save remap's addresses and return addresses must be checked against 1.5 there |
+| Compat no longer checks entry-hooked functions (`HOOK_OWNER[0x80112D34]` unused) | Deferred: plan 3 added only the owner check (every hook needs an owner; 0x80112D34 lists glade, glade-15, factory, factory-15) and pinned `getScript`'s bytes. The save remap's addresses and return addresses are not yet checked against 1.5 |
 | 1.5 facts (DG rows from 227, no room after 1.5's DG, a tail per edition) | Plan 3 |
 
 ## Carried to plan 3 and polish (from execution)

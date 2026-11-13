@@ -29,8 +29,8 @@ way until beaten, and a chamber with Machinedramon. Beating Machinedramon pays o
 Metalbanana and six chips once, all or nothing: with a full bag it takes nothing and
 says so. Saving inside the factory works, and the card loads on the stock game. It works
 with Digimon World 1.5 too: with 1.5 ticked it switches to a 1.5 edition by itself,
-the same four screens and fights, and the boss's reward box names item 127 as 1.5
-does, Glimpup Gem.
+the same four screens and fights, and on 1.5 the reward box calls the Metalbanana
+by 1.5's name for it, Glimpup Gem.
 
 **Every other mod now works with Digimon World 1.5.** Expanded Roster, Hidden Glade,
 Guaranteed Item Drops and Evolution Unbound switch to versions made for 1.5 while
