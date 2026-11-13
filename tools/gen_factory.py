@@ -3,8 +3,11 @@
 
 An abandoned factory whose machines still run, walked in a line: AFAC1 the entry hall, AFAC2 and AFAC3 two
 production floors, AFAC4 the boss chamber. Each screen is a scene of boxes, cylinders and ellipsoids turned into
-art, collision and MAP/TFS files by newmap_engine.py, as tools/gen_newmap.py does for the glade. The art is the
-flat guide until painted art arrives; no game art or data goes into the package.
+art, collision and MAP/TFS files by newmap_engine.py, as tools/gen_newmap.py does for the glade. The art is
+art/newmaps/factory_<n>.png, painted over the guide by tools/paint_factory.py: it must show ground where the scene
+has ground (IoU >= MIN_GROUND_IOU), the collision is fitted to it, and the machines it shows become foreground
+sprites so characters can walk behind them. Without that file a screen falls back to its flat guide. No game art or
+data goes into the package.
 
 Every screen keeps the glade's elevated camera: you enter at the bottom (-z) and the way on is at the top (+z).
 Warp slots are the same on each screen: slot 0 is the arrival walking forward and cell 110 leads back (to the
@@ -21,9 +24,10 @@ entrance: a new exit on a Gear Savanna screen (HOST).
     py -3.12 tools/gen_factory.py [--bin disc.bin] [--build build-debug] [--preview] [--check]
 
 Writes the package mods/preloaded/packages/dw.newmaps.factory/1.0.0/ (commit it, then update the MOD_PAYLOADS
-hashes in verify_setup_package.py), dw_newmaps_files.inc, and build/newmap/factory/: per-screen previews and
-spec.json, which verify_factory.py reads. --preview renders the previews only (no disc); --check builds in
-memory and compares the manifest, the assets and dw_newmaps_files.inc with what is committed.
+hashes in verify_setup_package.py), dw_newmaps_files.inc, and build/newmap/factory/: the painter's inputs
+(guide_<n>.png, labels_<n>.png), per-screen previews and spec.json, which verify_factory.py reads. --preview
+renders the previews only (no disc); --check builds in memory and compares the manifest, the assets and
+dw_newmaps_files.inc with what is committed.
 """
 import argparse
 import functools
@@ -41,7 +45,7 @@ from PIL import Image
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from extract_disc_file import parse_record, read_extent, sector, walk  # noqa: E402
 import newmap_engine as E  # noqa: E402
-from newmap_engine import MAX_FILE, Screen, cell_centre, deep_floor, mix, noise, sectors, tile_of  # noqa: E402
+from newmap_engine import MAX_FILE, Screen, cell_centre, deep_floor, sectors, tile_of  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACKAGE, FEATURE = "dw.newmaps.factory", "factory"
@@ -56,6 +60,8 @@ LOADING_ROW, LOADING_NAME = 69, 30    # the arrival card says Gear Savanna: row 
 BGM_ROW, BGM, BGM_PSTAT = 152, 0x16, 0    # FACT01's music: its 5D operand and pstat 0xF5 (asserted)
 MH_BUFFER, MH_BUDGET = 0x61A8, 180    # MAPHEAD_SCRIPT_BUFFER; the factory's sections must also fit 1.5's tail
 PREVIEWS = os.path.join(ROOT, "build-debug", "newmap", "factory")   # main() follows --build
+ART = os.path.join(ROOT, "art", "newmaps", "factory_%d.png")        # tools/paint_factory.py; screen i is %d = i + 1
+MIN_GROUND_IOU = 0.75                 # painted art must show ground where the scene has ground
 STOCK_FILLER = bytes.fromhex("fb00b400")  # a free row's MAPHEAD section binds script 180 (docs/GAME.md 3.11)
 
 # The entrance. Gear Savanna's dead-end screen with the signs (GIAS09): past the campfire and its bucket the grass
@@ -73,6 +79,9 @@ VP = np.array([0.0, -5600.0, -7400.0])    # the glade's camera
 VR = np.array([0.0, 0.0, -1500.0])
 H_PROJ = 927
 LIGHTS = [(0, 170, -30, 150, 150, 160), (1, 1, 1, 0, 0, 0), (1, 1, 1, 0, 0, 0)]   # a cooler key light than the glade's
+SUN = np.array([0.15, 1.0, 0.35]) / np.linalg.norm([0.15, 1.0, 0.35])   # the guide's light: overhead work lights,
+                                     # short shadows falling away from the camera (the glade's low sun cast the side
+                                     # walls' shadows across the floor, and the painter filled them with crates)
 REGIONS = (3, -1, -1, -1, -1, -1, -1, -1)  # A0 = machines (docs/GAME.md 3.3)
 
 LABELS = ("floor", "grate", "machine", "pipe", "wall", "crate")
@@ -227,12 +236,12 @@ def void(x, z, door):
 
 def albedo_fn(grates, door):
     def albedo(x, z):
-        """Flat guide colours: worn concrete plates with dark seams and oil stains, grates, the void."""
+        """Flat guide colours: concrete plates with dark seams, grates, the void. No stains: the painter read the
+        guide's blotches as objects and painted rust-red stains that taught the classifier orange crates are floor."""
         col = np.zeros(np.shape(x) + (3,))
         col[:] = (114, 112, 104)
         seam = (np.abs((x + 200) % 400 - 200) > 188) | (np.abs((z + 200) % 400 - 200) > 188)
         col[seam] = (86, 84, 78)
-        col = mix(col, np.array([88, 80, 66]), np.clip((noise(x, z, 900, 4, 31) - 0.58) / 0.08, 0, 1) * 0.7)
         g = in_rects(x, z, grates)
         col[g] = np.where(((x[g] % 60) < 24)[..., None], (46, 48, 50), (70, 72, 74))
         col[void(x, z, door)] = (30, 29, 28)
@@ -273,7 +282,7 @@ def make_screen(i):
     return Screen(name=NAMES[i].lower(), row=ROWS[i], vp=VP, vr=VR, h=H_PROJ, grid=GRID, paint=PAINT, lights=LIGHTS,
                   labels=LABELS, ground=GROUND, mats=MATS, flat=FLAT, fg_mats=("machine", "pipe"), painted_props=(),
                   floor=floor_fn(door), strips=strips, warps=warps(i), records=[], regions=REGIONS,
-                  albedo=albedo_fn(grates, door), floor_label=floor_label_fn(grates, door))
+                  albedo=albedo_fn(grates, door), floor_label=floor_label_fn(grates, door), sun=SUN)
 
 
 SCREENS = [make_screen(i) for i in range(4)]
@@ -303,10 +312,23 @@ def partner_at(x, z, rot):
     return (x + 200, z) if rot <= 0x600 else (x, z - 200) if rot <= 0xA00 else (x - 200, z)
 
 
+def strip_targets(i):
+    """{strip value: (x, z)}: the point on each strip that verify_factory.py walks onto (spec.json). The forward one
+    is the doorway's first row: painted art may end the doorway's floor short of the scene's z 1900."""
+    door = SCENES[i]()[2]
+    return {110: (ENTRY_X, BACK_STRIP_Z - 150), **({112: (int(door[0]), ZB + 50)} if door else {})}
+
+
 def check_screen(i, grid):
-    """Every spawn (and the partner beside it) is floor, every strip is reachable from both, and on a production
-    floor the gap is exactly 3 cells wide and the only way to the forward strip."""
+    """Every record position, spawn (and the partner beside it) and strip target is walkable, every strip is reachable
+    from both spawns, and on a production floor the gap is exactly 3 cells wide, so exactly one column passes (the
+    guardian's), and the only way to the forward strip."""
     scr = SCREENS[i]
+    for rec in scr.records:
+        x, _, z = struct.unpack_from("<3h", rec, 4)              # species, type, then the position
+        assert grid[cell(x, z)] == 0, "%s: the record at (%d, %d) must stand on floor" % (NAMES[i], x, z)
+    for value, (x, z) in strip_targets(i).items():
+        assert grid[cell(x, z)] == value, "%s: strip %d's target (%d, %d) must be on the strip" % (NAMES[i], value, x, z)
     s0 = cell(SPAWN0[0], SPAWN0[2])
     spots = [(SPAWN0[0], SPAWN0[2], 0x800)]
     if i < 3:
@@ -330,6 +352,10 @@ def check_screen(i, grid):
     line = SCENES[i]()[4]
     if line:
         rows = [r for r in range(100) if line["z"][0] <= cell_centre(0, r)[1] <= line["z"][1]]
+        free = grid[rows] != 0x80                    # the tamer's centre needs a free cell either side (GAME.md 3.9)
+        passable = [c for c in range(1, 99) if free[:, c - 1:c + 2].all()]
+        mid = tile_of((line["gap"][0] + line["gap"][1]) / 2, 0)[0]
+        assert passable == [mid], "%s: the gap must have exactly one passable column, %d (has %s)" % (NAMES[i], mid, passable)
         want = set(np.nonzero(grid[rows[len(rows) // 2]] != 0x80)[0])
         assert len(want) == 3 and max(want) - min(want) == 2 and \
             all(line["gap"][0] < cell_centre(c, 0)[0] < line["gap"][1] for c in want), \
@@ -341,14 +367,49 @@ def check_screen(i, grid):
             "%s: the gap must be the only way to the forward strip" % NAMES[i]
 
 
+def painted_map(i, rgb):
+    """What painted art (backdrop crop) shows per pixel (E.classify), and the IoU of its ground with the scene's."""
+    import cv2
+    scr = SCREENS[i]
+    lab_map = E.labels(scr, SCENES[i]()[0])
+    painted = E.classify(scr, rgb, lab_map)
+    # A flush grate's rim: classify's blurred colour reads the mid-tone seam between dark grate and light concrete as
+    # machine, a ring that walled every grate in. Within 5 px of both scene floor and scene grate, the scene's label holds.
+    near = [cv2.dilate((lab_map == c).astype(np.uint8), np.ones((11, 11), np.uint8)).astype(bool) for c in scr.ground]
+    painted = np.where(near[0] & near[1] & np.isin(lab_map, scr.ground), lab_map, painted)
+    # A painted line 1-2 px thick on the floor (a grate's lip, a seam) is not an obstacle, but lying along a cell row it
+    # takes three of the nine foot samples and walls the row (AFAC3 under its grate): on scene ground, what a 3x3
+    # opening removes from the non-ground mask is the scene's label again.
+    solid = ~np.isin(painted, scr.ground)
+    thin = solid & ~cv2.morphologyEx(solid.astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)).astype(bool)
+    painted = np.where(thin & np.isin(lab_map, scr.ground), lab_map, painted)
+    gl, pg = np.isin(lab_map, scr.ground), np.isin(painted, scr.ground)
+    return painted, (gl & pg).sum() / (gl | pg).sum()
+
+
 @functools.lru_cache(None)
 def built(i):
-    """(prims, grid, MAP bytes, TFS bytes, palette indices, day CLUT) of screen i, from the flat guide."""
+    """Screen i: prims, grid, map/tfs bytes, idx and day (backdrop and CLUT), rects (foreground sprites), n8 (their
+    texture pages, MAP_ENTRIES' TIM count), iou (None when flat). From its painted art when there is one (classify,
+    ground IoU, foreground sprites, collision fitted to the art), else from the flat guide."""
     scr, prims = SCREENS[i], SCENES[i]()[0]
-    grid, _ = E.collision(scr, prims)
-    rgb = E.guide(scr, prims)
-    idx, day = E.quantise(rgb)
+    painted = fg = iou = None
+    if os.path.exists(ART % (i + 1)):
+        art = Image.open(ART % (i + 1)).convert("RGB")
+        assert art.size == (scr.pbw, scr.pbh), "%s must be %dx%d (the paint frame)" % (ART % (i + 1), scr.pbw, scr.pbh)
+        rgb = np.asarray(art, np.float32)[scr.crop:scr.crop + scr.bh]
+        painted, iou = painted_map(i, rgb)
+        assert iou >= MIN_GROUND_IOU, "%s does not match the scene (ground IoU %.3f < %.2f): repaint it" \
+            % (ART % (i + 1), iou, MIN_GROUND_IOU)
+        fg = E.foreground_pixels(scr, prims, painted)
+    else:
+        rgb = E.guide(scr, prims)
+    grid, order = E.collision(scr, prims, painted, fg)
+    idx, day = E.quantise(rgb, painted)
     assert not (day[idx] == 0).any()
+    rects, pages = E.build_sprites(scr, fg, order, idx, prims) if fg is not None else ([], [])
+    if rects:                                        # cells the finished sprites would draw wrong
+        grid[E.order_errors(scr, grid, fg, order, rects)] = 0x80
     try:
         check_screen(i, grid)
     except AssertionError:                           # show what failed
@@ -357,9 +418,11 @@ def built(i):
         Image.fromarray(overlay(scr, grid, pal(day)[idx])).save(path)
         print("collision overlay of the failed screen: %s" % path)
         raise
-    mapb, tfsb = E.build_map(scr, grid), E.build_tfs(scr, idx, [day])
+    tims = [E.build_tim(pg, k, day) for k, pg in enumerate(pages)]
+    mapb = E.build_map(scr, grid, tims, E.build_objects(rects) if rects else b"")
+    tfsb = E.build_tfs(scr, idx, [day])
     assert len(mapb) <= MAX_FILE and len(tfsb) <= MAX_FILE
-    return prims, grid, mapb, tfsb, idx, day
+    return dict(prims=prims, grid=grid, map=mapb, tfs=tfsb, idx=idx, day=day, rects=rects, n8=len(tims), iou=iou)
 
 
 def dg_script(i):
@@ -383,7 +446,7 @@ def layout():
     """[(name, MMM.DAT sector, bytes)]: AFAC1.MAP, AFAC1.TFS, ... AFAC4.TFS, then the DG scripts, sector-aligned."""
     out, at = [], 0
     for i in range(4):
-        for ext, blob in (("MAP", built(i)[2]), ("TFS", built(i)[3])):
+        for ext, blob in (("MAP", built(i)["map"]), ("TFS", built(i)["tfs"])):
             out.append(("%s.%s" % (NAMES[i], ext), at, blob))
             at += sectors(blob)
     for i in range(4):
@@ -416,16 +479,27 @@ def overlay(scr, grid, rgb):
 
 
 def previews(out):
-    """Per screen: guide.png (the painter's input, paint frame), backdrop_day.png, collision_overlay.png; spec.json."""
+    """The painter's inputs, in the paint frame: guide_<n>.png and labels_<n>.png (scene label per pixel), written
+    first so a screen whose art fails can be repainted. Per screen: backdrop_day.png and collision_overlay.png
+    (foreground sprite pixels tinted magenta); spec.json."""
+    os.makedirs(out, exist_ok=True)
+    for i, scr in enumerate(SCREENS):
+        prims = SCENES[i]()[0]
+        Image.fromarray(E.guide(scr, prims, frame=PAINT).astype(np.uint8)).save(os.path.join(out, "guide_%d.png" % (i + 1)))
+        Image.fromarray(E.labels(scr, prims, PAINT)).save(os.path.join(out, "labels_%d.png" % (i + 1)))
     spec = dict(host=dict(row=HOST["row"], exit=HOST["warp"], spawn=HOST["spawn"][:3], save_exit=HOST["save_exit"],
                           file=HOST["file"]), screens=[])
     for i, scr in enumerate(SCREENS):
-        prims, grid, mapb, tfsb, idx, day = built(i)
+        b = built(i)
+        grid, mapb, tfsb, idx, day = b["grid"], b["map"], b["tfs"], b["idx"], b["day"]
         d = os.path.join(out, scr.name)
         os.makedirs(d, exist_ok=True)
-        Image.fromarray(E.guide(scr, prims, frame=PAINT).astype(np.uint8)).save(os.path.join(d, "guide.png"))
         Image.fromarray(pal(day)[idx]).save(os.path.join(d, "backdrop_day.png"))
-        Image.fromarray(overlay(scr, grid, pal(day)[idx])).save(os.path.join(d, "collision_overlay.png"))
+        ov = pal(day)[idx].astype(float)
+        for s in b["rects"]:
+            u, v, w, h = s["rect"]
+            ov[v:v + h, u:u + w][s["mask"]] = ov[v:v + h, u:u + w][s["mask"]] * 0.5 + np.array([127, 0, 127])
+        Image.fromarray(overlay(scr, grid, ov)).save(os.path.join(d, "collision_overlay.png"))
         _, _, door, walk_at, line = SCENES[i]()
         via = []
         if line:                                     # straight through the gap's middle column
@@ -434,13 +508,17 @@ def previews(out):
         spec["screens"].append(dict(
             row=scr.row, name=NAMES[i], spawn=[[int(v) for v in scr.warps[:3, w]] if scr.warps[4, w] >= 0 else None
                                                for w in range(3)],
-            strip_back=(ENTRY_X, BACK_STRIP_Z - 150), strip_fwd=(int(door[0]), ZB + 250) if door else None, via=via,
+            strip_back=strip_targets(i)[110], strip_fwd=strip_targets(i).get(112), via=via,
             walk=[deep_floor(grid, w) for w in walk_at],
             camera=dict(vp=VP.tolist(), vr=VR.tolist(), h=H_PROJ, gw=GRID[0], gh=GRID[1]),
             backdrop=os.path.join(d, "backdrop_day.png")))
-        print("%s: walkable cells %d, strips %s, colours %d, MAP %d B, TFS %d B (%d sectors)"
-              % (NAMES[i], (grid == 0).sum(), {v: int((grid == v).sum()) for v in scr.strips}, len(np.unique(idx)),
-                 len(mapb), len(tfsb), sectors(mapb) + sectors(tfsb)))
+        if b["rects"]:                               # Field.loaded_files checks the sprites are live
+            spec["screens"][-1]["fg"] = dict(count=len(b["rects"]))
+        print("%s: %s, walkable cells %d, strips %s, colours %d, foreground sprites %d (%d pages), MAP %d B, TFS %d B "
+              "(%d sectors)" % (NAMES[i], "flat guide" if b["iou"] is None else "painted, ground IoU %.3f" % b["iou"],
+                                (grid == 0).sum(), {v: int((grid == v).sum()) for v in scr.strips},
+                                len(np.unique(idx)), len(b["rects"]), b["n8"], len(mapb), len(tfsb),
+                                sectors(mapb) + sectors(tfsb)))
     with open(os.path.join(out, "spec.json"), "w") as fh:
         json.dump(spec, fh, indent=1)
 
@@ -576,7 +654,7 @@ def main():
                                                 hexs(old), hexs(new)))
     patches = []
     for i, row in enumerate(ROWS):
-        entry = NAMES[i].encode().ljust(10, b"\0") + bytes([0, 0, FLAGS, 0, 0, LOADING_NAME])
+        entry = NAMES[i].encode().ljust(10, b"\0") + bytes([built(i)["n8"], 0, FLAGS, 0, 0, LOADING_NAME])
         patches.append(("MAP_ENTRIES[%d] = %s" % (row, NAMES[i]), patch("main_exe", MAP_ENTRIES + row * 16, bytes(16), entry)))
     dg_base = files["DG.SCN"][0] * 2048
     patches.append(("DG table[%d..%d]: the screens' scripts in MMM.DAT" % (SCRIPTS[0], SCRIPTS[-1] + 1),

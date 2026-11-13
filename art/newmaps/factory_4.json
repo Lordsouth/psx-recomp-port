@@ -1,0 +1,62 @@
+{
+ "screen": 4,
+ "name": "AFAC4",
+ "seeds": {
+  "qwen": 2,
+  "z": 2
+ },
+ "models": {
+  "qwen": "qwen-image-edit-2511-Q4_K_S.gguf",
+  "lora": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+  "z_image": "z_image_turbo_int8_convrot.safetensors"
+ },
+ "passes": {
+  "qwen": {
+   "size": [
+    1152,
+    960
+   ],
+   "steps": 4,
+   "prompt": "This is a rough colour blockout of a video game screen seen from above at an angle. Render it as a finished, detailed 3D scene: pre-rendered 1999 PlayStation field-map CG of an abandoned factory interior, machines still running, dust and dim work lights, no people. The light grey floor with dark seams is worn concrete plates; the dark striped patches are steel floor grates; the khaki blocks and cylinders are heavy industrial machines, presses, furnaces and tanks, and the dark blue-grey cylinders on them are pipes and exhaust stacks; the dark blocks along the sides and the back are the factory's walls, with two pipe runs along the back wall, which is solid, with no doorway; the near-black is darkness beyond the walls. The open floor stays open, flat and empty, right up to the plain walls, with nothing added on it: no crates, no boxes. Keep the outline, size and position of every shape exactly; only replace the flat colours with detailed realistic materials. No characters, no text."
+  },
+  "z": {
+   "size": [
+    1152,
+    960
+   ],
+   "start_step": 4,
+   "steps": 8,
+   "prompt": "Photorealistic pre-rendered 1999 PlayStation field-map CG of an abandoned factory interior, machines still running, dust and dim work lights, no people, seen from a high fixed camera. A worn concrete floor of square plates with dark seams and faint grey grime, steel floor grates, heavy rusted industrial machines, presses, furnaces and tanks with pipes and exhaust stacks, grimy concrete walls with pipe runs; the open floor between them is empty and flat. Dim warm work lights, dusty air, muted greys and rust browns, fine film grain. Same layout and shapes as the input picture."
+  },
+  "textures": {
+   "concrete": {
+    "seed": 4,
+    "prompt": "Top-down photograph of a concrete floor texture filling the whole frame: worn grey industrial concrete with fine grit, hairline cracks and faint scuffs, flat even light, no shadows, no objects, uniform pattern, seamless tileable texture.",
+    "label": "floor",
+    "texel": 1.5,
+    "detail": 0.6
+   },
+   "steel": {
+    "seed": 4,
+    "prompt": "Top-down photograph of a steel floor plate texture filling the whole frame: worn dark grey diamond tread steel plate with scratches, grime and spots of rust, flat even light, no shadows, no objects, uniform pattern, seamless tileable texture.",
+    "label": "grate",
+    "texel": 1.0,
+    "detail": 0.6
+   }
+  }
+ },
+ "grade": {
+  "strength": 0.5,
+  "lab_mean": [
+   74.9,
+   124.9,
+   135.8
+  ],
+  "lab_std": [
+   65.4,
+   14.4,
+   14.7
+  ]
+ },
+ "ground_iou": 0.876
+}

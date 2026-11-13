@@ -557,7 +557,37 @@ Four screens on rows 240-243, walked in a line, built by `tools/gen_factory.py` 
   from z -4000 to about 1950), the way back along the bottom edge round x 0, the way on a doorway in the back wall.
   AFAC1 is an open entry hall; AFAC2 and AFAC3 each have a line of machinery wall to wall with one gap exactly three cells
   wide, the doorway straight behind it, so a guardian on the gap's middle column holds the way; AFAC4 is a sparse chamber
-  with no way on and open floor round (0, 600) for the boss. The art is the flat guide until it is painted.
+  with no way on and open floor round (0, 600) for the boss. The guide is lit from overhead (the scenes' `SUN`), not by
+  the glade's low sun, and its floor has no stains: the painter filled the long wall shadows with invented crates and
+  turned the stain blotches into objects and rust-red puddles, which taught the classifier that orange crates are floor.
+- **Painted art.** `tools/paint_factory.py` paints each guide into `art/newmaps/factory_<n>.png` (+ `.json`: seeds,
+  models, prompts, textures, grade, ground IoU), importing the glade painter's passes from `paint_newmap.py`:
+  Qwen-Image-Edit 2511 renders the blockout, Z-Image-Turbo repaints it from step 4 of 8 (factory prompts: a
+  pre-rendered 1999 PlayStation field map of an abandoned factory interior, machines still running, dust and dim work
+  lights, no people; the doorways lit, or the painter makes them dark corridors that classify as wall and lose their
+  warp strip); a concrete and a steel-plate texture (Z-Image, made once, shared) are laid on the painted floor and
+  grates in the camera's perspective; the Lab mean/std is pulled half way toward the stock interiors'. It differs from
+  the glade's recipe in three ways. There is no foliage pass: that pass exists to bring leaves to the game's scale, and
+  the factory has none. There is no per-material tone: the glade's tone moves grass and earth toward the Native Forest
+  turf, and passes 1-2 already paint grey metal and concrete well. The grade target is the interiors (the 107 TFS files
+  of the 110 rows with flag 0x40, CLUT 0, pooled: L 74.9 +/- 65.4, a 124.9 +/- 14.4, b 135.8 +/- 14.7, measured as the
+  glade's forest numbers were), not Factorial Town: what an indoor screen in this game looks like, rather than one
+  town's palette. Only those six numbers come from the disc.
+- **Art checks.** `gen_factory.py` reads the art when it exists and fails loudly otherwise: the art must be the paint
+  frame's size (768x640), its ground IoU against the scene at least 0.75, and the collision is fitted to it (the
+  glade's rule: ground painted under 7 of 9 foot samples), with the machines and pipes it shows cut into foreground
+  sprites so characters walk behind them. Then every record position, spawn and partner spot is floor, the point the
+  test walks onto on each strip is still that strip (the forward one is the doorway's first row: the painter may end a
+  doorway's floor short of the scene's), and each production floor's gap still has exactly one passable column, the
+  guardian's. Without art a screen uses its flat guide. Two corrections to the classifier's map, on scene ground only
+  (`gen_factory.painted_map`; the engine and the glade are untouched): within 5 px of both scene floor and scene grate
+  the scene's label holds, because the blurred-colour feature read every flush grate's seam as machine and walled the
+  grates in; and non-ground lines 1-2 px thick (a 3x3 opening removes them) are ground again, because a grate's painted
+  lip lying along a cell row took three of the nine foot samples and walled the row.
+- **The picks** (sweeps of seeds 1-4 per screen, AFAC2 also 4-9 on earlier prompts; `paint_factory.SEEDS`): AFAC1 4:4,
+  AFAC2 3:3, AFAC3 2:2, AFAC4 2:2 (qwen:z), ground IoU 0.866, 0.893, 0.846, 0.876. Each passed the art checks and showed
+  the scene's props where they stand; most others lost a doorway strip, a spawn or AFAC4's arena to invented clutter.
+  Re-running the painter reproduces each pick bit for bit.
 - **Warp slots.** Slot 0 is the arrival walking forward (0, -3500), and cell 110 leads back to the previous screen's exit 2
   (AFAC1: the host's slot 1). Slot 1 is the host gate's spawn, where a save will resume (no cell 111). Slot 2 is the
   arrival walking back, two rows in front of the doorway, and cell 112 leads on to the next screen's exit 0. AFAC4 has no
@@ -577,6 +607,10 @@ Four screens on rows 240-243, walked in a line, built by `tools/gen_factory.py` 
   screen against its backdrop (`Field.slivers`: NCC at least 0.9, lit; measured 1.000 on both edges of all four). With
   `dw_tfs_read_served` made to return 0 in a scratch build, `walk --wide` failed both edges on AFAC1 (NCC 0.53 and 0.26),
   so the check sees the sector fallback.
+- **What ran on the painted screens** [run 2026-11-13]: `walk` PASS (77 checks, now also each screen's foreground
+  sprites loaded as map objects and their texels in VRAM) and `walk --wide` PASS (both edges NCC 1.000 on all four).
+  Two earlier `walk` runs failed on walls that existed only in the classifier's map (the grate rims, a grate's 1 px
+  lip along a cell row), which led to the two corrections above.
 
 ---
 

@@ -40,6 +40,7 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_newmap as G  # noqa: E402
+import newmap_engine as E  # noqa: E402
 
 QWEN_PROMPT = (
     "This is a rough colour blockout of a video game screen seen from above at an angle. Render it as a finished, "
@@ -81,21 +82,22 @@ TURF_RGB, EARTH_RGB = (100, 122, 66), (122, 102, 72)   # stock Native Forest tur
 FLECKS = dict(density=0.34, brown=(100, 72, 48), green=(52, 74, 38))
 
 
-def grade(rgb, k=GRADE):
-    """Move the image's Lab mean/std a fraction k of the way to the stock forest maps'."""
+def grade(rgb, k=GRADE, target=FOREST_LAB):
+    """Move the image's Lab mean/std a fraction k of the way to `target` (default: the stock forest maps')."""
     import cv2
     lab = cv2.cvtColor(rgb.astype(np.uint8), cv2.COLOR_RGB2LAB).astype(np.float32)
     m, s = lab.reshape(-1, 3).mean(0), lab.reshape(-1, 3).std(0)
-    tm, ts = m + (FOREST_LAB[0] - m) * k, s + (FOREST_LAB[1] - s) * k
+    tm, ts = m + (target[0] - m) * k, s + (target[1] - s) * k
     return cv2.cvtColor(np.clip((lab - m) / s * ts + tm, 0, 255).astype(np.uint8), cv2.COLOR_LAB2RGB)
 
 
 # ---- ground textures -------------------------------------------------------
-def floor_xz(scale):
+def floor_xz(scale, scr=None):
     """World x, z of the floor point under each paint-frame pixel (rendered at `scale`x)."""
-    d = G.rays(G.PBW * scale, G.PBH * scale, scale, G.PAINT)
-    t = np.where(d[..., 1] > 1e-6, -G.VP[1] / np.maximum(d[..., 1], 1e-6), np.nan)
-    p = G.VP + d * t[..., None]
+    scr = scr or G.GLADE
+    d = E.rays(scr, scr.pbw * scale, scr.pbh * scale, scale, scr.paint)
+    t = np.where(d[..., 1] > 1e-6, -scr.vp[1] / np.maximum(d[..., 1], 1e-6), np.nan)
+    p = scr.vp + d * t[..., None]
     return p[..., 0], p[..., 2]
 
 
@@ -110,28 +112,36 @@ def sample(tex, x, z, texel, rot=0.0, off=(0.0, 0.0)):
     return cv2.remap(tex, np.nan_to_num(u).astype(np.float32), np.nan_to_num(v).astype(np.float32), cv2.INTER_LINEAR)
 
 
-def ground_detail(tex, texel, ss=3):
+def ground_detail(tex, texel, ss=3, scr=None):
     """Mean-1 luminance detail of `tex` laid on the floor, per paint-frame pixel (ss x ss supersampled)."""
     import cv2
-    x, z = floor_xz(ss)
+    scr = scr or G.GLADE
+    x, z = floor_xz(ss, scr)
     smp = 0.6 * sample(tex, x, z, texel) + 0.4 * sample(tex, x, z, texel * 1.7, rot=0.9, off=(300, 700))
-    smp = smp.reshape(G.PBH, ss, G.PBW, ss, 3).mean((1, 3))
+    smp = smp.reshape(scr.pbh, ss, scr.pbw, ss, 3).mean((1, 3))
     ratio = smp / np.maximum(cv2.GaussianBlur(smp, (0, 0), 6), 1)
     return np.repeat(ratio.mean(-1, keepdims=True), 3, -1)
 
 
-def texture_ground(P, grass, dirt, lab_map):
-    """Grass detail where the painting shows grass on scene ground, dirt detail on its earth."""
+def texture_ground(P, lab_map, layers, scr=None):
+    """Each layer (label, texture, texel, detail) lays its texture's detail where the painting shows that
+    label on scene ground: for the glade, grass on its grass and dirt on its earth."""
     import cv2
-    cls = G.classify(P, lab_map)
-    ground = np.isin(lab_map, G.GROUND) & np.isin(cls, G.GROUND)
+    scr = scr or G.GLADE
+    cls = E.classify(scr, P, lab_map)
+    ground = np.isin(lab_map, scr.ground) & np.isin(cls, scr.ground)
     k3 = np.ones((3, 3), np.uint8)
-    mg, md = [cv2.GaussianBlur(cv2.erode((ground & (cls == c)).astype(np.uint8), k3).astype(np.float32),
-                               (0, 0), 1.5)[..., None] for c in (0, 5)]
     base = cv2.GaussianBlur(P, (0, 0), 1.2)            # the painter's soft strokes give way to the texture
-    tg = base * (1 + (ground_detail(grass, TEXEL) - 1) * DETAIL["grass"])
-    td = base * (1 + (ground_detail(dirt, TEXEL * 1.3) - 1) * DETAIL["dirt"])
-    return P * (1 - mg - md) + tg * mg + td * md
+    keep, out = 1, []
+    for c, tex, texel, detail in layers:
+        m = cv2.GaussianBlur(cv2.erode((ground & (cls == c)).astype(np.uint8), k3).astype(np.float32),
+                             (0, 0), 1.5)[..., None]
+        keep = keep - m
+        out.append((base * (1 + (ground_detail(tex, texel, scr=scr) - 1) * detail), m))
+    res = P * keep
+    for t, m in out:
+        res = res + t * m
+    return res
 
 
 def tone(rgb, lab_map):
@@ -173,15 +183,36 @@ def masked(g, mask_name):
     return g
 
 
+def passes_12(comfy, work, guide_name, seeds, cache, qwen_prompt=QWEN_PROMPT, z_prompt=Z_PROMPT):
+    """Passes 1-2 on the guide (an input-folder name): Qwen-Image-Edit renders it, Z-Image repaints that.
+    -> the WORK-sized result's path. Each pass runs once per seed per `cache`."""
+    q = os.path.join(work, "qwen_%d.png" % seeds["qwen"])
+    z = os.path.join(work, "z_%d_%d.png" % (seeds["qwen"], seeds["z"]))
+    if ("pass", q) not in cache:
+        comfy.run(comfy.qwen_edit_graph(qwen_prompt, [guide_name], seeds["qwen"], *WORK), q, timeout=1800)
+        cache["pass", q] = True
+    if ("pass", z) not in cache:
+        comfy.run(comfy.zgraph(z_prompt, seeds["z"], *WORK, init=comfy.upload(q), start_step=Z_START), z,
+                  timeout=1800)
+        cache["pass", z] = True
+    return z
+
+
+def texture(comfy, work, name, prompt, seed, cache):
+    """A 1024x1024 ground texture made by Z-Image from `prompt`, once per `cache` (float32 RGB)."""
+    t = os.path.join(work, "tex_%s_%d.png" % (name, seed))
+    if t not in cache:
+        comfy.run(comfy.zgraph(prompt, seed, 1024, 1024), t, timeout=1800)
+        cache[t] = np.asarray(Image.open(t).convert("RGB"), np.float32)
+    return cache[t]
+
+
 def paint(comfy, work, guide_name, lab_map, seeds, cache):
     """Guide (an input-folder name) -> finished 768x640 RGB. Passes 1-2 and the textures are cached."""
     import cv2
-    q = os.path.join(work, "qwen_%d.png" % seeds["qwen"])
     z = os.path.join(work, "z_%d_%d.png" % (seeds["qwen"], seeds["z"]))
     if z not in cache:
-        comfy.run(comfy.qwen_edit_graph(QWEN_PROMPT, [guide_name], seeds["qwen"], *WORK), q, timeout=1800)
-        comfy.run(comfy.zgraph(Z_PROMPT, seeds["z"], *WORK, init=comfy.upload(q), start_step=Z_START), z,
-                  timeout=1800)
+        passes_12(comfy, work, guide_name, seeds, cache)
         big = os.path.join(work, "z_big.png")
         Image.open(z).convert("RGB").resize(FOLIAGE_WORK, Image.LANCZOS).save(big)
         m = cv2.erode((lab_map == 2).astype(np.uint8), np.ones((9, 9), np.uint8))
@@ -189,23 +220,21 @@ def paint(comfy, work, guide_name, lab_map, seeds, cache):
         mp = os.path.join(work, "foliage_mask.png")
         Image.fromarray(np.stack([m] * 3, -1)).save(mp)
         cache[z] = (comfy.upload(big), comfy.upload(mp))
-    for name, (prompt, seed) in TEXTURES.items():
-        t = os.path.join(work, "tex_%s_%d.png" % (name, seed))
-        if t not in cache:
-            comfy.run(comfy.zgraph(prompt, seed, 1024, 1024), t, timeout=1800)
-            cache[t] = np.asarray(Image.open(t).convert("RGB"), np.float32)
+    grass, dirt = [texture(comfy, work, n, *TEXTURES[n], cache) for n in ("grass", "dirt")]
     f = os.path.join(work, "foliage_%d_%d_%d.png" % (seeds["qwen"], seeds["z"], seeds["foliage"]))
     init, mask = cache[z]
     comfy.run(masked(comfy.zgraph(FOLIAGE_PROMPT, seeds["foliage"], *FOLIAGE_WORK, init=init,
                                   start_step=FOLIAGE_START), mask), f, timeout=1800)
     P = np.asarray(Image.open(f).convert("RGB").resize((G.PBW, G.PBH), Image.LANCZOS), np.float32)
-    grass, dirt = [cache[os.path.join(work, "tex_%s_%d.png" % (n, TEXTURES[n][1]))] for n in ("grass", "dirt")]
-    return tone(grade(np.clip(texture_ground(P, grass, dirt, lab_map), 0, 255)), lab_map)
+    layers = ((0, grass, TEXEL, DETAIL["grass"]), (5, dirt, TEXEL * 1.3, DETAIL["dirt"]))
+    return tone(grade(np.clip(texture_ground(P, lab_map, layers), 0, 255)), lab_map)
 
 
-def ground_iou(rgb, lab_map):
-    painted = G.classify(rgb.astype(np.float32), lab_map)
-    gl, pg = np.isin(lab_map, G.GROUND), np.isin(painted, G.GROUND)
+def ground_iou(rgb, lab_map, scr=None):
+    """Intersection over union of the ground the scene has (lab_map) and the ground the painting shows."""
+    scr = scr or G.GLADE
+    painted = E.classify(scr, rgb.astype(np.float32), lab_map)
+    gl, pg = np.isin(lab_map, scr.ground), np.isin(painted, scr.ground)
     return (gl & pg).sum() / (gl | pg).sum()
 
 
