@@ -20,7 +20,7 @@ Metalbanana and six chips once, all or nothing: with a full bag it takes nothing
 says so. Saving inside the factory works, and the card loads on the stock game. The
 1.5 edition follows; for now the factory is off while 1.5 is on.
 
-**Every mod now works with Digimon World 1.5.** Expanded Roster, Hidden Glade,
+**Every other mod now works with Digimon World 1.5.** Expanded Roster, Hidden Glade,
 Guaranteed Item Drops and Evolution Unbound switch to versions made for 1.5 while
 it is on, the new Digimon included, and back when you untick 1.5. On 1.5 the roster
 makes the same 51 Digimon raisable, written into 1.5's own tables; Machinedramon is

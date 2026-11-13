@@ -243,7 +243,8 @@ class Rec(NamedTuple):
 GUARD_TRIGGER = {241: 627, 242: 628}  # set when that floor's guardian is beaten (docs/GAME.md 4.8)
 REWARD_TRIGGER = 629                 # set when the boss's reward is paid, all of it
 LINES = {92: "Intruder detected. Engage!", 41: "None shall pass this line!", 137: "This floor belongs to us!",
-         172: "The deep works are mine!", 115: "This factory obeys me alone."}
+         172: "The deep works are mine!", 115: "This factory obeys me alone.",
+         122: "Keep clear of the machines.", 123: "Not my shift. Ask Vice."}
 RANGE = dict(regular=800, guardian=600, boss=1200)   # trackingRange: how near it turns to face you (followMode 2);
                                                      # it starts nothing
 HEAP_BUDGET = 152000                 # per screen, Vice's combined model weight (docs/GAME.md 3.11)
@@ -653,15 +654,16 @@ def boss_section(rec, at):
 
 
 def dg_script(i):
-    """Screen i's DG script: the section table, the arrival section (0xFE) and a talk section per fighter. Every
+    """Screen i's DG script: the section table, the arrival section (0xFE) and a talk section per record (a worker's is one line, never run: autotalk 2). Every
     screen's arrival clears 0xFA: a flee lands on the screen before, AFAC1 included."""
-    fighters = [r for r in CAST[ROWS[i]] if r.role != "worker"]
+    fighters = CAST[ROWS[i]]
     head = 2 + 4 * (1 + len(fighters)) + 2
     table, body = struct.pack("<HH", 0xFE, head), ARRIVAL
     for r in fighters:
         at = head + len(body)
         table += struct.pack("<HH", r.script_id, at)
-        body += boss_section(r, at) if r.role == "boss" else talk_section(ROWS[i], r)
+        body += (boss_section(r, at) if r.role == "boss" else say(r.script_id, [LINES[r.species]]) + b"\xfe\x00"
+                 if r.role == "worker" else talk_section(ROWS[i], r))
     s = struct.pack("<H", head) + table + b"\xff\xff" + body
     assert len(s) <= 0x4000
     return s

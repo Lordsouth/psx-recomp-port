@@ -97,7 +97,7 @@ feature = "factory"
 target = "disc_user"
 offset = 306542592
 file = "assets/afac1.dg"
-sha256 = "7bffcf628af464edcf0d3bb4370ff7b92513eade368a4cfe8dc637e412d1837a"
+sha256 = "d44ac74bff958a97676622a75a540fcb7a4038c73f86cba18db129389410f6b6"
 
 # AFAC2.DG at MMM.DAT sector 1012 (LBA 149680)
 [[overlay]]

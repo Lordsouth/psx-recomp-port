@@ -270,6 +270,26 @@ def main():
         check(f.pstat(0xFA) == 0, "flee_clears_predefined: %s, pstat 0xFA reads %d on %s" % (what, f.pstat(0xFA), sc["name"]))
         settled_on(sc["row"])
 
+    def worker_confirm(i):
+        """Up to a worker and press confirm: its line shows, or nothing happens (autotalk 2); the game neither hangs
+        nor starts a fight, and the tamer walks on."""
+        w = members(i, "worker")[0]
+        n = f.npc(w["slot"])
+        x, z = n["pos"][0], n["pos"][2]
+        go((x, z - 300), lambda: near(x, z - 300, r=250), limit=60, vec=vec)
+        g.route("6:cross,20:none")
+        time.sleep(1)
+        for _ in range(10):                            # a line, if one shows, waits for a press
+            if f.gstate() != 0 or f.i32(IS_SCRIPT_PAUSED) == 1:
+                break
+            g.route("4:cross,20:none")
+        check(f.gstate() == 0 and f.i32(IS_SCRIPT_PAUSED) == 1 and screen() == screens[i]["row"],
+              "worker_confirm: confirm at the %d (slot %d): no fight, play is back in control" % (w["species"], w["slot"]))
+        p = pos(TAMER)
+        f.walk(max(vec, key=lambda d: vec[d][1]), 1)
+        q = pos(TAMER)
+        check(p is not None and q is not None and (p[0], p[2]) != (q[0], q[2]), "worker_confirm: the tamer walks on (%s to %s)" % (p, q))
+
     def lose(i):
         f.g.d.write_bytes(bytes([3]), PARTNER_LIVES)       # a loss costs a life; the last one would end in death
         f.lose(screens[i]["row"])
@@ -432,6 +452,8 @@ def main():
             for t in sc["walk"]:
                 check(go(tuple(t), lambda: near(*t), limit=60, vec=vec) and screen() == sc["row"],
                       "%s: walked to %s (at %s)" % (sc["name"], t, pos(TAMER)))
+            if i == 0 and not a.wide:
+                worker_confirm(0)
             if sc["strip_fwd"] is None:
                 continue
             if sc["via"]:
