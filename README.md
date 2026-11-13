@@ -103,6 +103,7 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 |---|---|---|
 | **Digimon World 1.5** | Capablemite's fan mod (Test Build 1.3.1) on your own disc: Veemon, Wormmon, Renamon and Guilmon lines, new eggs and special attacks. Has its own memory cards — see below | — |
 | **Hidden Glade** | A new map to explore: a quiet forest glade with a pond, painted for this port, and a secret fight, with a new exit in Native Forest — see below | Yes: on 1.5 it switches to a 1.5 edition by itself |
+| **Abandoned Factory** | A second new map: four screens of an old factory, entered through a new gap on Gear Savanna, with machine Digimon, two floor guardians and Machinedramon, who pays a one-time reward | Yes: on 1.5 it switches to a 1.5 edition by itself |
 | **Expanded Roster** | **Adds 52 Digimon.** Machinedramon fills the game's one unused slot; the other 51 — Tentomon, Myotismon, Guardromon, Gigadramon, Panjyamon, BlueMeramon, Otamamon, Gotsumon and more — are finished Digimon that were on the disc all along as enemies only. All of them become partners you can genuinely raise and evolve into — see below | Yes: on 1.5 it switches to a 1.5 edition by itself, with the 51 but not Machinedramon, whose slot is Veemon there |
 | **Trainer** | Fifteen independent toggles: never hungry, tired, sick or dead; no lifespan loss; plus the Training group below | Yes |
 | **Perfect Training** | Every training session pays the jackpot rate. The slot minigame secretly grades your reels into a reward multiplier, from 0.5x for a miss up to 10x for triple sevens — this makes every spin pay the top rate | Yes |
@@ -138,8 +139,8 @@ it in memory each time you play. Your disc file is never changed.
 * **Start a new game.** Saves from the original game may not work in 1.5.
 * **It has its own memory cards**, in `saves/dw15/`. Your normal saves in
   `saves/` are not touched, and they come back when you untick it.
-* **Every mod works with it.** Expanded Roster, Hidden Glade, Evolution Unbound
-  and Guaranteed Item Drops run 1.5 editions while 1.5 is on, made for where 1.5
+* **Every mod works with it.** Expanded Roster, Hidden Glade, the Abandoned Factory,
+  Evolution Unbound and Guaranteed Item Drops run 1.5 editions while 1.5 is on, made for where 1.5
   keeps its files and tables, without you ticking anything else. On 1.5 the roster
   adds the 51 Digimon but not Machinedramon, because 1.5 uses that slot for Veemon.
   The Native Evolution Engine steps aside for 1.5's own evolution chooser, and

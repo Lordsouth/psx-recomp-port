@@ -115,7 +115,8 @@ only room proven so far [run], or 28 pairs at 241 + 241; the windows in 2.4 stil
   1011-1014, one sector each, and each screen's arrival ran from them going in and coming back (`verify_factory.py walk`)
   [run 2026-11-13: `verify_factory.py walk`, `fights`, `boss`]. `getScript` is the only reader of `SCRIPT_OFFSET_TABLE` (`src/main/script_interp.c:647-668`), so no DG.SCN row
   is written: on 1.5, whose DG.SCN (LBA 162388) lies past MMM.DAT and whose table holds rows 222-225, no row could reach
-  MMM.DAT.
+  MMM.DAT. On 1.5 the hook serves the same ids from the same sectors to the factory's 1.5 edition, `factory-15`, and
+  each screen's arrival ran from them [run 2026-11-13: `verify_factory.py walk --dw15`, `fights --dw15`, `boss --dw15`].
 - New DG scripts at rows 223+ [run 2026-11-11, row 223]: nothing bounds a row (`src/main/script_interp.c:663-665,2810`), but the 0x2000 B table holds 2048 and rows 512+ are entry 0's bytes. A row is an offset
   from `DG.SCN`'s start, so `(148668-142589)*2048 = 12,449,792` plus the sector offset, in whole sectors, and needs
   both `table[N]` and `table[N+1]`. Never touch `table[222]`: it is the file's end and script 221's size.
@@ -395,7 +396,7 @@ blocked line keeps an NPC out of a fight (`src/main/btl.c:109`); 0x8F no drops (
 | Map Digimon | 8 records (`src/main/overworld.c:1161`); species below 0xB4 (`src/main/model.c:3369`) | Read. Count unchecked |
 | NPC models | `LOADED_DIGIMON_MODELS` holds 8 and drops the rest (`src/main/script_interp.c:2561-2571`), but `NPC_MODELS` has 5 slots (`src/main/model.c:2698`). Same species shares a slot. Index k maps to page 0x16+k/2, CLUT `((k+2)*16, 488)` (`src/main/model.c:3400-3403`) | Read. Index 4 overlaps `SBOY.TIM`'s pixels and `SYSTEM_W.TIM`'s CLUT, so 4 are clean. A sixth returns NULL [not run] |
 | Heap | `_end` to stack: 197,520 B (0x801BFB70-0x801EFF00, `src/main/main.c:3537-3538`). A map needs MMDs in whole sectors, plus bones x (0x88 + 0x52) per placed Digimon (`src/main/model.c:2829-2830`), plus 0x4800 while loading (`src/main/model.c:3299`). A failed `malloc3` reads to NULL (`src/main/model.c:3410-3414`). Only `model.c` and `std_setup.c` call it | Read. Stock free heap is 40.2 KB to 192.9 KB by screen [Horizon]. Vice's randomizer re-rolls two-group areas until combined model weight is at most 152,000, unit not stated [Vice]. The factory's screens by this formula (`heap_estimate` in `tools/gen_factory.py`, bones from `DIGIMON_DATA`, the field `model.c:2815` reads): AFAC1 56,954 B (3 workers), AFAC2 145,942 B (4 Guardromon, Giromon), AFAC3 137,578 B (4 small Mamemon, small Megadramon), AFAC4 105,280 B (Machinedramon, 78,588 B of MMD). Every model loaded, two-enemy fights were won on AFAC2 and AFAC3, and Machinedramon loaded and fought on AFAC4 [run 2026-11-13]. A Guardromon pair, a Tankmon pair and even the small Giromon (161) come to 165,550 B |
-| MAPHEAD tail | 0x6070-0x61A8: 312 B for all new sections; the glade's takes 20. Every row has a table entry to repoint. Free rows hold a filler binding script 180, a real cutscene: never ship one | Read. 1.5 puts its own new sections in the tail, up to 0x60DE; the glade's 1.5 edition goes after them |
+| MAPHEAD tail | 0x6070-0x61A8: 312 B for all new sections; the glade's takes 20. Every row has a table entry to repoint. Free rows hold a filler binding script 180, a real cutscene: never ship one | Read. On stock the glade's section is at 0x6070 and the factory's 150 B at 0x6084. 1.5 puts its own new sections in the tail, up to 0x60DE; `glade-15`'s 20 B go at 0x60DE and `factory-15`'s 150 B at 0x60F2-0x6188, which leaves 32 B. A guardian's IF jumps to an offset from MAPHEAD's start, so `factory-15`'s sections are rebuilt at 0x60F2, not copied (`tools/gen_newmap_dw15.py`): on 1.5 each beaten guardian stayed away on the way back and confirm where it stood started nothing [run 2026-11-13: `verify_factory.py fights --dw15`] |
 | DG script | 0x4000 B. No slot is free: MAPHEAD binds 1-198, cross-calls reach 199-221 | Read. Ids 227+ served from MMM.DAT by the `getScript` hook (2.3) [run 2026-11-13: `verify_factory.py walk`, `fights`, `boss`]; rows 223+ in MMM.DAT also run [run 2026-11-11] |
 
 Unknown, and not to be assumed either way:
@@ -744,6 +745,8 @@ Stock gives one item and, on a failure, says the bag is full, opens the discard 
 rb_k: 29 00 item_j 01 for each j < k, 1B FF 1A 00 text 0D 00 00 00, FE 00    take back, say the bag is full, 629 clear
 ```
 Jumps are offsets from the script's start, so the section is built knowing where it lands. With one free slot a win left the bag's 0x5B bytes as they were and 629 clear; with room, one of each item went in and 629 was set; a second win changed nothing but the bits [run 2026-11-13]. `1B FF` is the narrator's box, which stock uses for "got the item" lines; after a fight the box of `1B id` is closed (`27`), so text needs a new `1B`.
+
+On Digimon World 1.5 item 127 is named "Glimpup Gem" (its 32 B record is otherwise the same, and items 23-28 are the same six chips; `gen_newmap_dw15.py` asserts the names on the 1.5 image). So `factory-15` runs `afac4_15.dg`, whose paid line reads "Got Glimpup Gem and 6 chips!". A first win on 1.5 put item 127 in the bag, and the script AFAC4 ran held that line [run 2026-11-13: `verify_factory.py boss --dw15`].
 
 ---
 

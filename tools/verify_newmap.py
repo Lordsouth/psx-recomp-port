@@ -22,6 +22,7 @@
           judged here. --wide does it at 21:9 with the Expanded Roster on.
           --brains N checks Battle End Freeze Fix on the win (docs/GAME.md 12.1)
     --dw15 runs a mode on Digimon World 1.5, where the glade runs its 1.5 edition
+    --with-factory also ticks the Abandoned Factory (factory-15 on 1.5), so both new maps are on
     measure (glade) a real fight: the partner evolved and set to --stats, then nothing
           poked but --heal. Presses only the finisher button. Prints how it went, judges nothing
 
@@ -70,6 +71,8 @@ WIDE = ('\n[[package]]\nid = "psx.enhancement.widescreen"\nversion = "1.0.0"\n\n
 NO_END_FIX = '\n[[feature]]\npackage_id = "dw.vanilla.qol"\nid = "end-box-fix"\nenabled = false\n'
 DROPS = ('\n[[package]]\nid = "dw.vanilla.trainer"\nversion = "1.0.0"\n\n'
          '[[feature]]\npackage_id = "dw.vanilla.trainer"\nid = "guaranteed-drops"\nenabled = true\n')
+FACTORY = ('\n[[package]]\nid = "dw.newmaps.factory"\nversion = "1.0.0"\n\n'
+           '[[feature]]\npackage_id = "dw.newmaps.factory"\nid = "factory"\nenabled = true\n')
 DW15 = ('\n[[package]]\nid = "dw.1_5"\nversion = "1.0.0"\n\n'
         '[[feature]]\npackage_id = "dw.1_5"\nid = "dw15"\nenabled = true\n')
 MAPS = {
@@ -93,6 +96,7 @@ def main():
     ap.add_argument("--wide", action="store_true", help="fight: at 21:9, with the Expanded Roster on")
     ap.add_argument("--dw15", action="store_true",
                     help="on Digimon World 1.5: the map runs its 1.5 edition, glade-15; cards live in dw15/")
+    ap.add_argument("--with-factory", action="store_true", help="the Abandoned Factory ticked too (factory-15 on 1.5)")
     ap.add_argument("--card", choices=("glade", "host"), default="glade", help="off: which saved card to load")
     ap.add_argument("--map", choices=sorted(MAPS), default="glade")
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
@@ -123,7 +127,7 @@ def main():
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
         fh.write("format_version = 2\n" if a.mode == "off" else STATE % (mp["package"], mp["package"], mp["feature"])
                  + (WIDE if a.wide else "") + (NO_END_FIX if a.no_end_fix else "") + (DROPS if a.drops else "")
-                 + (DW15 if a.dw15 else ""))
+                 + (FACTORY if a.with_factory else "") + (DW15 if a.dw15 else ""))
     card_dir = os.path.join(cards, "dw15") if a.dw15 else cards     # 1.5 keeps its own cards (dw_dw15.c)
     if a.mode == "off":                                # a copy of the card that save was left on
         shutil.rmtree(cards, ignore_errors=True)

@@ -554,7 +554,8 @@ New maps beyond the stock file table need no table rows and no overlay patches.
 ### 3.4 The Abandoned Factory (verified in game, 2026-11-12)
 
 Four screens on rows 240-243, walked in a line, built by `tools/gen_factory.py` into `mods/preloaded/packages/dw.newmaps.factory`
-(feature `factory`, plugin `dw.newmaps.factory`, `conflicts = ["dw.1_5/dw15"]` until a 1.5 edition exists).
+(feature `factory`, plugin `dw.newmaps.factory`). It has no 1.5 conflict: on 1.5 its edition `factory-15` runs in its
+place (below).
 
 - **Scenes.** Each screen is a scene of boxes, cylinders and ellipsoids that `newmap_engine.py` turns into the guide, the
   collision and the MAP/TFS, as the glade's (3.2), on the glade's camera with a 6x4 grid and one CLUT (row flag 0x40).
@@ -603,7 +604,7 @@ Four screens on rows 240-243, walked in a line, built by `tools/gen_factory.py` 
   sectors 1011-1014, served as ids 227-230 by the `getScript` hook (3.3).
   Each script is a section table: the arrival section 0xFE (`1E 00 FA 00 FE 00`, see the fights below), one talk section
   per fighter, and on AFAC4 the boss's. The MAPHEAD sections (bind the script, pstat 0xF5 = 0, `5D 16` as FACT01, the
-  screen's LOAD_DIGIMON and SET_DIGIMON ops, end; 144 B in all, of the 180 B budget) follow the glade's section at 0x6084,
+  screen's LOAD_DIGIMON and SET_DIGIMON ops, end; 150 B in all, of the 180 B budget) follow the glade's section at 0x6084,
   read from the glade's manifest. The entrance is a new exit on `GIAS09` (GAME.md 3.1). Every patch's expected bytes are read from the
   disc; the generator asserts the names are new, the MMM.DAT sectors and the MAPHEAD tail are zero, the rows and their
   MAPHEAD sections are stock, the script ids lie past DG.SCN's table (table[222] its size), the host slot is free, every spawn is
@@ -655,6 +656,25 @@ Four screens on rows 240-243, walked in a line, built by `tools/gen_factory.py` 
   of which under a third remains. With `dw_tfs_read_served` returning 0 in a scratch build, the masked check failed all
   eight edges (NCC 0.37-0.87, port 5921). Restored and rebuilt, `walk --wide` PASS with every edge at NCC 1.000 (AFAC2
   25% and 29% left out; port 5922). Then glade `fight --wide` PASS (5923) and factory `walk` PASS (5924).
+- **On 1.5** the factory runs its edition `factory-15` (4.4, 1.5 editions), written by
+  `tools/gen_newmap_dw15.py --package factory` below a marker in the manifest; `gen_factory.py` keeps that block when it
+  rewrites the part above. Every write is copied with its guard checked against 1.5. Two things differ. The MAPHEAD
+  sections go after `glade-15`'s, at 0x60F2-0x6188, and are rebuilt there by `gen_factory.mh_sections`, because AFAC2's
+  and AFAC3's guardian IF jumps to an offset from MAPHEAD's start (+0x6E: row 241's to 0x6140, row 242's to 0x6172). The
+  four row pointers move with them. AFAC4's script is `afac4_15.dg`, whose paid line names item 127 as 1.5 does, "Glimpup
+  Gem" (GAME.md 6.2). There is no DG.SCN write on either disc: the `getScript` hook serves ids 227-230 (3.3), and 1.5's
+  DG.SCN lies past MMM.DAT. The files, the cast and the entrance are the same. `check_dw15_compat.py` reports the factory
+  as `edition`, and `factory-15` co-owns the three `dw_newmaps.c` hooks.
+- **What ran on 1.5** [run 2026-11-13, ports 6632-6640]: `verify_factory.py walk --dw15`, `walk --dw15 --wide`, `saves
+  --dw15`, `off --dw15`, `fights --dw15` and `boss --dw15` PASS, the runtime logging `factory-15` "activated implicitly
+  (required by dw.newmaps.factory/factory)". The first `walk --dw15 --wide` failed both AFAC2 edges (NCC 0.74 and 0.78,
+  1-2% left out, port 6633): the screenshot showed the Guardromon standing in them on a correct backdrop, and
+  `Field.figures` had read their size from the stock `DIGIMON_DATA`, which 1.5 moves to `0x801F4300`. With `Field(...,
+  dw15=True)` reading 1.5's table it PASS, every edge NCC 1.000, AFAC2 25% and 29% left out as on stock (port 6634). `fights --dw15` beat each guardian, walked on to the next screen and back,
+  found it gone, walked back through its gap and pressed confirm where it stood: no fight, play in control (the moved IF
+  targets). `boss --dw15` read "Got Glimpup Gem and 6 chips!" in the script AFAC4 ran and found item 127 in the bag. Both
+  new maps on together: `walk --dw15 --with-glade` and `verify_newmap.py run1 --map glade --dw15 --with-factory` PASS.
+  After them, on stock: `walk`, `fights` and `boss` PASS (ports 6641-6643), the new confirm and paid-line checks included.
 
 ---
 
@@ -1094,8 +1114,8 @@ during the BIOS load that byte is part of the block copied to `0x801F0204`.
 
 **Conflicts.** `tools/check_dw15_compat.py` (§7.5) compares every guarded
 write, every `game.toml` hook and the ranges the widescreen plugins depend on
-against the 1.5 disc. Six features cannot run on it as they are. Five of them have
-1.5 editions that run in their place by themselves; the sixth, Battle End Freeze Fix,
+against the 1.5 disc. Seven features cannot run on it as they are. Six of them have
+1.5 editions that run in their place by themselves; the seventh, Battle End Freeze Fix,
 is built into `dw15` and gives way by itself:
 
 | Feature | Why |
@@ -1105,6 +1125,7 @@ is built into `dw15` and gives way by itself:
 | `dw.vanilla.trainer/guaranteed-drops` | 1.5 changed 138 of the `DIGIMON_DATA` drop bytes it guards. Not a conflict: `dw15-guaranteed-drops` runs in its place |
 | `dw.vanilla.evolution/native-evolution` | 1.5 changed `getFreshEvolutionTarget`, the replaced function: its first instruction jumps to 1.5's own chooser at `0x801F9940`. Not a conflict: `dw15-native-evolution`, which writes nothing and hooks nothing, runs in its place, so 1.5's chooser runs. The engine changes no behaviour yet, so nothing is lost |
 | `dw.newmaps/glade` | 1.5 moved the file table, DG.SCN and the MAPHEAD tail it writes. Not a conflict: `glade-15` runs in its place (§3.2) |
+| `dw.newmaps.factory/factory` | 1.5 fills the MAPHEAD tail it writes, and item 127, which its paid line names, is "Glimpup Gem" there. Not a conflict: `factory-15` runs in its place (§3.4) |
 | `dw.vanilla.qol/end-box-fix` | 1.5's delta owns its `BTL_REL.BIN` sectors, though not these bytes. The `dw15` feature makes the same writes itself. This one is default-on, so it gives way without being unticked (`MOD_PACKAGES.md`, Feature conflicts) |
 
 Everything else passed, widescreen included: none of its seven hooked
@@ -2035,7 +2056,7 @@ different executables.
 | `gen_qol_mods.py`, `gen_gameplay_mods.py` | the QoL and gameplay packages |
 | `gen_save_anywhere.py`, `gen_text_speed.py`, `gen_walk_speed.py` | Save Anywhere, Text Speed and Run Speed, imported by `gen_qol_mods.py`. Run alone they only verify; `--out` writes a standalone test manifest |
 | `gen_dw15_extras.py` | the two generated 1.5 editions and 1.5's own end-box writes, below a marker in the `dw.1_5` manifest (needs the 1.5 image; `--check`) |
-| `gen_newmap_dw15.py` | `glade-15`, Hidden Glade's 1.5 edition, below a marker in the `dw.newmaps` manifest (needs the 1.5 image; `--check`) |
+| `gen_newmap_dw15.py` | a new map's 1.5 edition below a marker in its manifest: `glade-15` in `dw.newmaps` (default), `factory-15` in `dw.newmaps.factory` (`--package factory`, after glade's; needs the 1.5 image; `--check`) |
 | `gen_roster_dw15.py` | `roster-15`, Expanded Roster's 1.5 edition, below a marker in the `dw.vanilla.roster` manifest (needs the 1.5 image; `--check`) |
 | `verify_dw15_states.py` | on 1.5 with every mod ticked, in the Hidden Glade: a savestate load and a Rewind jump (driven through the debug host pad layer, the only input Rewind reads headless) must bring the game back with the editions' data intact; also checks Evolution Unbound's setting reaches its 1.5 edition |
 | `verify_roster15.py` | on 1.5, a roster evolution 1.5's own chooser picks from shaped stats: `--source S --target T`, default Airdramon to Gigadramon; checks the raised flag's bank |

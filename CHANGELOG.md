@@ -21,14 +21,16 @@ on, with the tamer standing near the left or right edge of the screen, and it co
 hit any scene that moves the camera, not only recruits. A camera move now counts as
 finished when it reaches widescreen's edge. With widescreen off nothing changes.
 
-**A second new map: the Abandoned Factory, on the stock disc.** Tick it under
+**A second new map: the Abandoned Factory, on both discs.** Tick it under
 **Mods → New maps**, go to the dead end with the signs on Gear Savanna and walk
 east through the gap past the camp. Four screens lead into an old factory: an entry
 hall with workers, two floors with machine Digimon and a guardian each who holds the
 way until beaten, and a chamber with Machinedramon. Beating Machinedramon pays out a
 Metalbanana and six chips once, all or nothing: with a full bag it takes nothing and
-says so. Saving inside the factory works, and the card loads on the stock game. The
-1.5 edition follows; for now the factory is off while 1.5 is on.
+says so. Saving inside the factory works, and the card loads on the stock game. It works
+with Digimon World 1.5 too: with 1.5 ticked it switches to a 1.5 edition by itself,
+the same four screens and fights, and the boss's reward box names item 127 as 1.5
+does, Glimpup Gem.
 
 **Every other mod now works with Digimon World 1.5.** Expanded Roster, Hidden Glade,
 Guaranteed Item Drops and Evolution Unbound switch to versions made for 1.5 while

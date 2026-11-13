@@ -263,8 +263,8 @@ Regulars use followMode 2 or 12, stand on open floor beside the path, and come b
 
 | Item | Where |
 |---|---|
-| Factory MAPHEAD sections overlap `glade-15`'s 1.5 bytes; `check_mod_collisions` exempts only that never-together pair | Plan 3: give the factory's 1.5 edition its own bytes, then drop the exemption |
-| `HOOK_OWNER[0x80112D34]` holds one owner while two plugins hook it (final review minor 3) | Plan 3, when factory-15 registers the same hook |
+| Factory MAPHEAD sections overlap `glade-15`'s 1.5 bytes; `check_mod_collisions` exempts only that never-together pair | Done (plan 3): `factory-15`'s sections have their own bytes at 0x60F2, after `glade-15`'s; `check_mod_collisions` passes with no exemption |
+| `HOOK_OWNER[0x80112D34]` holds one owner while two plugins hook it (final review minor 3) | Done (plan 3): it lists glade, glade-15, factory and factory-15 |
 | Heap forced a narrower cast (AFAC2 Guardromon pairs + Giromon; AFAC3 Mamemon 137 pairs + Megadramon 172; workers only on AFAC1) | Polish: more species variety if the heap allows |
 | Pair fights are not simulated (fight_sim is per fighter); unpoked measure fights lose on the reference card, as the glade boss does (GAME.md 7.18) | Polish: balance pass |
 | Painted crates overlap at their lower edges (7-of-9 foot rule); art is clean for "abandoned" and repeats orange crates | Polish: art pass |

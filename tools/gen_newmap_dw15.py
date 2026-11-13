@@ -123,7 +123,11 @@ def build(disc, exe, head, pkg):
     used = max(i for i, b in enumerate(mh) if b) + 1
 
     # MAPHEAD: the section moves from B to B', after 1.5's own sections or after another edition's.
-    B, sec = mh_tail(m, feature, mh_base)
+    tail = mh_tail(m, feature, mh_base)
+    if tail is None:
+        problems.append("no %s MAPHEAD section in %s" % (feature, spec["manifest"]))
+        return problems, ""
+    B, sec = tail
     if spec["mh_after"] is None:
         new_b, after = used, "after 1.5's MAPHEAD sections (they end at %#x)" % used
     else:
@@ -133,11 +137,10 @@ def build(disc, exe, head, pkg):
         if ot is None:
             problems.append("no %s MAPHEAD section in %s: run --package %s first" % (other_ed, SPECS[other]["manifest"], other))
             return problems, ""
-        o_lo, o_hi = ot[0], ot[0] + len(ot[1])
+        o_hi = ot[0] + len(ot[1])
         new_b, after = o_hi, "after %s's MAPHEAD section (it ends at %#x)" % (other_ed, o_hi)
-        if new_b < used or (new_b < o_hi and o_lo < new_b + len(sec)):
-            problems.append("%s's MAPHEAD sections at %#x overlap 1.5's (to %#x) or %s's (%#x-%#x)"
-                            % (edition, new_b, used, other_ed, o_lo, o_hi))
+        if new_b < used:                             # right after the other edition's: only 1.5's can overlap
+            problems.append("%s's MAPHEAD sections at %#x overlap 1.5's (to %#x)" % (edition, new_b, used))
     new_b += new_b & 1                               # sections are halfword-aligned
     if new_b + len(sec) > MH_BUFFER:
         problems.append("no room for %s's MAPHEAD sections (%#x + %d > %#x)" % (edition, new_b, len(sec), MH_BUFFER))

@@ -25,6 +25,10 @@
            reward_bag_full: with one free slot in the bag a win leaves the bag exactly as it was and trigger 629 clear.
            First win, the slots freed: one of each reward item added, 629 set, the bits paid. Second win: the bag
            unchanged, the bits paid, 629 still set.
+           The paid box's line is read from the script the game ran on AFAC4: it names Metalbanana, or Glimpup Gem
+           on 1.5 (item 127 there).
+    --dw15 runs a mode on Digimon World 1.5: the factory runs its 1.5 edition, factory-15, by itself; cards live in
+           dw15/. --with-glade also ticks the Hidden Glade (glade-15 on 1.5) and checks row 239 holds it.
     measure  a real fight (docs/GAME.md 7.18) with --tier guardian (AFAC2's) or boss: the partner evolved and set to
            --stats, nothing poked but --heal. Prints MEASURE lines and judges nothing.
 
@@ -51,8 +55,9 @@ import tomllib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game  # noqa: E402
-from field_drive import Field, TAMER, RIGHT, LEFT, IS_SCRIPT_PAUSED, PREVIOUS_SCREEN, PARTNER_LIVES  # noqa: E402
-from newmap_engine import tile_of  # noqa: E402
+from field_drive import Field, TAMER, RIGHT, LEFT, IS_SCRIPT_PAUSED, PREVIOUS_SCREEN, PARTNER_LIVES, BATTLE  # noqa: E402
+from gen_factory import DW15_REWARD_NAME, REWARD_NAMES, paid_lines  # noqa: E402
+from newmap_engine import dialog_text, tile_of  # noqa: E402
 
 PACKAGE, FEATURE = "dw.newmaps.factory", "factory"
 STATE = ('format_version = 2\n\n[[package]]\nid = "%s"\nversion = "1.0.0"\n\n'
@@ -62,6 +67,11 @@ SAVES = ('\n[[package]]\nid = "dw.vanilla.qol"\nversion = "1.0.0"\n\n'
 WIDE = ('\n[[package]]\nid = "psx.enhancement.widescreen"\nversion = "1.0.0"\n\n'
         '[[feature]]\npackage_id = "psx.enhancement.widescreen"\nid = "widescreen"\nenabled = true\n'
         '[feature.values]\naspect = "21:9"\n')
+DW15 = ('\n[[package]]\nid = "dw.1_5"\nversion = "1.0.0"\n\n'
+        '[[feature]]\npackage_id = "dw.1_5"\nid = "dw15"\nenabled = true\n')
+GLADE = ('\n[[package]]\nid = "dw.newmaps"\nversion = "1.0.0"\n\n'
+         '[[feature]]\npackage_id = "dw.newmaps"\nid = "glade"\nenabled = true\n')
+MAP_SCRIPT_BUFFER = 0x801B9ED8       # the screen's DG script, 0x4000 B (docs/GAME.md 4.1)
 
 
 class Stop(Exception):
@@ -73,6 +83,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", choices=("walk", "saves", "off", "fights", "boss", "measure"))
     ap.add_argument("--wide", action="store_true", help="at 21:9, with each screen's edges checked")
+    ap.add_argument("--dw15", action="store_true",
+                    help="on Digimon World 1.5: the factory runs its 1.5 edition, factory-15; cards live in dw15/")
+    ap.add_argument("--with-glade", action="store_true", help="the Hidden Glade ticked too (glade-15 on 1.5)")
     ap.add_argument("--tier", choices=("guardian", "boss"), default="boss", help="measure: which fight")
     ap.add_argument("--stats", default="5500,5000,600,600,450,450", help="measure: partner HP, MP, off, def, speed, brains")
     ap.add_argument("--heal", type=int, default=3, help="measure: stand-in for N recovery items, +5000 HP each below 2500")
@@ -82,12 +95,14 @@ def main():
     a = ap.parse_args()
     out = os.path.join(a.build, "newmap_factory")
     cards = os.path.join(out, "cards")
+    card_dir = os.path.join(cards, "dw15") if a.dw15 else cards     # 1.5 keeps its own cards (dw_dw15.c)
     os.makedirs(out, exist_ok=True)
     spec = json.load(open(os.path.join(a.build, "newmap", "factory", "spec.json")))
     host, screens = spec["host"], spec["screens"]
     src = os.path.join(root, "mods", "preloaded", "packages", PACKAGE, "1.0.0")
     pkg = os.path.join(a.build, "mods", "bundled", PACKAGE, "1.0.0")
     fails = []
+    tags = "".join(" --" + t.replace("_", "-") for t in ("wide", "dw15", "with_glade") if getattr(a, t))
 
     def check(cond, msg):
         print(("PASS " if cond else "FAIL ") + msg, flush=True)
@@ -112,22 +127,23 @@ def main():
     if a.mode == "off":                                # a copy of the card the last inside save left
         shutil.copytree(os.path.join(out, "cards_factory-inside"), cards)
     else:
-        os.makedirs(cards)
+        os.makedirs(card_dir)
         for name in ("card1.mcd", "card2.mcd"):
             if os.path.exists(os.path.join(a.seed, name)):
-                shutil.copy(os.path.join(a.seed, name), cards)
-        if not os.path.exists(os.path.join(cards, "card1.mcd")):
+                shutil.copy(os.path.join(a.seed, name), card_dir)
+        if not os.path.exists(os.path.join(card_dir, "card1.mcd")):
             print("No memory card to seed from at %s" % a.seed, file=sys.stderr)
             return 2
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
-        fh.write("format_version = 2\n" if a.mode == "off"
-                 else STATE + (SAVES if a.mode == "saves" else "") + (WIDE if a.wide else ""))
+        fh.write(("format_version = 2\n" if a.mode == "off"
+                  else STATE + (SAVES if a.mode == "saves" else "") + (WIDE if a.wide else "")
+                  + (GLADE if a.with_glade else "")) + (DW15 if a.dw15 else ""))
 
     g = Game.launch(exe=os.path.join(a.build, "Digimon_World_Recompiled.exe"), port=a.port,
                     memcard_dir=cards, extra_args=["--headless-opengl"], log_path=os.path.join(out, a.mode + ".log"))
     shot = lambda n: (g.artifact_shot(os.path.join(out, "%s_%s.png" % (a.mode, n))),
                       os.path.join(out, "%s_%s.png" % (a.mode, n)))[1]
-    f = Field(g, check, shot)
+    f = Field(g, check, shot, a.dw15)
     screen, pos, near, go, wait_for = f.screen, f.pos, f.near, f.go, f.wait_for
     vec = {}
 
@@ -179,7 +195,7 @@ def main():
                   "%s: card names map %d exit %d (before: map %d exit %d), no factory row"
                   % (what, s0[0x49A], s0[0x49C], s0[0x49B], s0[0x49D]))
             check(tuple(at) == tuple(host["spawn"][:3]), "%s: card position %s is the gate's return spawn" % (what, tuple(at)))
-        f.save_here(cards, out, judge)
+        f.save_here(card_dir, out, judge)
 
     def settled_on(row):
         ok = wait_for(lambda: screen() == row and g.tamer_state == 0, 120)
@@ -334,6 +350,15 @@ def main():
         check(go(tuple(sc["via"][0]), lambda: near(*sc["via"][0]), limit=30, vec=vec),
               "%s: the gap is open, walked back through it to %s (at %s)" % (sc["name"], sc["via"][0], pos(TAMER)))
         shot("open_" + sc["name"])
+        x, z = r["at"]                                 # where it stood: confirm there starts nothing, and play goes on
+        there = go((x, z), lambda: near(x, z, r=150), limit=40, vec=vec)
+        p = pos(TAMER)
+        g.route("6:cross,20:none")
+        f0 = g.d.frame()
+        time.sleep(2)
+        check(there and f.gstate() not in BATTLE and f.i32(IS_SCRIPT_PAUSED) == 1 and screen() == sc["row"] and g.d.frame() > f0 + 60
+              and f.npc(r["slot"]) is None, "%s: confirm where the beaten guardian stood (%s, at %s) starts nothing, "
+              "play is in control" % (sc["name"], r["at"], p))
 
     def fights():
         g.warp(screens[0]["row"], 0)
@@ -407,6 +432,11 @@ def main():
         want = {**counts(before), **{t: counts(before).get(t, 0) + 1 for t in reward}}
         check(counts(after) == want and f.trigger(r["trigger"]), "first win, the slots freed: the bag gained one each "
               "of %s (now %s), trigger %d set" % (reward, counts(after), r["trigger"]))
+        check(counts(after).get(127, 0) == counts(before).get(127, 0) + 1, "item 127 is in the bag (%d)"
+              % counts(after).get(127, 0))
+        name = DW15_REWARD_NAME if a.dw15 else REWARD_NAMES[0][1]
+        check(dialog_text(paid_lines(name)) in g.d.read(MAP_SCRIPT_BUFFER, 0x4000),
+              "the paid box in the script AFAC4 ran reads %r" % (paid_lines(name),))
         before, after = win(None)
         check(after == before and f.trigger(r["trigger"]), "second win: the bag is unchanged (%s), trigger %d still set"
               % ("same" if after == before else counts(after), r["trigger"]))
@@ -430,10 +460,12 @@ def main():
                 {"saves": saves, "off": off, "fights": fights, "boss": boss, "measure": measure}[a.mode]()
             except Stop:
                 pass
-            print("RESULT factory %s: %s" % (a.mode, "FAIL %s" % fails if fails else "PASS"))
+            print("RESULT factory %s%s: %s" % (a.mode, tags, "FAIL %s" % fails if fails else "PASS"))
             return 1 if fails else 0
         for sc in screens:
             check(g.map_record(sc["row"])["file"] == sc["name"], "row %d holds %s (is %s enabled?)" % (sc["row"], sc["name"], PACKAGE))
+        if a.with_glade:
+            check(g.map_record(239)["file"] == "MGEN17", "row 239 holds the glade's MGEN17 (is glade enabled?)")
         for r in (r for sc in screens for r in sc["cast"] if r["trigger"]):
             f.set_trigger(r["trigger"])                # the guardians beaten: the route through the gaps is open
         g.warp(host["row"], host["exit"])
@@ -478,7 +510,7 @@ def main():
         shot("out")
     finally:
         g.shutdown()
-    print("RESULT factory %s%s: %s" % (a.mode, " --wide" if a.wide else "", "FAIL %s" % fails if fails else "PASS"))
+    print("RESULT factory %s%s: %s" % (a.mode, tags, "FAIL %s" % fails if fails else "PASS"))
     return 1 if fails else 0
 
 

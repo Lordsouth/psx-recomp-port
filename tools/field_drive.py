@@ -35,12 +35,14 @@ PARTNER_LIVES = 0x801557A8 + 0x7C                     # PartnerEntity.lives, i8
 INVENTORY = 0x8013D474                                # types[30], amounts[30], names[30], size u8 (docs/GAME.md 6.2)
 SLIVER_NCC = 0.9      # plan 1 measured 0.991 and 1.000 for a served map's edges; a black or missing edge is far below
 SPECIES, PARTNER = 0x8012CEB4, 0x801557A8             # DIGIMON_DATA (52 B each: radius, height i16 at +24); PARTNER_ENTITY
+SPECIES_15 = 0x801F4300                               # DIGIMON_DATA where Digimon World 1.5 keeps it (docs/INTERNALS.md 4.4)
 TAMER_SIZE = (100, 350)                               # the tamer's radius (docs/GAME.md 3.9) and a height over his head
 
 
 class Field:
-    def __init__(self, g, check, shot=None):
+    def __init__(self, g, check, shot=None, dw15=False):
         self.g, self.check = g, check
+        self.species = SPECIES_15 if dw15 else SPECIES
         self.shot = shot or (lambda name: None)       # shot(name) -> screenshot path, for the caller's own folder
 
     def enter(self):
@@ -262,7 +264,7 @@ class Field:
         f = (cam[3:] - vp) / np.linalg.norm(cam[3:] - vp)
         r = np.array([f[2], 0.0, -f[0]]) / np.hypot(f[0], f[2])
         d = np.cross(f, r)
-        size = lambda species: struct.unpack("<2h", g.d.read(SPECIES + 52 * species + 24, 4))
+        size = lambda species: struct.unpack("<2h", g.d.read(self.species + 52 * species + 24, 4))
         who = [(self.pos(TAMER), TAMER_SIZE), (self.pos(PARTNER), size(self.i32(PARTNER)))]
         who += [(n["pos"], size(n["type"])) for n in map(self.npc, range(8)) if n and n["on_map"] and n["pos"]]
         boxes = []

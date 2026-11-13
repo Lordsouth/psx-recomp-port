@@ -106,7 +106,9 @@ HOOK_OWNER = {
     0x800FF7F8: ROSTER,  # dw_roster_flags.c setDigimonRaised
     0x800FF824: ROSTER,  # dw_roster_flags.c hasDigimonRaised
     0x800E2544: "dw.vanilla.evolution/native-evolution",  # dw_evolution.c
-    0x80112D34: "dw.newmaps/glade",  # dw_newmaps.c  createSavegameChecksum
+    # createSavegameChecksum: an entry hook per map package, for the save remap (dw_newmaps.c k_maps)
+    0x80112D34: ("dw.newmaps/glade", "dw.newmaps/glade-15", "dw.newmaps.factory/factory",
+                 "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  createSavegameChecksum (entry)
     # lookupFileTable: a filter hook serving the new map names in dw_newmaps_files.inc (gen_factory.py)
     0x800A31F8: ("dw.newmaps.factory/factory", "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  lookupFileTable (filter)
     # getScript: a filter hook serving the factory's script ids in dw_newmaps_scripts.inc (gen_factory.py)
