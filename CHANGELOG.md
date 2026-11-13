@@ -11,6 +11,16 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ## Unreleased
 
+**Widescreen: a recruit's "X joins the city!" no longer freezes the game.**
+A player reported "Agumon joins the city!" staying on screen for good: the world
+kept moving, but they could not get past it. After that box the game moves the
+camera to your tamer. Widescreen stops the camera a little further from each map
+edge than the original game does, so the camera can come to rest a few pixels short
+of that spot, and the game waited for it forever. This happened only with widescreen
+on, with the tamer standing near the left or right edge of the screen, and it could
+hit any scene that moves the camera, not only recruits. A camera move now counts as
+finished when it reaches widescreen's edge. With widescreen off nothing changes.
+
 **A second new map: the Abandoned Factory, on the stock disc.** Tick it under
 **Mods → New maps**, go to the dead end with the signs on Gear Savanna and walk
 east through the gap past the camp. Four screens lead into an old factory: an entry

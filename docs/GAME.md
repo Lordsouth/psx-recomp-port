@@ -218,6 +218,35 @@ Camera follow never changes the view: it scrolls backdrop and 3D layer together,
 centre the tamer, and clamps to `0..128W-320`, `cameraY` to `0..128H-240` (`src/main/map.c:4381-4395`). It follows only
 in `GAME_STATE` 0, tamer state 0, with `CAMERA_FOLLOW_PLAYER` set and a d-pad direction held (`src/main/map.c:4472-4495`).
 
+**Scripted camera moves.** `MOVE_CAMERA_TO_ENTITY` / `MOVE_CAMERA_TO` put type 7 / 6 in `SCRIPT_MOVEMENT[10]` (0x801BE72C),
+and `WAIT_FOR_ENTITY 200` (`4A C8`) waits for that slot (`src/main/script_interp.c:1331-1352,1455-1470`). The move is object
+0xFB1 running `tickCameraMovement`. On its first tick it computes the target `CAMERA_MOVE_DIFF_X/Y` (0x80134DD4, a
+`DRAWING_OFFSET` value), which centres the entity. That target is clamped to the `DRAW_OFFSET_LIMIT` pair, the drawing offsets
+of the two map edges (0x80134DB6..BC). The move then steps by (distance / speed) per frame, plus 1 for the first
+|distance % speed| + 1 frames. It ends only on a frame where both axes are either clamped by `cameraIsAtEdge` or exactly on
+target (`src/main/map.c:4855-5050`; `checkCameraMovement`, `CAMERA_REACHED_TARGET` 0x80134DAC, `CAMERA_HAS_TARGET` 0x80134DAD).
+On stock the two clamps agree, so every move ends. Each recruit ends `"X joins the city!"`, `50 00 FD 0A`, `4A C8`, then the
+tamer's next line. A `1A` page whose next op is not `1A` stays on screen after X until the next `1B` (`advanceTextbox`,
+`src/main/script_textbox.c:881-910`), so a move that never ends looks like a box that will not close. All 221 DG scripts
+together hold 245 `MOVE_CAMERA_TO*` and 229 `4A C8` (decoded).
+
+**Widescreen and the camera clamp.** Native-wide replaces `cameraIsAtEdge` (`dw_ws_camera.c`) and keeps `cameraX` in
+[m, 128W-320-m] (m = 53 at 16:9). The move's target is still clamped to the vanilla pair, so it can lie up to m px past the
+widened bound. Then:
+- Past the bound by at least the speed: the per-frame step crosses the bound every frame, so the clamp reports it and the move ends.
+- Past it by 1-8 px: only the +1 remainder steps cross it. After those, the camera sits on the bound and `DRAWING_OFFSET_X` never
+  equals the target. If Y needed more frames than that window, the move never ends.
+
+Reproduced on Agumon's recruit (map 109, script 105 section 6), with the tamer moved so the target was 4 px past lo = 53 and
+the camera parked on lo, 30 px below the top clamp. After X: `ACTIVE_INSTRUCTION` 0x4A, `WAIT_FOR_ENTITY_ID` 0x0A, slot 10 type 7,
+`CAMERA_HAS_TARGET` 1, `CAMERA_REACHED_TARGET` 0, camera X 53, `DRAWING_OFFSET_X` 267 against a target of 271, trigger 203 set,
+and "Agumon joins the city!" still on screen. Widescreen off, the same pokes finish [run 2026-11-13:
+`tools/verify_ws_camera.py hang`, `hang --off`]. Unforced, on map 109: arriving by exit 1 (west) parks the camera on lo with
+the Y offset at up to 12 px, but Agumon meets the tamer where the target is at least 53 px past the bound, so the move finishes.
+Exit 2 (east) is the same on hi, and exit 0 has Y clamped. None of 7 meetings hung [run 2026-11-13: `verify_ws_camera.py
+natural`]. The fix treats a camera standing on the bound its move's target lies past
+as clamped, only while `CAMERA_HAS_TARGET` is 1, so the follow camera is untouched (`dw_move_parked_at_bound`).
+
 ### 3.5 TFS, tiles and time of day
 Layout (`src/main/map.c:4225-4263`): a u32 the game skips (not `W | H<<16` on 13 stock maps, MAYO10 and TROP03 among them); u32 nCLUT,
 truncated to i16; nCLUT x 256 u16 BGR555 palettes, uploaded to VRAM `(0, 481+i)`; then per non -1 grid slot, in order, a

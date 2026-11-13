@@ -82,6 +82,8 @@ extern int dw_ws_banks_active(int32_t m); /* dw_ws_sliver.c */
 #define DW_LIMIT_Y_MAX 0x80134DBAu /* int16 */
 #define DW_LIMIT_Y_MIN 0x80134DBCu /* int16 */
 #define DW_FISHING_DATA_PTR 0x80134E6Cu /* FishingData*, set while FISH is loaded */
+#define DW_CAMERA_HAS_TARGET 0x80134DADu   /* int8, 1 while tickCameraMovement runs a move */
+#define DW_CAMERA_MOVE_DIFF_X 0x80134DD4u  /* int16, the move's target DRAWING_OFFSET_X */
 
 #define DW_SCREEN_W 320
 #define DW_SCREEN_H 240
@@ -477,6 +479,33 @@ static void dw_cull_widen(struct CPUState* cpu, uint32_t address) {
                              2 * psx_mod_widescreen_x_margin()); /* $a1 width */
 }
 
+/* A camera move parked on the widened bound short of a target past it.
+ *
+ * tickCameraMovement (map.c:4855-5050; MOVE_CAMERA_TO_ENTITY, MOVE_CAMERA_TO, the
+ * Continue camera, curling) clamps its target to the VANILLA DRAW_OFFSET_LIMIT pair,
+ * so a target that centres the tamer within m px of a map edge stays legal for it
+ * while the clamp above stops the camera m px short. The move ends only on a frame
+ * where both axes report clamped or arrived. Past the bound by >= its speed, the
+ * per-frame step crosses the bound every frame and the clamp reports it every
+ * frame. By less, only the +-1 remainder steps cross it, for |distance| + 1 frames;
+ * after that the camera sits ON the bound, nothing clamps, DRAWING_OFFSET_X never
+ * equals the target, and if Y was not done inside that window the move never ends.
+ * WAIT_FOR_ENTITY 200 then holds the script forever: the recruit scenes' "X joins
+ * the city!" box never goes away [run 2026-11-13: tools/verify_ws_camera.py hang].
+ *
+ * So during a move (CAMERA_HAS_TARGET), a camera standing exactly on the bound its
+ * target lies past is clamped: the same answer the crossing frames give. The
+ * follow camera never has a target, so it is untouched. */
+static int dw_move_parked_at_bound(int32_t w, int32_t m) {
+    int32_t lo, hi, c, t;
+    if (psx_mod_read_byte(DW_CAMERA_HAS_TARGET) != 1)
+        return 0;
+    dw_clamp_range(w, m, &lo, &hi);
+    c = dw_read_i16(DW_CAMERA_X);
+    t = dw_offset_limit_max(w) - dw_read_i16(DW_CAMERA_MOVE_DIFF_X); /* target CAMERA_X */
+    return (c == lo && t < lo) || (c == hi && t > hi);
+}
+
 static int dw_camera_is_at_edge(struct CPUState* cpu, uint32_t address) {
     int32_t m, w, h, c, lim;
     uint32_t out_x, out_y;
@@ -495,7 +524,7 @@ static int dw_camera_is_at_edge(struct CPUState* cpu, uint32_t address) {
     psx_mod_write_word(out_x, 1u);
 
     /* --- X: the widened arm ------------------------------------------- */
-    if (dw_clamp_x(w, m))
+    if (dw_clamp_x(w, m) || dw_move_parked_at_bound(w, m))
         psx_mod_write_word(out_x, 0u);
 
     /* --- Y: transcribed unchanged; native-wide does not widen vertically */
