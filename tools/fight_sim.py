@@ -319,21 +319,21 @@ def win_rate(make_enemy, partner_name="average Ultimate", items=3, heal=5000, ru
 def factory():
     """The same table for every distinct fighter of gen_factory.py's CAST (one per stat record), then the plan's
     bounds against the average Ultimate with 3 x 5000 heals: regulars 90 % or more, guardians within 10 points of
-    the glade boss. Fights of a pair are judged one fighter at a time, as this sim has one enemy."""
+    the glade boss, the boss at least 10 points below it and above 0. Fights of a pair are judged one fighter at a
+    time, as this sim has one enemy."""
     from gen_factory import CAST, NAMES, ROWS
     glade = win_rate(boss)
     seen, bad = {}, []
     for row, recs in CAST.items():
         for r in recs:
-            if r.role in ("regular", "guardian"):
-                seen.setdefault(r.words[11:30] + (r.species, r.role), []).append("%s slot %d" % (NAMES[ROWS.index(row)], r.slot))
-    for key, where in seen.items():
-        words = next(r.words for recs in CAST.values() for r in recs if r.words[11:30] + (r.species, r.role) == key)
-        role = key[-1]
+            if r.role != "worker":
+                seen.setdefault((r.words[11:30], r.species, r.role), (r.words, []))[1].append(
+                    "%s slot %d" % (NAMES[ROWS.index(row)], r.slot))
+    for (_, _, role), (words, where) in seen.items():
         print()
         table("%s %s (%s)" % (role.capitalize(), SP[words[0]]["name"], ", ".join(where)), lambda: enemy_from(words))
         rate = win_rate(lambda: enemy_from(words))
-        ok = rate >= 90 if role == "regular" else abs(rate - glade) <= 10
+        ok = dict(regular=rate >= 90, guardian=abs(rate - glade) <= 10, boss=0 < rate <= glade - 10)[role]
         print("  -> %.1f %% against the average Ultimate with 3 x 5000 heals (glade boss %.1f %%): %s"
               % (rate, glade, "ok" if ok else "OUT OF BOUNDS"))
         if not ok:

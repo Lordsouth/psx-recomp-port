@@ -32,6 +32,7 @@ NPC_MODELS = 0x80137140                               # 5 x 0x1C: useCount, mode
 ENEMY_IDS = 0x8013D640 + 0x66C                        # COMBAT_DATA.player.entityIds[4]: 1 (partner), then enemy entity ids
 ENEMY_COUNT = 0x80134D6C                              # i16: how many of them are this battle's (the rest are stale)
 PARTNER_LIVES = 0x801557A8 + 0x7C                     # PartnerEntity.lives, i8
+INVENTORY = 0x8013D474                                # types[30], amounts[30], names[30], size u8 (docs/GAME.md 6.2)
 SLIVER_NCC = 0.9      # plan 1 measured 0.991 and 1.000 for a served map's edges; a black or missing edge is far below
 
 
@@ -101,6 +102,18 @@ class Field:
         """The battle's enemies as map NPC slots (COMBAT_DATA.player.entityIds after the partner's 1)."""
         n = struct.unpack("<h", self.g.d.read(ENEMY_COUNT, 2))[0]
         return [e - 2 for e in self.g.d.read(ENEMY_IDS, 4)[1:1 + n]]
+
+    def bag(self):
+        """The inventory's 0x5B bytes: item types, amounts and name slots (30 each, 0xFF free), then the bag's size."""
+        return self.g.d.read(INVENTORY, 0x5B)
+
+    def set_bag(self, items):
+        """The bag holds exactly `items`, [(type, amount)], in its first slots, the rest free as giveItem leaves them."""
+        assert len(items) <= self.bag()[90]
+        t, a, n = [0xFF] * 30, [0] * 30, [0xFF] * 30
+        for i, (ty, am) in enumerate(items):
+            t[i], a[i], n[i] = ty, am, i
+        self.g.d.write_bytes(bytes(t + a + n), INVENTORY)
 
     def win_group(self, slots, bits, row):
         """A maxed partner; every enemy in `slots` on 1 HP until it falls. The fight ends on this map with the bits of
@@ -354,6 +367,71 @@ class Field:
         check(g.d.read(NPC_ON_MAP, 1)[0] == 0, "the boss has left the map")
         g.advance(30)
         self.shot("won")
+
+    def measure(self, stats, heal, rec, slot, host, enter):
+        """A real fight that judges nothing (docs/GAME.md 7.18). At `host` (row, exit) the partner evolves to
+        MetalGreymon and takes `stats` ("hp,mp,off,def,speed,brains"); `enter()` then walks up to the fighter in NPC
+        slot `slot` (its map record `rec`) and starts the battle. Nothing is poked but `heal`: up to that many +5000 HP
+        when the partner falls below 2500. Presses only the finisher button and prints MEASURE lines."""
+        g, check, wait_for, gstate, i32 = self.g, self.check, self.wait_for, self.gstate, self.i32
+        hp, mp_, off, de, spd, brain = (int(v) for v in stats.split(","))
+        g.warp(*host)
+        for field, value in (("remaining_lifetime", 9999), ("poop_level", 9999), ("tiredness", 0), ("script_sync_bit", 1),
+                             ("evolution_target", 12)):      # MetalGreymon
+            g.set(field, value)
+        g.set_atomic(("tamer_state", 6), ("tamer_substate", 0))
+        g.set_atomic(("partner_state", 13), ("partner_sub_state", 0))
+        check(wait_for(lambda: g.partner_type == 12 and g.evolution_target == -1
+                       and (g.partner_state == 1 or g.tamer_state == 20), 240), "the partner evolved")
+        for _ in range(12):
+            if g.tamer_state == 0 and g.partner_state == 1:
+                break
+            g.route("4:cross,45:none")
+        g.settle()
+        wait_for(lambda: g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1, 30)
+        g.advance(120)                                 # the evolution's last box has closed
+        g.d.write_bytes(struct.pack("<4h", off, de, spd, brain), PARTNER_STATS)
+        # Buster Dive, Pulse Laser, Metal Sprinter, and its finisher: animation 46 + the slot in its move list
+        g.d.write_bytes(bytes([34, 33, 33, 0, 50, 54, 56, 60]), PARTNER_STATS + 8)
+        g.d.write_bytes(struct.pack("<4h", hp, mp_, hp, mp_), PARTNER_MAX_HP)
+        enter()
+        row = self.screen()
+        npc_hp, npc_mp, npc_anim = (NPC_BASE + NPC_SIZE * slot + o for o in (0x4C, 0x4E, 0x2E))
+        h = lambda addr: struct.unpack("<h", g.d.read(addr, 2))[0]
+        picks, ours, last, last_p, dry, printed, boss_hp, partner_hp = {}, 0, 0, 0, None, 0, rec[11], hp
+        heals = 0
+        t0 = time.time()
+        while time.time() - t0 < 600 and gstate() == 1:
+            anim, t = g.d.read(npc_anim, 1)[0], time.time() - t0
+            if anim in rec[22:26] and anim != last:
+                picks[anim] = picks.get(anim, 0) + 1
+            last = anim
+            mine = g.d.read(PARTNER_ANIM, 1)[0]
+            ours += mine == 60 and last_p != 60          # our finisher
+            last_p = mine
+            now = h(npc_hp), h(PARTNER_MAX_HP + 4)
+            if gstate() == 1:                            # still fighting: the game restores them at the end
+                boss_hp, partner_hp = now
+                if heals < heal and 0 < partner_hp < 2500:
+                    g.d.write_bytes(struct.pack("<h", min(hp, partner_hp + 5000)), PARTNER_MAX_HP + 4)
+                    heals += 1
+            if dry is None and h(npc_mp) < 96:
+                dry = round(t)
+            if t - printed >= 15:
+                printed = t
+                print("  %3ds: boss HP %d MP %d, partner HP %d MP %d, picks %s"
+                      % (t, h(npc_hp), h(npc_mp), h(PARTNER_MAX_HP + 4), h(PARTNER_MAX_HP + 6), picks), flush=True)
+            g.route("2:square,2:none", poll_s=0.02)   # the finisher, whenever its meter is full
+        secs = round(time.time() - t0)
+        self.shot("measure_end")
+        print("MEASURE fight: partner %s: %ds, boss HP left %d, partner HP left %d, heals %d, boss picks %s, our finishers %d, MP ran out at %s"
+              % (stats, secs, boss_hp, partner_hp, heals, picks, ours, dry), flush=True)
+        end = time.time() + 300
+        while time.time() < end and not (gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1):
+            g.route("4:cross,20:none")
+        over = gstate() == 0 and g.tamer_state == 0
+        print("MEASURE outcome: %s (map %d)" % ("unfinished" if not over else "won" if self.screen() == row else "lost",
+                                                self.screen()), flush=True)
 
     def flee(self, host_row, host_at):
         """Back to the host's side of the entrance, as any fled battle goes back where it came from."""

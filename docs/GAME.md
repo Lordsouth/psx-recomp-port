@@ -355,7 +355,7 @@ blocked line keeps an NPC out of a fight (`src/main/btl.c:109`); 0x8F no drops (
 | Sprites | 3 8bpp pages, 180 definitions, 188 instances, 8 frames each | Read. Nothing checks them |
 | Map Digimon | 8 records (`src/main/overworld.c:1161`); species below 0xB4 (`src/main/model.c:3369`) | Read. Count unchecked |
 | NPC models | `LOADED_DIGIMON_MODELS` holds 8 and drops the rest (`src/main/script_interp.c:2561-2571`), but `NPC_MODELS` has 5 slots (`src/main/model.c:2698`). Same species shares a slot. Index k maps to page 0x16+k/2, CLUT `((k+2)*16, 488)` (`src/main/model.c:3400-3403`) | Read. Index 4 overlaps `SBOY.TIM`'s pixels and `SYSTEM_W.TIM`'s CLUT, so 4 are clean. A sixth returns NULL [not run] |
-| Heap | `_end` to stack: 197,520 B (0x801BFB70-0x801EFF00, `src/main/main.c:3537-3538`). A map needs MMDs in whole sectors, plus bones x (0x88 + 0x52) per placed Digimon (`src/main/model.c:2829-2830`), plus 0x4800 while loading (`src/main/model.c:3299`). A failed `malloc3` reads to NULL (`src/main/model.c:3410-3414`). Only `model.c` and `std_setup.c` call it | Read. Stock free heap is 40.2 KB to 192.9 KB by screen [Horizon]. Vice's randomizer re-rolls two-group areas until combined model weight is at most 152,000, unit not stated [Vice]. The factory's screens by this formula (`heap_estimate` in `tools/gen_factory.py`, bones from `DIGIMON_DATA`, the field `model.c:2815` reads): AFAC1 56,954 B (3 workers), AFAC2 145,942 B (4 Guardromon, Giromon), AFAC3 137,578 B (4 small Mamemon, small Megadramon), AFAC4 18,432 B. Every model loaded and two-enemy fights were won on AFAC2 and AFAC3 [run 2026-11-13]. A Guardromon pair, a Tankmon pair and even the small Giromon (161) come to 165,550 B |
+| Heap | `_end` to stack: 197,520 B (0x801BFB70-0x801EFF00, `src/main/main.c:3537-3538`). A map needs MMDs in whole sectors, plus bones x (0x88 + 0x52) per placed Digimon (`src/main/model.c:2829-2830`), plus 0x4800 while loading (`src/main/model.c:3299`). A failed `malloc3` reads to NULL (`src/main/model.c:3410-3414`). Only `model.c` and `std_setup.c` call it | Read. Stock free heap is 40.2 KB to 192.9 KB by screen [Horizon]. Vice's randomizer re-rolls two-group areas until combined model weight is at most 152,000, unit not stated [Vice]. The factory's screens by this formula (`heap_estimate` in `tools/gen_factory.py`, bones from `DIGIMON_DATA`, the field `model.c:2815` reads): AFAC1 56,954 B (3 workers), AFAC2 145,942 B (4 Guardromon, Giromon), AFAC3 137,578 B (4 small Mamemon, small Megadramon), AFAC4 105,280 B (Machinedramon, 78,588 B of MMD). Every model loaded, two-enemy fights were won on AFAC2 and AFAC3, and Machinedramon loaded and fought on AFAC4 [run 2026-11-13]. A Guardromon pair, a Tankmon pair and even the small Giromon (161) come to 165,550 B |
 | MAPHEAD tail | 0x6070-0x61A8: 312 B for all new sections; the glade's takes 20. Every row has a table entry to repoint. Free rows hold a filler binding script 180, a real cutscene: never ship one | Read. 1.5 puts its own new sections in the tail, up to 0x60DE; the glade's 1.5 edition goes after them |
 | DG script | 0x4000 B. No slot is free: MAPHEAD binds 1-198, cross-calls reach 199-221 | Read. Rows 223+ in MMM.DAT [run 2026-11-11] |
 
@@ -465,7 +465,7 @@ camera, warp. 0x5A-0x5F sound. 0x64-0x7E routines, battle, delay, movement, spaw
 | 1B, 27 | SET_DIALOG_OWNER, FADEOUT_HUD | 1 | id (4.10); box, 0 is the dialog box |
 | 1A | SHOW_TEXTBOX | text | `_`, text (4.9); waits for a press |
 | 1C, 1D; 1E, 1F, 20 | SET_, UNSET_TRIGGER; SET_, ADD_TO_, REDUCE_PSTAT | 3 | `_`, u16; `_`, pstat, u8 (add and reduce clamp to 0..255) |
-| 28, 29; 2A, 2B | GIVE_, REMOVE_ITEM; ADD_, REDUCE_MONEY | 3; 5 | `_`, item, amount; `_`, s32 |
+| 28, 29; 2A, 2B | GIVE_, REMOVE_ITEM; ADD_, REDUCE_MONEY | 3; 5 | `_`, item, amount; `_`, s32. A give sets trigger 0 on failure, clears it on success (6.2) |
 | 46, 79; 48, 4A | LOAD_, UNLOAD_DIGIMON; UNLOAD_ENTITY, WAIT_FOR_ENTITY | 1 | species; id, 0xFF to wait for every movement |
 | 47 | SET_DIGIMON | 3 | species, slot, autotalk |
 | 4E, 6C | ENTITY_WALK_TO, ENTITY_MOVE_TO | 7 | id, x, z, anim or duration in frames, u8 |
@@ -505,7 +505,8 @@ so it calls the bands C owns free.
 | 200..311 | 0xC8 + species, recruited or beaten. **Arena pools and cup unlocks read this band, all of it for a cup with no species list** (`src/main/utils2.c:602-618`, `src/dget/dget.c:375-387`); prosperity reads species 3..58 (`src/main/main.c:3908-3909`) |
 | 364..382; 384..511 | Medals; shop stock (`src/main/script_common.c:3026-3036,1636-1641`) |
 | 512..574; 575..626 | Raised, 0x200 + species below 63 (`:3011-3024`); Jijimon's recruit lines, 0x23C + species (`dw_roster_flags.c:10-13`) |
-| 627, 628 | The Abandoned Factory's floor guardians beaten, AFAC2's and AFAC3's (`GUARD_TRIGGER` in `tools/gen_factory.py`): set in the win path, tested by an IF around the guardian's `46`/`47` in its row section. 629 is planned for the factory's reward |
+| 627, 628 | The Abandoned Factory's floor guardians beaten, AFAC2's and AFAC3's (`GUARD_TRIGGER` in `tools/gen_factory.py`): set in the win path, tested by an IF around the guardian's `46`/`47` in its row section |
+| 629 | The Abandoned Factory's reward paid (`REWARD_TRIGGER`): set in Machinedramon's win path only once all seven items are in the bag, tested at its start so a later win pays bits only (6, the all-or-nothing give). The boss itself comes back on every visit |
 | 640; 650..716 | Energy threshold met (`src/main/partner_impl.c:1546-1548`); chests opened. 716 is the top id any stock script names |
 | 717..799 | **The Expanded Roster's raised flags**, 0x2CD + species - 63 (`dw_roster_flags.c:33-38`). Cards are shared, so a flag here marks a species raised. Horizon's allocator calls 717..788 free: not in this port |
 
@@ -690,7 +691,19 @@ Press-to-fight with fleeing is new: all 9 stock autotalk 0 records whose section
 fighters in 0xFB..0xFD makes a predefined battle: no join rolls, music track 0 (`src/main/btl.c:232-261,360-377`). Stock writes 0xFA back
 to 0 after it, and every loss route reaches script 212, which clears it. A flee is the hole: the fled section never resumes and the flee's map change runs no section that clears it (`src/main/script_interp.c:1929-1941`), so a fleeable predefined fight leaves 0xFA at 1 and the next fight anywhere would run predefined with stale fighters [inferred]. The factory's fights are fleeable and predefined, so every factory screen's arrival section (DG 0xFE) is `1E 00 FA 00 FE 00`, AFAC1 included, since a flee lands on the screen before. After flees from AFAC2's pair and both guardians, 0xFA read 0 where they landed [run 2026-11-13].
 
-A fight of a group: each member's talk section is the same, `1B id`, one line, `27 00 67 00 01 00`, `1E 00 FA 01`, `1E 00 FB/FC/FD` the group's script ids (0xFF padded), `66 00`, then the win path `1E 00 FA 00 FE 00` (`talk_section` in `tools/gen_factory.py`). The battle's enemy list (`COMBAT_DATA.player.entityIds`, 0x8013DCAC) held exactly the group, never a worker on screen [run 2026-11-13].
+A fight of a group: each member's talk section is the same, `1B id`, one line, `27 00 67 00 01 00`, `1E 00 FA 01`, `1E 00 FB/FC/FD` the group's script ids (0xFF padded), `66 00`, then the win path `1E 00 FA 00 FE 00` (`talk_section` in `tools/gen_factory.py`). The battle's enemy list (`COMBAT_DATA.player.entityIds`, 0x8013DCAC) held exactly the group, never a worker on screen [run 2026-11-13]. Only its first `ENEMY_COUNT` (i16 0x80134D6C) entries after the partner's are this battle's: the rest are stale from the last battle, so a reader must stop there (`Field.enemies` in `tools/field_drive.py`) [run 2026-11-13].
+
+### 6.2 A reward paid once, all or nothing
+`GIVE_ITEM` (`28 00 item amount`) sets trigger 0 when `giveItem` fails and clears it when it succeeds, every time (`src/main/script_interp.c:1106-1113`), so nothing need clear trigger 0 before a give. `giveItem` stacks onto the item's slot if the bag has one, failing only when that stack is at 99; otherwise it takes the first free slot (type 0xFF) and the first unused name index, failing when none is free (`src/main/item.c:2562-2614`). `REMOVE_ITEM` (`29 00 item amount`, `src/main/script_interp.c:1115-1118`) takes the amount off that stack and frees the slot when it reaches 0, type and name back to 0xFF, amount 0 (`src/main/item.c:2616-2637`). So taking back what was given leaves the bag byte for byte as it was. The bag is `INVENTORY` 0x8013D474: types[30], amounts[30], names[30], then the size u8 (`include/dw/item.h:39-48`, `config/us/symbols.txt`); only slots below the size are used.
+
+Stock gives one item and, on a failure, says the bag is full, opens the discard menu (routine 0, `openDiscardItem`, `src/main/script_interp.c:423-425`) and gives again. For several items as one reward, Machinedramon's win path (`boss_section` in `tools/gen_factory.py`):
+```
+19 00 01 00 75 02 18 00 end 19 00       IF trigger 629 is set, jump to the end: paid already, a win pays bits only
+28 00 item 01  19 00 01 00 00 00 18 00 rb_k 19 00    per item k: give it; if trigger 0 is set, jump to rollback k
+1C 00 75 02   1B FF 1A 00 text 0D 00 00 00   end: FE 00      all in: set 629, say so
+rb_k: 29 00 item_j 01 for each j < k, 1B FF 1A 00 text 0D 00 00 00, FE 00    take back, say the bag is full, 629 clear
+```
+Jumps are offsets from the script's start, so the section is built knowing where it lands. With one free slot a win left the bag's 0x5B bytes as they were and 629 clear; with room, one of each item went in and 629 was set; a second win changed nothing but the bits [run 2026-11-13]. `1B FF` is the narrator's box, which stock uses for "got the item" lines; after a fight the box of `1B id` is closed (`27`), so text needs a new `1B`.
 
 ---
 
@@ -1026,6 +1039,16 @@ So it is a hard fight that a trained partner can win with large heals, and a max
 The sim is too kind. For these rows it gives 81.2 %, 38.8 %, 99.8 % (its column for 3 heals, the nearest) and 97.8 %. So the stock comparison in 7.17 does not show where the boss falls in the real game; no stock boss has been measured this way.
 
 One of the maxed wins never gave control back. Its Brains of 998 can cross 999 on a win, so that is probably the end box freeze (12.1) [inferred]: the run ended before anything looked at the screen.
+
+The Abandoned Factory's tiers, measured the same way (`tools/verify_factory.py measure --tier guardian|boss`, which shares `Field.measure` in `tools/field_drive.py` with the glade's), one run each on the first row, 5500/5000/600/600/450/450 with 3 x 5000 [run 2026-11-13]:
+
+| Fight | Sim, that cell | Won | How it went |
+|---|---|---|---|
+| Glade boss, H-Kabuterimon (rerun beside these) | 80.8 % | 0 of 1 | 74 s, boss left on 2757 of 8800 HP, all heals used |
+| AFAC2 guardian, Giromon | 79.5 % | 0 of 1 | 64 s, guardian left on 4777 of 7600 HP, all heals used, its finisher once |
+| AFAC4 boss, Machinedramon | 62.0 % | 0 of 1 | 87 s, boss left on 3991 of 9000 HP, all heals used, Infinity Cannon once |
+
+Single runs are too few to rank the three. All lost on a cell where the sim gives 62-81 %, as the glade's four runs above did, so the sim is as kind to the factory's fighters as to the glade boss.
 
 ---
 

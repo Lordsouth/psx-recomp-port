@@ -20,6 +20,13 @@
            205 or 218). Each guardian: holding toward the forward strip for 10 s never reaches it; fled (the screen
            before's spawn 2, pstat 0xFA 0: flee_clears_predefined); lost; won (its trigger set, it runs off), then
            through the gap to the next screen and back: it stays away and the gap is open. AFAC3's second pair: won.
+    boss   fresh sandbox card, HP poked. Machinedramon on AFAC4: standing by it starts nothing, confirm opens its
+           dialogue and a fight with it alone; fled (AFAC3's spawn 2: Run is offered); lost (row 205 or 218).
+           reward_bag_full: with one free slot in the bag a win leaves the bag exactly as it was and trigger 629 clear.
+           First win, the slots freed: one of each reward item added, 629 set, the bits paid. Second win: the bag
+           unchanged, the bits paid, 629 still set.
+    measure  a real fight (docs/GAME.md 7.18) with --tier guardian (AFAC2's) or boss: the partner evolved and set to
+           --stats, nothing poked but --heal. Prints MEASURE lines and judges nothing.
 
     py -3.12 tools/gen_factory.py
     cmake --build build-debug --target psx-runtime      (stages the bundled package)
@@ -27,6 +34,8 @@
     py -3.12 -I tools/verify_factory.py saves --seed <card dir> [--port N]
     py -3.12 -I tools/verify_factory.py off [--port N]
     py -3.12 -I tools/verify_factory.py fights --seed <card dir> [--port N] [--wide]
+    py -3.12 -I tools/verify_factory.py boss --seed <card dir> [--port N] [--wide]
+    py -3.12 -I tools/verify_factory.py measure --tier guardian|boss --seed <card dir> [--stats ...] [--heal N]
 
 The seed is any card dir whose slot 1 holds a Digimon World file. It writes build/mods/state.toml. Verdicts are
 guest-memory reads (and at 21:9 the screenshot's edges against our own backdrop).
@@ -62,8 +71,11 @@ class Stop(Exception):
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=("walk", "saves", "off", "fights"))
+    ap.add_argument("mode", choices=("walk", "saves", "off", "fights", "boss", "measure"))
     ap.add_argument("--wide", action="store_true", help="at 21:9, with each screen's edges checked")
+    ap.add_argument("--tier", choices=("guardian", "boss"), default="boss", help="measure: which fight")
+    ap.add_argument("--stats", default="5500,5000,600,600,450,450", help="measure: partner HP, MP, off, def, speed, brains")
+    ap.add_argument("--heal", type=int, default=3, help="measure: stand-in for N recovery items, +5000 HP each below 2500")
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
     ap.add_argument("--port", type=int, default=4450)
     ap.add_argument("--seed", default=os.path.join(root, "saves"))
@@ -81,7 +93,7 @@ def main():
         print(("PASS " if cond else "FAIL ") + msg, flush=True)
         if not cond:
             fails.append(msg)
-            if a.mode == "fights":                     # each step plays on what the last left: stop at a failure
+            if a.mode in ("fights", "boss", "measure"):   # each step plays on what the last left: stop at a failure
                 raise Stop(msg)
 
     staged = os.path.exists(os.path.join(pkg, "manifest.toml"))
@@ -339,12 +351,63 @@ def main():
         f.win_group([m["slot"] for m in pair], sum(m["bits"] for m in pair), screens[2]["row"])
         guardian(2)
 
+    def boss():
+        sc, r, reward = screens[3], members(3, "boss")[0], spec["reward"]
+        g.warp(screens[0]["row"], 0)
+        settled_on(screens[0]["row"])
+        vec.update(f.calibrate())
+        come_in(3)
+        models_loaded(3)
+        size = f.bag()[90]
+        check(size > len(reward) and not f.trigger(r["trigger"]), "a fresh card: bag size %d, trigger %d clear"
+              % (size, r["trigger"]))
+        talk(3, r)                                     # standing starts nothing; confirm: its dialogue, it alone
+        back_at(3, "the boss")                         # Run is offered
+        leave(screens[2]["strip_fwd"], sc["row"], "AFAC3, back to AFAC4")
+        settled_on(sc["row"])
+        talk(3, r)
+        lose(3)
+        fillers = [(t, 1) for t in range(128) if t not in reward][:size - 1]
+        counts = lambda b: {t: n for t, n in zip(b[:30], b[30:60]) if t != 0xFF}
+
+        def win(bag):
+            """Back in from AFAC3, the bag set to `bag` (None: as it is), and a win: the bag before and after."""
+            come_in(3)
+            if bag is not None:
+                f.set_bag(bag)
+            before = f.bag()
+            talk(3, r)
+            f.win_group([r["slot"]], r["bits"], sc["row"])
+            return before, f.bag()
+
+        before, after = win(fillers)                   # one free slot
+        check(after == before and not f.trigger(r["trigger"]), "reward_bag_full: with one free slot the win leaves the "
+              "bag as it was (%s) and trigger %d clear" % ("same" if after == before else counts(after), r["trigger"]))
+        before, after = win(fillers[:size - len(reward)])
+        want = {**counts(before), **{t: counts(before).get(t, 0) + 1 for t in reward}}
+        check(counts(after) == want and f.trigger(r["trigger"]), "first win, the slots freed: the bag gained one each "
+              "of %s (now %s), trigger %d set" % (reward, counts(after), r["trigger"]))
+        before, after = win(None)
+        check(after == before and f.trigger(r["trigger"]), "second win: the bag is unchanged (%s), trigger %d still set"
+              % ("same" if after == before else counts(after), r["trigger"]))
+
+    def measure():
+        i = 1 if a.tier == "guardian" else 3
+        r = members(i, a.tier)[0]
+
+        def enter():
+            g.warp(screens[i]["row"], 0)
+            settled_on(screens[i]["row"])
+            vec.update(f.calibrate())
+            talk(i, r)
+        f.measure(a.stats, a.heal, r["record"], r["slot"], (host["row"], host["exit"]), enter)
+
     try:
         f.enter()
         g.settle(timeout_frames=1800)
-        if a.mode in ("saves", "off", "fights"):
+        if a.mode in ("saves", "off", "fights", "boss", "measure"):
             try:
-                {"saves": saves, "off": off, "fights": fights}[a.mode]()
+                {"saves": saves, "off": off, "fights": fights, "boss": boss, "measure": measure}[a.mode]()
             except Stop:
                 pass
             print("RESULT factory %s: %s" % (a.mode, "FAIL %s" % fails if fails else "PASS"))

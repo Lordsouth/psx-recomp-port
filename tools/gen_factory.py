@@ -34,6 +34,7 @@ import functools
 import hashlib
 import json
 import os
+import re
 import struct
 import sys
 import tomllib
@@ -227,7 +228,8 @@ SCENES = (entry_hall, production_floor_1, production_floor_2, boss_chamber)
 #
 # How hard, from tools/fight_sim.py --factory, one fighter at a time against the average Ultimate with 3 x 5000 heals
 # (2000 fights each; the glade boss: 80.8 %, 81.2 % in the 500-fight table): a Guardromon 100 %, Giromon 79.5 %, a
-# Mamemon 100 %, Megadramon 83.0 %. Regulars must stay at 90 % or more, guardians within 10 points of the glade boss.
+# Mamemon 100 %, Megadramon 83.0 %, Machinedramon 62.0 %. Regulars must stay at 90 % or more, guardians within 10
+# points of the glade boss, the boss at least 10 points below it and above 0.
 class Rec(NamedTuple):
     species: int
     slot: int                        # the record's index, SET_DIGIMON's slot
@@ -239,11 +241,21 @@ class Rec(NamedTuple):
 
 
 GUARD_TRIGGER = {241: 627, 242: 628}  # set when that floor's guardian is beaten (docs/GAME.md 4.8)
+REWARD_TRIGGER = 629                 # set when the boss's reward is paid, all of it
 LINES = {92: "Intruder detected. Engage!", 41: "None shall pass this line!", 137: "This floor belongs to us!",
-         172: "The deep works are mine!"}
-REGULAR_RANGE, GUARD_RANGE = 800, 600     # trackingRange: how near it turns to face you (followMode 2); starts nothing
+         172: "The deep works are mine!", 115: "This factory obeys me alone."}
+RANGE = dict(regular=800, guardian=600, boss=1200)   # trackingRange: how near it turns to face you (followMode 2);
+                                                     # it starts nothing
 HEAP_BUDGET = 152000                 # per screen, Vice's combined model weight (docs/GAME.md 3.11)
-MIN_PICKS = 30                       # a fleeable fight spends mpCost * 3 per pick: MP for at least this many
+MIN_PICKS = dict(regular=30, guardian=30, boss=60)   # a fleeable fight spends mpCost * 3 per pick: MP for this many
+# The boss's one-time reward, item ids in dw_decomp src/main/item.c's ITEM_PARA (asserted in main against its
+# ITEM_PARA_NAME strings and the disc's names): Metalbanana, then the Offense, Defense, Brain, Quick, HP and MP Chips.
+REWARD = (127, 23, 24, 25, 26, 27, 28)
+REWARD_NAMES = (("METALBANANA", "Metalbanana"), ("OFF_CHIP", "Off. Chip"), ("DEF_CHIP", "Def. Chip"),
+                ("BRAIN_CHIP", "Brain Chip"), ("QUICK_CHIP", "Quick Chip"), ("HP_CHIP", "HP Chip"), ("MP_CHIP", "MP Chip"))
+PAID_LINES = ("The machines fall silent.", "Got Metalbanana and 6 chips!")
+FULL_LINES = ("Your bag is full.", "Make room and come back.")
+ITEM_PARA = 0x801269DC               # 128 x 32 B, the name first (char[20], USA)
 
 
 def fighter(species, at, script_id, stats, moves, weights, flee, rng):
@@ -270,6 +282,8 @@ MAMEMON = ((3400, 7800, 640, 470, 420, 400, 900), (0x2E, 0x2F, 0x30, 0x32), (40,
 # Megaton Punch, Buster Dive, Metal Sprinter, finisher Smiley Bomb
 MEGADRAMON = ((9000, 12600, 870, 690, 550, 400, 4000), (0x2E, 0x2F, 0x30, 0x31), (35, 40, 25, 0))
 # Megaton Punch, Giga Freeze, DG Dimension, finisher Genoside Attack
+MACHINEDRAMON = ((9000, 20000, 700, 600, 480, 400, 9999), (0x2E, 0x30, 0x32, 0x34), (35, 35, 30, 0))
+# Megaton Punch, Thunder Justice, All Range Beam, finisher Infinity Cannon: the moves of the stock one on MGEN99
 
 
 def cast():
@@ -290,7 +304,7 @@ def cast():
               ("regular", 137, (2400, -2600), MAMEMON, (3400, -2600), 2),
               ("regular", 137, (2400, -2100), MAMEMON, (3400, -2100), 2),
               ("guardian", 172, (-850, -300), MEGADRAMON, (-3400, -300), 0)],
-        243: [],
+        243: [("boss", 115, ARENA, MACHINEDRAMON, (3400, ARENA[1]), 0)],
     }
     for row, recs in plan.items():
         out[row] = []
@@ -301,8 +315,7 @@ def cast():
                 out[row].append(Rec(p[1], slot, sid, "worker", (p[2][0], 0, p[2][1]), words))
             else:
                 role, species, at, (stats, moves, weights), flee, group = p
-                words = fighter(species, at, sid, stats, moves, weights, flee,
-                                GUARD_RANGE if role == "guardian" else REGULAR_RANGE)
+                words = fighter(species, at, sid, stats, moves, weights, flee, RANGE[role])
                 out[row].append(Rec(species, slot, sid, role, (at[0], 0, at[1]), words, group))
     return out
 
@@ -351,8 +364,8 @@ def check_cast(disc):
                     "%s: move %d's EFE list lacks its type %d" % (sp["name"], move, disc.original_type(r.species))
                 if not is_finisher(move) and r.words[26 + k]:
                     cost.append(disc.move(move)["mp"] * 3)
-            assert cost and w["mp"] >= MIN_PICKS * max(cost), "%s: MP %d is under %d picks of %d" \
-                % (sp["name"], w["mp"], MIN_PICKS, max(cost))
+            assert cost and w["mp"] >= MIN_PICKS[r.role] * max(cost), "%s: MP %d is under %d picks of %d" \
+                % (sp["name"], w["mp"], MIN_PICKS[r.role], max(cost))
     return heaps
 
 
@@ -606,21 +619,49 @@ def talk_section(row, rec):
     assert rec.script_id in ids and len(ids) <= 3
     ids += [0xFF] * (3 - len(ids))
     win = (b"\x1c\x00" + struct.pack("<H", GUARD_TRIGGER[row]) if rec.role == "guardian" else b"") + ARRIVAL
-    return (bytes([0x1B, rec.script_id, 0x1A, 0]) + E.dialog_text([LINES[rec.species]])
-            + bytes.fromhex("0d00 0000 2700 6700 0100 1e00 fa01")
+    return (say(rec.script_id, [LINES[rec.species]]) + bytes.fromhex("2700 6700 0100 1e00 fa01")
             + b"".join(bytes([0x1E, 0, 0xFB + k, v]) for k, v in enumerate(ids)) + b"\x66\x00" + win)
+
+
+def jump_if_set(trigger, to):
+    """The IF of docs/GAME.md 4.3: jump to `to` (an offset from the script's start) when `trigger` is set."""
+    return b"\x19\x00\x01\x00" + struct.pack("<HHH", trigger, 0x18, to) + b"\x19\x00"
+
+
+def say(owner, lines):
+    """A box of `lines` from `owner` (docs/GAME.md 4.9, 4.10) that waits for a press."""
+    return bytes([0x1B, owner, 0x1A, 0]) + E.dialog_text(lines) + b"\x0d\x00\x00\x00"
+
+
+def boss_section(rec, at):
+    """The boss's talk section, placed at offset `at` in its DG script (its jumps are offsets from the script's start).
+    It speaks, then a fight that is not predefined (nothing can join on an empty screen, and it plays the boss's own
+    music). A flee or a loss never comes back here. A win pays the reward once, all or nothing (docs/GAME.md 6.2): with
+    trigger 629 set it ends; otherwise each item is given (GIVE_ITEM sets trigger 0 when the bag cannot take it, clears it
+    when it can) and a failed give jumps to the rollback for that position, which takes back the items already given,
+    says the bag is full and ends with 629 still clear. Only when all seven are in does 629 get set."""
+    head = say(rec.script_id, [LINES[rec.species]]) + bytes.fromhex("2700 6700 0100 6600")
+    paid = b"\x1c\x00" + struct.pack("<H", REWARD_TRIGGER) + say(0xFF, PAID_LINES) + b"\xfe\x00"
+    rollback = [b"".join(bytes([0x29, 0, item, 1]) for item in REWARD[:k]) + say(0xFF, FULL_LINES) + b"\xfe\x00"
+                for k in range(len(REWARD))]
+    give = lambda item, to: bytes([0x28, 0, item, 1]) + jump_if_set(0, to)
+    end = at + len(head) + len(jump_if_set(0, 0)) + len(give(0, 0)) * len(REWARD) + len(paid) - 2   # paid's FE 00
+    starts = [end + 2 + sum(map(len, rollback[:k])) for k in range(len(REWARD))]
+    s = head + jump_if_set(REWARD_TRIGGER, end) + b"".join(give(item, to) for item, to in zip(REWARD, starts)) + paid
+    assert at + len(s) == end + 2 and s[end - at:] == b"\xfe\x00"
+    return s + b"".join(rollback)
 
 
 def dg_script(i):
     """Screen i's DG script: the section table, the arrival section (0xFE) and a talk section per fighter. Every
     screen's arrival clears 0xFA: a flee lands on the screen before, AFAC1 included."""
-    secs = [(0xFE, ARRIVAL)] + [(r.script_id, talk_section(ROWS[i], r)) for r in CAST[ROWS[i]]
-                                if r.role in ("regular", "guardian")]
-    head = 2 + 4 * len(secs) + 2
-    table, body = b"", b""
-    for sid, b in secs:
-        table += struct.pack("<HH", sid, head + len(body))
-        body += b
+    fighters = [r for r in CAST[ROWS[i]] if r.role != "worker"]
+    head = 2 + 4 * (1 + len(fighters)) + 2
+    table, body = struct.pack("<HH", 0xFE, head), ARRIVAL
+    for r in fighters:
+        at = head + len(body)
+        table += struct.pack("<HH", r.script_id, at)
+        body += boss_section(r, at) if r.role == "boss" else talk_section(ROWS[i], r)
     s = struct.pack("<H", head) + table + b"\xff\xff" + body
     assert len(s) <= 0x4000
     return s
@@ -699,7 +740,7 @@ def previews(out):
         Image.fromarray(E.guide(scr, prims, frame=PAINT).astype(np.uint8)).save(os.path.join(out, "guide_%d.png" % (i + 1)))
         Image.fromarray(E.labels(scr, prims, PAINT)).save(os.path.join(out, "labels_%d.png" % (i + 1)))
     spec = dict(host=dict(row=HOST["row"], exit=HOST["warp"], spawn=HOST["spawn"][:3], save_exit=HOST["save_exit"],
-                          file=HOST["file"]), screens=[])
+                          file=HOST["file"]), reward=list(REWARD), screens=[])
     for i, scr in enumerate(SCREENS):
         b = built(i)
         grid, mapb, tfsb, idx, day = b["grid"], b["map"], b["tfs"], b["idx"], b["day"]
@@ -725,7 +766,8 @@ def previews(out):
             backdrop=os.path.join(d, "backdrop_day.png"),
             cast=[dict(species=r.species, slot=r.slot, script=r.script_id, role=r.role, group=r.group,
                        at=[r.xyz[0], r.xyz[2]], hp=r.words[11], mp=r.words[12], bits=r.words[19],
-                       trigger=GUARD_TRIGGER.get(scr.row) if r.role == "guardian" else None)
+                       trigger=GUARD_TRIGGER.get(scr.row) if r.role == "guardian" else
+                       REWARD_TRIGGER if r.role == "boss" else None, record=list(r.words))
                   for r in CAST[scr.row]]))
         if b["rects"]:                               # Field.loaded_files checks the sprites are live
             spec["screens"][-1]["fg"] = dict(count=len(b["rects"]))
@@ -839,6 +881,16 @@ def main():
     heaps = check_cast(Disc(a.bin))
     print("heap estimates (budget %d B): %s" % (HEAP_BUDGET, ", ".join("%s %d B" % (NAMES[ROWS.index(r)], b)
                                                                        for r, b in heaps.items())))
+    # the reward: each id is its item, by dw_decomp's ITEM_PARA_NAME strings and by the name the disc's table holds
+    for item, (_, name) in zip(REWARD, REWARD_NAMES):
+        assert cstr(ITEM_PARA + 32 * item) == name, "item %d is %r, not %s" % (item, cstr(ITEM_PARA + 32 * item), name)
+    item_c = os.path.join(ROOT, "..", "dw_decomp", "src", "main", "item.c")
+    if os.path.exists(item_c):
+        para = re.findall(r"ITEM_PARA_NAME\((\w+)\)", open(item_c, encoding="utf-8").read().split("Item ITEM_PARA[128]")[1])
+        assert len(para) == 128 and [para[i] for i in REWARD] == ["STR_ITEM_NAME_" + t for t, _ in REWARD_NAMES], \
+            "REWARD is not %s in dw_decomp's ITEM_PARA" % [t for t, _ in REWARD_NAMES]
+    else:
+        print("no dw_decomp checkout at %s: the reward ids are checked against the disc's names only" % item_c)
     h = hashlib.sha256()
     f.seek(0)
     for block in iter(lambda: f.read(1 << 22), b""):

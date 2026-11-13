@@ -52,8 +52,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game  # noqa: E402
 from field_drive import (  # noqa: E402
-    Field, UP, TAMER, NPC0, CAMERA, IS_SCRIPT_PAUSED, PREVIOUS_SCREEN, CURRENT_EXIT, NPC_ANIM, NPC_ON_MAP,
-    NPC_STATS, PARTNER_STATS, PARTNER_MAX_HP, PARTNER_ANIM, HOUR, CURRENT_FRAME)
+    Field, UP, TAMER, NPC0, CAMERA, IS_SCRIPT_PAUSED, PREVIOUS_SCREEN, CURRENT_EXIT, NPC_ON_MAP,
+    NPC_STATS, PARTNER_STATS, HOUR, CURRENT_FRAME)
 
 
 ROW_122 = 122                                     # the other map bound to DG script 118 (TUNN07_2)
@@ -339,64 +339,10 @@ def main():
         f.lose(row)
 
     def measure_fight():
-        hp, mp_, off, de, spd, brain = (int(v) for v in a.stats.split(","))
-        g.warp(mp["host_row"], spec["host"]["exit"])
-        for field, value in (("remaining_lifetime", 9999), ("poop_level", 9999), ("tiredness", 0), ("script_sync_bit", 1),
-                             ("evolution_target", 12)):      # MetalGreymon
-            g.set(field, value)
-        g.set_atomic(("tamer_state", 6), ("tamer_substate", 0))
-        g.set_atomic(("partner_state", 13), ("partner_sub_state", 0))
-        check(wait_for(lambda: g.partner_type == 12 and g.evolution_target == -1
-                       and (g.partner_state == 1 or g.tamer_state == 20), 240), "the partner evolved")
-        for _ in range(12):
-            if g.tamer_state == 0 and g.partner_state == 1:
-                break
-            g.route("4:cross,45:none")
-        g.settle()
-        wait_for(lambda: g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1, 30)
-        g.advance(120)                                 # the evolution's last box has closed
-        g.d.write_bytes(struct.pack("<4h", off, de, spd, brain), PARTNER_STATS)
-        # Buster Dive, Pulse Laser, Metal Sprinter, and its finisher: animation 46 + the slot in its move list
-        g.d.write_bytes(bytes([34, 33, 33, 0, 50, 54, 56, 60]), PARTNER_STATS + 8)
-        g.d.write_bytes(struct.pack("<4h", hp, mp_, hp, mp_), PARTNER_MAX_HP)
-        g.warp(row, 0)                                 # coming back from the glade a big partner lands in the entrance's
-        vec = calibrate()                              # lane, as it would at any stock exit: not what this measures
-        talk(vec)
-        rec = spec["boss"]["record"]
-        h = lambda addr: struct.unpack("<h", g.d.read(addr, 2))[0]
-        picks, ours, last, last_p, dry, printed, boss_hp, partner_hp = {}, 0, 0, 0, None, 0, rec[11], hp
-        heals = 0
-        t0 = time.time()
-        while time.time() - t0 < 600 and gstate() == 1:
-            anim, t = g.d.read(NPC_ANIM, 1)[0], time.time() - t0
-            if anim in rec[22:26] and anim != last:
-                picks[anim] = picks.get(anim, 0) + 1
-            last = anim
-            mine = g.d.read(PARTNER_ANIM, 1)[0]
-            ours += mine == 60 and last_p != 60          # our finisher
-            last_p = mine
-            now = h(NPC_STATS + 0x14), h(PARTNER_MAX_HP + 4)
-            if gstate() == 1:                            # still fighting: the game restores them at the end
-                boss_hp, partner_hp = now
-                if heals < a.heal and 0 < partner_hp < 2500:
-                    g.d.write_bytes(struct.pack("<h", min(hp, partner_hp + 5000)), PARTNER_MAX_HP + 4)
-                    heals += 1
-            if dry is None and h(NPC_STATS + 0x16) < 96:
-                dry = round(t)
-            if t - printed >= 15:
-                printed = t
-                print("  %3ds: boss HP %d MP %d, partner HP %d MP %d, picks %s"
-                      % (t, h(NPC_STATS + 0x14), h(NPC_STATS + 0x16), h(PARTNER_MAX_HP + 4), h(PARTNER_MAX_HP + 6), picks), flush=True)
-            g.route("2:square,2:none", poll_s=0.02)   # the finisher, whenever its meter is full
-        secs = round(time.time() - t0)
-        shot("measure_end")
-        print("MEASURE fight: partner %s: %ds, boss HP left %d, partner HP left %d, heals %d, boss picks %s, our finishers %d, MP ran out at %s"
-              % (a.stats, secs, boss_hp, partner_hp, heals, picks, ours, dry), flush=True)
-        end = time.time() + 300
-        while time.time() < end and not (gstate() == 0 and g.tamer_state == 0 and i32(IS_SCRIPT_PAUSED) == 1):
-            g.route("4:cross,20:none")
-        over = gstate() == 0 and g.tamer_state == 0
-        print("MEASURE outcome: %s (map %d)" % ("unfinished" if not over else "won" if screen() == row else "lost", screen()), flush=True)
+        def enter():
+            g.warp(row, 0)                             # coming back from the glade a big partner lands in the entrance's
+            talk(calibrate())                          # lane, as it would at any stock exit: not what this measures
+        f.measure(a.stats, a.heal, spec["boss"]["record"], 0, (mp["host_row"], spec["host"]["exit"]), enter)
 
     def fight():
         def stage(*steps):                             # each step runs on what the last left: stop at a failure
