@@ -307,7 +307,7 @@ static int emitter_read(struct CPUState* cpu, int fn, uint32_t* key, int32_t* v)
             !battle_state()) return 0;
         *key = ra;
         v[0] = rd16(a[0] + 4); v[1] = rd16(a[0] + 6);
-        v[2] = rd32(a[0] + 28); v[3] = rd32(a[0] + 32);
+        v[2] = rd16(a[0] + 28); v[3] = rd16(a[0] + 30);   /* GsSPRITE scalex, scaley: i16 */
         return 4;
     }
     return 0;
@@ -346,7 +346,7 @@ static void emitter_write(struct CPUState* cpu, int fn, const int32_t* v) {
         break;
     case FN_GSSPRITE:
         psx_mod_write_half(a[0] + 4, (uint16_t)v[0]); psx_mod_write_half(a[0] + 6, (uint16_t)v[1]);
-        psx_mod_write_word(a[0] + 28, (uint32_t)v[2]); psx_mod_write_word(a[0] + 32, (uint32_t)v[3]);
+        psx_mod_write_half(a[0] + 28, (uint16_t)v[2]); psx_mod_write_half(a[0] + 30, (uint16_t)v[3]);
         break;
     }
 }

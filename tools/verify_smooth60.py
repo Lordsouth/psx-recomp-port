@@ -2,7 +2,7 @@
 
 python tools/verify_smooth60.py --port N --tag T [--build build-debug] [--off] [--verify] [--ws 21:9]
        [--run 2x] [--hd DIR] [--hd-dump DIR] [--dw15] [--map NAME] [--dir right] [--battle] [--fp]
-       [--menu] [--talk] [--shout]
+       [--menu] [--shout] [--win] [--evo N] [--idle-fp-save | --idle-fp-load TAG] [--exe NAME]
 Results: <build>/s60/<tag>/result.json. Method: docs/investigations/2026-11-13-60fps.md.
 """
 import argparse, json, os, shutil, struct, sys, time
@@ -21,8 +21,10 @@ ap.add_argument("--build", default="build-debug")
 ap.add_argument("--exe", default="Digimon_World_Recompiled.exe", help="another exe in the build dir (an A/B build)")
 ap.add_argument("--idle-fp-save", action="store_true", help="save a state in the field, fingerprint it twice (control)")
 ap.add_argument("--idle-fp-load", help="tag of an --idle-fp-save run: load its state here and compare fingerprints")
-ap.add_argument("--talk", action="store_true", help="talk to the nearest NPC and dump the text box opening")
 ap.add_argument("--shout", action="store_true", help="battle: dump the command menu slide-in and a command shout")
+ap.add_argument("--evo", type=int, default=0, help="force a stock evolution into this species and dump it")
+ap.add_argument("--evo-dumps", type=int, default=4)
+ap.add_argument("--evo-gap", type=float, default=2.0)
 ap.add_argument("--win", action="store_true", help="battle: win it and dump the ending (menu slide-out, result boxes)")
 ap.add_argument("--tag", required=True)
 ap.add_argument("--off", action="store_true")
@@ -251,6 +253,31 @@ try:
             res["menu_closed"] = tri() != -1
             g.artifact_shot(os.path.join(out, "menu_after.png"))
             time.sleep(1)
+    if a.evo:
+        # A forced stock evolution (verify_roster_evolution.py's recipe): the EVL overlay's sequence
+        # runs as world objects inside gameLoop.
+        with Stage("evo"):
+            g.set("remaining_lifetime", 9999)
+            g.set("poop_level", 0)
+            g.set("tiredness", 0)
+            if g.script_sync_bit == 0:
+                g.set("script_sync_bit", 1)
+            g.set("evolution_target", a.evo)
+            g.set_atomic(("tamer_state", 6), ("tamer_substate", 0))
+            g.set_atomic(("partner_state", 13), ("partner_sub_state", 0))
+            for k in range(a.evo_dumps):
+                time.sleep(a.evo_gap)
+                dump("dump_evo%d" % k, 12)
+            end = time.time() + 60
+            while time.time() < end and g.partner_type != a.evo:
+                time.sleep(0.5)
+            res["evo_done"] = g.partner_type == a.evo
+            g.artifact_shot(os.path.join(out, "evo.png"))
+            end = time.time() + 40
+            while time.time() < end and not (g.tamer_state == 0 and g.partner_state == 1):
+                g.route("4:cross,30:none")
+            g.set("evolution_target", -1)
+            res["evo_back"] = g.tamer_state == 0 and g.partner_state == 1
     samples = res.setdefault("scroll", [])
 
     def sample(t_end):

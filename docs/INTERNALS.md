@@ -129,7 +129,7 @@ Twelve plugins live here:
 | `dw_cheats.c` | the cheat list as launcher toggles; the codes stay in `cheats.txt` (§6) |
 | `dw_dw15.c` | moves the memory cards to `saves/dw15/` while Digimon World 1.5 is on (§4.4) |
 | `dw_newmaps.c` | keeps a new map out of a memory card's screen bytes: a save made there names its host map (§3.2) |
-| `dw_smooth60.c` | Smooth 60 FPS: redraws the field and battles between the 20 Hz ticks with render passes, from `VSync` entry (PENDING, no added delay). Passes restore the RAM kept at `renderObjects` entry, blend camera, bones and the 2D emitters' arguments, and skip `startSound` and off-rect `LoadImage`/`ClearImage`. Its 11 `game.toml` hooks are owned in `check_dw15_compat.py` (`docs/investigations/2026-11-13-60fps.md` §6d) |
+| `dw_smooth60.c` | Smooth 60 FPS: redraws the field and battles between the 20 Hz ticks with render passes, from `VSync` entry (PENDING, no added delay). Passes restore the RAM kept at `renderObjects` entry, blend camera, bones, the HUD and battle command menu slides and the 2D emitters' arguments (sprites, effects, damage numbers, fades, the text and menu box zoom through `drawLine3P` from `renderUIBoxAnim`, the battle command shout through `GsSortSprite`), and skip `startSound` and off-rect `LoadImage`/`ClearImage`. Field passes cover everything `gameLoop` draws, the evolution (EVL) included; battle passes run in `GAME_STATE` 1 and 2 (the fight, intro and ending). Tournament (STD) and VS loops keep stock frames. Its 12 `game.toml` hooks are owned in `check_dw15_compat.py`, plus a share of `GsSortSprite` (`docs/investigations/2026-11-13-60fps.md` §6d, §8) |
 
 `codegen_setup.c` is glue for the launcher build, not a plugin.
 
