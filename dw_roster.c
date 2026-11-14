@@ -144,6 +144,9 @@ static void roster_fill(void) {
             roster_arena + ROSTER_OFF_STD_GLYPH + 113u * 14u + i,
             k_std_glyph_113[i]);
     }
+    /* Cup bracket projectile icons: already 180 entries in the include. */
+    for (i = 0; i < sizeof(k_std_icons); i++)
+        psx_mod_write_byte(roster_arena + ROSTER_OFF_STD_ICONS + i, k_std_icons[i]);
 
     /* The two overlay tables come from baked constants, not guest RAM. */
     for (i = 0; i < sizeof(k_train_anim_stock); i++)

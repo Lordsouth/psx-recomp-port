@@ -1449,7 +1449,7 @@ Stock runs are `fight --brains N [--drops]` in `tools/verify_newmap.py`; `--no-e
 | **Move-to softlock** | `tickEntityMoveTo` and `tickEntityMoveToAxis` truncate delta = (target-pos)/duration (`src/main/tamer.c:1134-1175,1216-1238`). A target on the positive side by less than the duration gets delta 0 and never finishes; the negative side snaps at once. X and Z are judged separately. Duration 0 divides by zero, but the compiled code does not trap and MIPS gives -1 or +1, so it snaps [inferred]. | code, disc; [not run] | Authored scripts: keep each positive distance at least the duration. |
 | **180 degree look-at softlock** | `rotateEntity` has no branch for equal differences (`src/main/overworld.c:1503-1546`), so an exact 2048 offset never finishes. A script hangs only if it waits on that slot with op 0x4A; NPC tracking self-heals. The first `SET_DIALOG_OWNER` of a talk section queues a mutual look-at (`src/main/script_interp.c:2741-2747`), so a script can meet this without writing a look-at. | code; [not run] | Authored scripts: no `4A FF` in a talk section. `boss_script` has no 0x4A wait, so it is safe as built. |
 | **Chase radius is not a circle** | The radius test compares dx+dz, unsquared and signed, with (range*6/10)^2 (`src/main/overworld.c:1454-1459`). dx+dz stays near 20000 at most, so any trackingRange of 237 or more passes everywhere; below that it is a half-plane. Stock barely uses it: one record of mode 16. | code, disc; [not run] | Do not give a new NPC follow modes 6, 7, 8, 9, 15, 16, 17 or 18 expecting a circle. |
-| **Cup bracket sprites** | The sheet comes from type/64 and the cell from type-1 (`src/std/std_main.c:3363-3367`), so type 64 uses sheet 1 cell 63; type 128 has the same edge. The partner's own type enters this table (:3472). `STD_DIGIMON_SPRITE_CLUT` has 112 rows, so types 112 and up read past it. Machinedramon's mini sprite shows garbage in Vice [Vice]. | code; [not run] | Yes: roster partners in cups are untested, and Gigadramon (64) is wrong for sure. |
+| **Cup bracket sprites** | The sheet comes from type/64 and the cell from type-1 (`src/std/std_main.c:3363-3367`), so type 64 draws sheet 1 cell 63, which is empty; its portrait is sheet 0 cell 63 (15.5). The partner's own type enters this table (:3472); opponents 63-65 are swapped out (15.2). `STD_DIGIMON_SPRITE_CLUT` and `STD_BRACKET_PROJECTILE_ICONS` have 112 rows, so types 112 and up read past both. Disc: 112 has a portrait (cell 47), 113 and up none. | code, disc; [run: Gigadramon with no mods drew sheet 1 cell 63, `tools/verify_cups.py --partner 64`] | Yes, fixed in the Expanded Roster (INTERNALS 4.1 "Cup bracket"). Only 63-66 reach a cup by the schedule; the roster's other species are on no entry list (15.3). |
 | **Slot machine blocks triples** | At assist 0 the third reel is pushed 1 or 2 steps off a would-be triple (`src/trn/trn_slots.c:333-343`). Disc: on that reel a symbol repeats at distance 3 or more, so a triple is impossible. Assist 1 also pushes off 7-7-7 (:361-362), so triple sevens need assist 2, one roll in ten. A loss still pays 5. TRN2 was not checked. | code, disc; [not run] | Lucky Reels and Perfect Training route around it. |
 | **Evolution item accepted, nothing happens** | `partnerWillRefuseItem` refuses only same level, level+2 and level-1 (`src/main/partner_impl.c:1460-1467`), so Fresh accepts Champion and Ultimate items, and In-Training accepts Ultimate items. `handleEvoItems` then returns (`src/main/item.c:2205-2208`). Vicen says the item is lost [Vice], but that return comes before `removeTamerItem` at :2212, so check first. | code; [not run] | Low. The port treats only items 125-127. |
 | **Omni Disk skips the battle limit** | Case 0x12 adds a flat 20 to Off, Def and Speed without the start-plus-30 % limit (`src/main/main.c:4372-4374`); 999 still holds through `BTL_buffStats`. A later capped disk computes limit minus stat, which is negative, so it lowers the stat (:4328-4352). | code; [not run] | Low. Battle item only. |
@@ -1475,7 +1475,7 @@ Stock runs are `fight --brains N [--drops]` in `tools/verify_newmap.py`; `--no-e
 | **Missing text** | A stray `00 00` inside script text ends it early, as in Myotismon's SkullGreymon line [Vice]. | Authored text must not contain it. |
 | **Bank, recycling shop, schedule and Brains-tech text** | Scrolling the bank wipes the bag text, the recycling shop uses the wrong format, schedule rows starting with a space shift, and the learned-tech box clips [Vice]. | Cosmetic. |
 | **Shop and flatten odds and ends** | Shogun Gekomon shop memory leak, merit cap compare, black box after shopping, and an enemy left untouchable when the partner revives during its flatten, the last only suspected [Vice]. | None known. |
-| **GPU primitive after every cup** | A self-linked primitive after each cup, patch 0023 [Horizon]. | Tournament code is untested in the port. |
+| **GPU primitive after every cup** | A self-linked primitive after each cup, patch 0023 [Horizon]. | Not seen in the port: a win and a loss in one session, and runs with Widescreen and Smooth 60 FPS, each returned to the lobby with the game running [run: `tools/verify_cups.py`]. The primitive itself was not looked for. |
 | **Status page happiness label** | The label reads the wrong texture columns, patch 0220 [Horizon]. | Cosmetic. |
 | **Gabumon ambush crash** | A GPU packet overflow from the banner with a fourth NPC, plus an effect-context race, reproduced under a forced layout and not proven as the original report [Horizon]. | Limit NPC counts on new maps. |
 | **Care edge cases** | Lifetime has no upper clamp and wraps at 32767; the sickness roll is uint8 and wraps, by Horizon's own inference; bedtime ignores `sleepyMinute` [Horizon]. | Check against the code with item 6 in 14.1. |
@@ -1574,7 +1574,7 @@ The port translates the stock EXE ahead of time. It can change data, apply guard
 | 8 | **Text boxes, shops, menus, items.** How does the text box state machine run, where does `DELAY_FRAMES` count down, what are the shop rules, how do item effects and ground pickups work? NPCs and items on new maps need this. | `src/main/script_textbox.c`, `src/shop/script_menu.c`, `src/main/game_menu.c`, `inventory.c`, `main_menu.c`, `item.c`, `world_object.c`; Horizon `docs/reference/items-and-menus.md` |
 | 9 | **Which of Vicen's claims are real on this disc,** and which crash the port? All of 12.3, the tournament exploit, and the Machinedramon crashes above all, since the build keeps both triggers. | Decoded DG.SCN, `src/main/script_common.c`, `src/main/tournament.c`; Vicen's wiki bug pages, issues 3 and 22, `Digimon Code/*.asm` |
 | 10 | **Cutscene overlays on an authored map.** These scenes run on whatever map the player is on, then reload only sounds and the TFS. Is row 239 intact afterwards: sprite texels at x 384+, collision, palette, the 21:9 sliver? What do the overlays occupy in RAM? Only entry functions were opened. | `src/main/partner.c:776-779,808-809`; `src/evl/evl.c`; `src/dooa/dooa.c`, `src/murd/murd.c`, `src/doo2/doo2.c`, `src/eab/eab.c`, `src/endi/endi.c`, `src/dget/dget.c`, `src/mov/mov.c`; `config/us/*.yaml` |
-| 11 | **Tournaments.** The calendar, opponent pools, cup unlocks and rewards? Does the arena AI differ from the field AI? | `src/std/std_main.c`, `std_setup.c`, `std_hud.c`, `std_effect.c`, `src/main/tournament.c`, `src/vs/*.c`, `src/dget/dget.c:383-387`, `src/main/utils2.c:605-618` |
+| 11 | **Tournaments.** Mostly answered in section 15: calendar, registration, pools, unlocks, rewards and medals from the code and the disc, a Grade D win and a loss run in the port. Still open: the match AI in `STD_REL` against the field AI, the yearly cup 22 and Grade R (four-way) were not run, and what the runner-up prize branch pays per cup. | `src/std/std_main.c` (match code), `src/vs/*.c`, DG scripts 102 and 214 |
 | 12 | **Training.** The gain formula, grades, gym upgrades and slots. INTERNALS says the maths was in the lost research archive (not re-checked), so it may need redoing. | `src/trn/trn_*.c`, `src/trn2/*.c`, `src/main/script_interp.c:1684-1723`, `tools/verify_roster_training.py` |
 | 13 | **What DW 1.5, SydMontague and Vicen's spreadsheets know** that these studies do not. 1.5 is local and cheap and was in no study's scope. Record each licence when opened. | `dw15-release/ANALYSIS.md`, `PLAN.md`, `disc_diff.txt` (beside this repo in the workspace); DW1-Code `memoryMap.txt`; DW1-SydPatches source; Horizon `docs/decisions.md`, `docs/mods/compatibility.md` |
 | 14 | **Horizon's model and sound claims.** Do the 178/178 and 222/222 round trips reproduce? What explains 178 files against 180 types, and the libsnd overrun and loop meanings? Fonts 29-32 have no proven caller. | `src/main/model.c`, `anim.c`, `sound.c`, `sound_async.c`, `font.c`; Horizon `tools/mmd.py`, `tools/sound.py`, `docs/mods/sound.md`, `docs/mods/models.md` |
@@ -1600,3 +1600,91 @@ Left behind on purpose: a save decoder from one debugging session (9.1 has the f
 ### 14.4 Never exercised
 
 The `fight` mode of `tools/verify_newmap.py` does not fight the glade boss at real numbers: it rewrites boss HP and MP and partner HP on every poll and forces boss HP to 1 to win. Its `measure` mode sets the partner's stats and then pokes nothing; 7.18 records what it found. Last-life loss, lifetime-0 loss, natural death and evolution have not run on row 239. `tools/verify_newmap.py` has no audio check. Whether a port option changes the 20-tick battle clock was not checked (`src/btl/battle_main.c:2606`).
+
+## 15. Tournaments
+
+The arena cups run in the `STD_REL` overlay (`src/std/`, load base 0x80052AE0), entered from the main executable's
+`startTournament` (`src/main/utils2.c:577-682`); the schedule and its checks are in `DGET_REL` (`src/dget/dget.c`), the
+registration clock in `src/main/tournament.c`. `VS_REL` (`src/vs/`) is the two-player versus mode, not read here. A
+whole cup was played in the port, a win and a loss, on the stock disc with no mods [run 2026-11-14:
+`tools/verify_cups.py`]. A citation that starts with a colon is in the file last named.
+
+### 15.1 Where and when
+
+- **The arena** is the Arena Lobby, map 208, or 223 once trigger 50 is set; both run DG script 168, which hands talk
+  section 0x51 (Greymon at the desk) and tile section 0x36 (the waiting-room door, top left) to library script 213.
+  Map 106 (script 102) holds a separate yearly cup, id 22, on day 22 [inferred from its text].
+- **Calendar.** `TOURNAMENT_SCHEDULE` (`src/main/script_common.c:585`) is 30 days of up to 6 cup ids, indexed by
+  `DAY % 30`. The schedule screen shows today and the next four days (`src/dget/dget.c:101-121`), each cup filtered by
+  its unlock (15.3). Day 0 offers cups 0 and 1 to an early save [run].
+- **Registering** (`CALL_ROUTINE 18`, `initTournamentSchedule`, `:664-741`): today's column takes entries only up to
+  10:00 (`minutesOfDay() <= 600`, `:124`), tomorrow's at any time. A cup can be picked when its byte carries 0x80 (the
+  partner is on its entry list) or 0x40 (on its penalty list) (`:484-495`). Picking writes trigger 37, triggers 38 and
+  39 (the two reminders), pstat 2 = the day (`| 0x80` for tomorrow, cleared by the day rollover,
+  `src/main/script_common.c:1432-1435`), pstat 3 = the cup and pstat 4 = the partner's species. A penalty-list partner
+  also sets trigger 40. Greymon cancels on request (unsets 37).
+- **The day.** `updateTournamentRegistration` (`src/main/tournament.c:42-120`, every field tick) drops the entry if the
+  partner's species is no longer pstat 4, shows MAPHEAD 0x4D9 ("You're entered in today's ... Tournament") once
+  between 12:00 and 20:00 and once after, and MAPHEAD 0x4DA (missed) on a later day or after 23:00 [run: the 12:00
+  reminder]. Walking through the door runs script 213 section 0x36: not registered, tomorrow's entry, or before 10:00
+  sends the tamer back; trigger 40 with Tamer level above 0 costs a level 30 % of the time; then `CALL_ROUTINE 6`
+  starts the cup. After it the clock moves on 360 minutes [run: 12:00 to 18:09] and the tamer is warped to 208 (223
+  with trigger 50).
+
+### 15.2 The cup
+
+`startTournament` reads pstat 3, draws seven opponents (15.3), loads `STD_REL` and calls `STD_tournamentMain`
+(`src/std/std_setup.c:521-616`). That swaps opponents 64, 63 and 65 for 54, 48 and 42 (`:530-539`), so Gigadramon,
+Panjyamon and MetalEtemon never appear as opponents; the partner is not swapped. `STD_setupParticipants`
+(`src/std/std_main.c:3464-3540`) puts the partner in a random slot of 8 (`PARTICIPANT_TYPES` 0x80135150,
+`STD_PLAYER_SLOT` 0x8013514D) and decides the other pairings by a roll on the two levels (`STD_WIN_CHANCES`, 4 x 3,
+`:1445`), never by a fight. Each round shows the bracket, then the partner fights its opponent; a loss ends the cup.
+`GAME_STATE` is 5 for the intro, bracket and scenes and 4 during a match [run]. The return value is the number of
+wins; 3 wins (2 for cup 5, the four-way Grade R) is a win: `TOURNAMENTS_WON` +1 and trigger 15 + cup, else
+`TOURNAMENTS_LOST` +1; `TOURNAMENT_WINS` += wins; pstat 255 = wins (`src/main/utils2.c:661-681`) [run: a win gave
+counters (1, 3, 0) and trigger 15, a round-one loss (1, 3, 1) and pstat 255 = 0]. The matches use the overlay's own
+copy of the battle code; whether its AI differs from the field's was not read.
+
+### 15.3 Pools and unlocks
+
+Each cup's data is a jump table in script 213 section 0xA, entry `id`, five lists (`getCupDataJumpTable`,
+`src/main/tournament.c:146-166`): 0 the schedule text, 1 three requirement bytes, 2 the penalty list, 3 the entry
+list, 4 the opponent pool. Lists end at a byte of 0xFE or more; a pool that starts with one means "every species".
+
+- **Opponents** (`src/main/utils2.c:596-651`): the pool's species whose recruit flag (trigger 200 + species) is set;
+  an empty pool takes every species 0..111 with the flag, and cup 22 takes its list without flags. Exactly 7 are
+  used as they are; fewer are padded with random repeats; more lose the partner's own species and 7 are drawn. An
+  early save has no flags, and `randomLimit(0)` would then pick from an uninitialised array [inferred, not run]; the
+  test sets Grade D's 18 pool flags first.
+- **Unlocks** (`isTournamentEnabled`, `src/dget/dget.c:350-427`): requirement bytes (min recruits, min count, kind).
+  Min recruits 0 is always open; otherwise that many of the pool's flags (of the whole band 200..311 for an empty
+  pool) must be set. Then kind 0 is open, 1 needs Grade A won (trigger 18), 2 needs min count of script 213 section
+  0xB's species (the stock Ultimates) recruited, and any other kind needs min count recruited among the pool's leading
+  entries up to that species id. Disc: on stock only cup 0 needs nothing; most need 8 recruits, Grade B 24, the Mech
+  Cup 6 and three of a list, the Filthy Cup 3 and two, Grade A 8 and four Ultimates.
+- **Who may enter.** Disc: the entry lists hold only stock partners and the four unused 63-66 (Panjyamon, Gigadramon,
+  MetalEtemon, Myotismon); no list holds a species above 66. So a roster partner of 67 or more is refused by every
+  cup and can enter only if the registration is written by hand [run: the schedule showed its cups without 0x80 or
+  0x40 and refused them].
+
+### 15.4 Rewards and medals
+
+- **Prizes** are paid by DG script 214 section 0x33 when the tamer is back in the lobby, keyed on pstat 255 and pstat
+  3: a win pays bits and an item per cup, reaching the final pays a smaller prize, a round-one loss pays a consolation
+  item; Grades B and A also roll for a Tamer level (10 % and 20 %), and Grade S picks one of three items. The section
+  also clears trigger 37. [run: Grade D won paid 2000 bits and item 7; a loss paid item 39.]
+- **Medals** (`checkTournamentMedalConditions`, `src/main/tournament.c:168-240`, `CALL_ROUTINE 22` in scripts 126 and
+  209): all six grade cups won, all five version cups, all seven element cups, all four type cups, 100 match wins, or
+  every card plus the game beaten; each once.
+
+### 15.5 The bracket portrait
+
+`STD_renderBracketDigimon` (`src/std/std_main.c:3341-3389`) draws each participant as a 16x16 frame of a 32x32 cell
+on two 4-bit sheets that `\STDDAT\STDTIM.BIN` loads at VRAM x 0x380 and 0x3C0, palettes at x 0x120 and 0x130 from
+y 0x1E0. Disc: sheet 0 holds types 1..64 in cells 0..63 and sheet 1 types 65..112 in cells 0..47, then effect icons
+in cells 48..50, the rest empty. The code takes the sheet from `type / 64`, so type 64 draws sheet 1 cell 63, an
+empty cell, while its portrait is sheet 0 cell 63 [run: Gigadramon with no mods drew (sheet 1, cell 63, row 6)]. The
+palette row comes from `STD_DIGIMON_SPRITE_CLUT` (0x8007A49C, 112 entries) and the projectile icon from
+`STD_BRACKET_PROJECTILE_ICONS` (0x8007A50C, 112 entries, `:3623-3650`), so types 112 and up read past both. 112
+(WaruSeadramon) has a portrait, cell 47, and the byte past the palette table happens to be 0, a fitting row; 113 and
+114 have none. The Expanded Roster's fix is in INTERNALS 4.1.

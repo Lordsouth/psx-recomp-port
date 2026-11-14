@@ -51,10 +51,13 @@ OFF_EVO_PATHS, OFF_EVOCHART, OFF_TRAIN_ANIM, OFF_TRN2_ANIM = (
 # The battle-intro name glyphs, 14 bytes per type. 180 * 14 = 0x9D8.
 OFF_STD_GLYPH = 0x4600
 N_TYPES = 180
-# 32 KB. The high-water mark is TRN2_ANIM's end; the lui/lo16 retarget can only
+# The cup bracket's projectile icon per type, one byte each (see STD_BRACKET below).
+OFF_STD_ICONS = 0x5000
+# 32 KB. The high-water mark is STD_ICONS' end; the lui/lo16 retarget can only
 # encode a positive lo16, so every offset must also stay below 0x8000.
 ARENA_SIZE = 0x8000
-_ARENA_END = OFF_STD_GLYPH + N_TYPES * 14
+assert OFF_STD_GLYPH + N_TYPES * 14 <= OFF_STD_ICONS
+_ARENA_END = OFF_STD_ICONS + N_TYPES
 assert _ARENA_END <= ARENA_SIZE and _ARENA_END < 0x8000, _ARENA_END
 
 # ---- tables being relocated, main EXE --------------------------------------
@@ -92,7 +95,46 @@ OVL_RELOC = {
     # moment either enters an arena battle.
     "STD_NAME_GLYPHS":   ("STD_REL.BIN", 148157, 0x80079CBC, 112 * 14,
                           OFF_STD_GLYPH),
+    # The cup bracket's projectile icon, 112 bytes indexed by raw type: 112-114
+    # read the next table (docs/GAME.md 12.2 "Cup bracket sprites").
+    "STD_PROJ_ICONS":    ("STD_REL.BIN", 148157, 0x8007A50C, 112,
+                          OFF_STD_ICONS),
 }
+
+# ---- cup bracket (STD_renderBracketDigimon, STD_REL.BIN) --------------------
+# The bracket portrait takes its sheet from type/64 and its cell from type-1, so
+# type 64 (Gigadramon) drew sheet 1's empty last cell; the portrait the art has for
+# it is sheet 0 cell 63 (Disc: \STDDAT\STDTIM.BIN). Its palette row comes from a
+# 112-entry table, so 112 and up read past it. Nine code words, shared with the 1.5
+# edition (the function is byte-identical there): the sheet from (type-1)/64, and the
+# palette index clamped to 111. 112 keeps its own cell and gets row 0, the value the
+# stock past-the-end read returned; 113 and 114 have no portrait in the art and draw
+# cells 48 and 49 of sheet 1, the bracket's effect icons, in row 0. No new art.
+STD_BRACKET_LBA, STD_BASE = 148157, 0x80052AE0
+STD_BRACKET = [   # (vaddr, stock word, new word)
+    (0x8005D5B0, 0x0220A021, 0x2E210070),   # addu s4,s1,zero  -> sltiu at,s1,112
+    (0x8005D5B4, 0x06210003, 0x14200002),   # bgez s1,+3       -> bne at,zero,D5C0
+    (0x8005D5B8, 0x0011C983, 0x0220A021),   # sra t9,s1,6      -> addu s4,s1,zero (delay: index = type)
+    (0x8005D5BC, 0x2622003F, 0x2414006F),   # addiu v0,s1,63   -> addiu s4,zero,111 (type >= 112)
+    (0x8005D5C0, 0x0002C983, 0x2622FFFF),   # sra t9,v0,6      -> addiu v0,s1,-1
+    (0x8005D5C4, 0x00191180, 0x00029983),   # sll v0,t9,6      -> sra s3,v0,6     (sheet)
+    (0x8005D5C8, 0x03209821, 0x3042FFC0),   # addu s3,t9,zero  -> andi v0,v0,0xFFC0 (sheet*64)
+    (0x8005D5F4, 0x00511021, 0x00541021),   # palette row: table + s1 -> table + s4
+    (0x8005D660, 0x2283FFFF, 0x2223FFFF),   # cell: s4-1 -> s1-1
+]
+# Projectile icons for the three types past the stock table, from a donor's row.
+STD_ICON_DONORS = {112: 61, 113: 3, 114: 64}
+
+
+def std_bracket_patches(image, feature, lba=STD_BRACKET_LBA):
+    """Guarded disc_user patches for STD_BRACKET against one STD_REL.BIN image."""
+    out = []
+    for va, old, new in STD_BRACKET:
+        got = struct.unpack_from("<I", image, va - STD_BASE)[0]
+        assert got == old, "STD_REL 0x%08X is 0x%08X, not 0x%08X" % (va, got, old)
+        out += disc_bytes_patch(disc_offset(lba, va, STD_BASE), struct.pack("<I", old),
+                                struct.pack("<I", new), "cup bracket 0x%08X" % va, feature)
+    return out
 
 # EVERY overlay's load address. Relocating a table means retargeting every
 # reference to it ANYWHERE, and overlays reference the EXE's tables too -- the
@@ -1119,6 +1161,7 @@ def main():
         ("TRN_REL.BIN", "RAISE_DATA"): 3,
         ("TRN2_REL.BIN", "RAISE_DATA"): 3,
         ("STD_REL.BIN", "STD_NAME_GLYPHS"): 6,
+        ("STD_REL.BIN", "STD_PROJ_ICONS"): 4,
     }
     assert dict(per_file) == want_ovl, (
         "overlay site census changed.\n  got:    %s\n  wanted: %s"
@@ -1152,6 +1195,11 @@ def main():
     assert len(stock_train) == 136 and len(stock_trn2) == 136
     stock_glyph = ovl_stock("STD_NAME_GLYPHS")
     assert len(stock_glyph) == 112 * 14
+    icons = bytearray(ovl_stock("STD_PROJ_ICONS"))
+    assert len(icons) == 112
+    icons += bytes(N_TYPES - 112)
+    for t, donor in STD_ICON_DONORS.items():
+        icons[t] = icons[donor]
 
     # Battle-banner names for the two types that overran the table.
     #
@@ -1230,6 +1278,7 @@ def main():
     for lo_va, old, new in sorted(lo_patches):
         out += word_patch(lo_va, old, new)
     out += overlay_retarget(ovl_sites, ovl_images)
+    out += std_bracket_patches(ovl_images["STD_REL.BIN"], "roster")
     out += AUTHORED["extra_patches"]
 
     dest_dir = os.path.join(ROOT, "mods", "preloaded", "packages", PKG_ID, PKG_VER)
@@ -1297,6 +1346,12 @@ def main():
         "static const unsigned char k_std_glyph_113[14] = { %s };  /* Meteormon */"
         % ", ".join("0x%02X" % b for b in AUTHORED["glyph_113"]),
         "#define ROSTER_OFF_STD_GLYPH 0x%04Xu" % OFF_STD_GLYPH,
+        "",
+        "/* Cup bracket projectile icons, all 180 types: the 112 stock bytes, then",
+        " * donor rows for 112-114 (STD_ICON_DONORS). Baked for the same reason. */",
+        "static const unsigned char k_std_icons[%d] = { %s };"
+        % (len(icons), ", ".join("0x%02X" % b for b in icons)),
+        "#define ROSTER_OFF_STD_ICONS 0x%04Xu" % OFF_STD_ICONS,
         "",
         "/* Newly raisable species. One row each; the plugin walks this table",
         " * so adding a species is a generator edit, not a plugin edit.",
