@@ -65,6 +65,7 @@ MODTBL, MODTBL_LBA, MODTBL_SIZE, MODTBL_STAGED = 0x80089000, 168481, 30720, 0x80
 EVO_REQ, EVO_GAINS, EVO_PATHS = 0x80089020, 0x8008BA20, 0x8008CF20
 RAISE, ITEM_TAKE, TRN_ANIM, TRN2_ANIM = 0x801FA01C, 0x801FCA40, 0x8012ED14, 0x8012F014
 SET_RAISED, HAS_RAISED = 0x801F0D40, 0x801F9B80
+EVL_BOUND_HOOK, EVL_BOUND_CODE, EVL_SHARD_LIMIT = 0x80061DE0, 0x801F9160, 0x800677B0   # 1.5's own shard bound
 ROSTER_BANK = 0x296                       # trigger = 0x296 + species: 63..113 -> 0x2D5..0x307
 
 # 1.5's setDigimonRaised, rewritten: 63..113 go to the roster bank, everything
@@ -151,6 +152,17 @@ def build(disc, exe):
             "# Only with 1.5 beneath it: its MODTBL writes go on sectors the 1.5 delta owns.",
             "[[requirement]]", 'feature = "roster-15"', 'package = "dw.1_5"', 'requires_feature = "dw15"', ""]
 
+    # The evolution shatter: on stock, EVL_buildShardSet writes past its 5,436-byte scratch for big models and
+    # the stock roster moves that scratch to its arena (gen_roster_mod.py, EVL_SHARD_*). 1.5 already bounds it:
+    # its EVL jumps from 0x80061DE0 into 1.5 code at 0x801F9160, which sends a shard set that would cross
+    # 0x800677B0 to a spare buffer at 0x80050000-0x80053FFF, or skips it. So roster-15 must NOT retarget the
+    # scratch (an arena address would fail 1.5's bound every time). Hold 1.5 to that bound.
+    evl = disc.files["/EVL_REL.BIN"][0] * 2048
+    if disc.user(evl + EVL_BOUND_HOOK - 0x80060000, 4) != struct.pack("<I", 0x08000000 | (EVL_BOUND_CODE >> 2 & 0x3FFFFFF)):
+        problems.append("1.5's EVL no longer jumps to its shard bound at 0x%08X" % EVL_BOUND_CODE)
+    if ram(EVL_BOUND_CODE + 0x34, 8) != words([0x3C0A8006, 0x354A0000 | (EVL_SHARD_LIMIT & 0xFFFF)]):
+        problems.append("1.5's shard bound no longer tests 0x%08X" % EVL_SHARD_LIMIT)
+
     paths = {}                                # source type -> its 7 targets, as written so far
     for spec in NEW_SPECIES:
         t, d = spec["type"], spec["raise_donor"]
@@ -167,7 +179,7 @@ def build(disc, exe):
         exe_patch("%s: item-take distance (from %s)" % (nm, name(d)), ITEM_TAKE + t - 1, ram(ITEM_TAKE + d - 1, 1))
         a = spec["anim_donor"]
         exe_patch("%s: Offense training animation (from %s)" % (nm, name(a)), TRN_ANIM + t * 2, ram(TRN_ANIM + a * 2, 2))
-        exe_patch("%s: MP training animation (from %s)" % (nm, name(a)), TRN2_ANIM + t * 2, ram(TRN2_ANIM + a * 2, 2))
+        exe_patch("%s: TRN2 Offense training animation (from %s)" % (nm, name(a)), TRN2_ANIM + t * 2, ram(TRN2_ANIM + a * 2, 2))
         for src_name, src in spec["src"]:
             if name(src) != src_name or level(src) != level(t) - 1:
                 problems.append("%s cannot evolve into %s on 1.5" % (src_name, nm))

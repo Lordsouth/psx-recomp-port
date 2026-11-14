@@ -48,6 +48,9 @@ MACHINEDRAMON, SUKAMON, ALL_RANGE_BEAM = 114, 39, 25
 DD_MOVES = 35                       # DIGIMON_DATA.moves[16]
 HOME = 112                          # where each battle starts from, so the room reloads
 VIRUS_BAR = 0x80138460 + 0x1E
+STOCK_SHARDS, FLASH_BUFFER, BONE_ORDER = 0x80066274, 0x800677B0, 0x80067994   # EVL's stock shard array and what follows
+SHARD_PC = (0x80061D84, 0x800621CC)                 # EVL_buildShardSet (config/us/symbols_evl.txt; 1.5's EVL keeps it)
+from verify_roster15 import STATE as DW15_STATE   # noqa: E402  1.5 plus the roster: runs roster-15
 SCRATCH_TOP = 0x8013520C            # EVL's shard write pointer (MAIN_D_8013520C, src/evl/evl.c:1031,1114)
 
 
@@ -62,17 +65,19 @@ def main():
     ap.add_argument("--casts", type=int, default=3, help="beam: All Range Beam casts per battle before the kill")
     ap.add_argument("--count", type=int, default=3, help="suka: evolutions")
     ap.add_argument("--from-type", type=int, default=MACHINEDRAMON, help="suka: the partner that catches the virus")
+    ap.add_argument("--dw15", action="store_true",
+                    help="suka: on Digimon World 1.5, where the roster runs as roster-15 (cards in cards/dw15)")
     ap.add_argument("--port", type=int, default=7410)
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
     ap.add_argument("--seed", default=os.path.join(root, "saves"))
     a = ap.parse_args()
-    out = os.path.join(a.build, "roster_battles_" + a.mode)
+    out = os.path.join(a.build, "roster_battles_" + a.mode + ("_15" if a.dw15 else ""))
     cards = os.path.join(out, "cards")
-    if not seed_cards(a.seed, cards):
+    if not seed_cards(a.seed, os.path.join(cards, "dw15") if a.dw15 else cards):
         print("No memory card to seed from at %s" % a.seed, file=sys.stderr)
         return 2
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
-        fh.write(ROSTER_STATE)
+        fh.write(DW15_STATE if a.dw15 else ROSTER_STATE)
     log = os.path.join(out, "game.log")
     fails, attempts = [], []
 
@@ -85,7 +90,7 @@ def main():
     g = Game.launch(exe=os.path.join(a.build, "Digimon_World_Recompiled.exe"), port=a.port, memcard_dir=cards,
                     extra_args=["--headless-opengl"], log_path=log,
                     env={"PSX_OVERLAY_CAPTURES": os.path.join(out, "captures.json")})
-    f = Field(g, check)
+    f = Field(g, check, dw15=a.dw15)
     h16 = lambda addr: struct.unpack("<h", g.d.read(addr, 2))[0]
     npc_hp = lambda s: NPC_BASE + NPC_SIZE * s + 0x4C
 
@@ -183,6 +188,10 @@ def main():
         top0 = struct.unpack("<I", g.d.read(SCRATCH_TOP, 4))[0]
         tops = set()
         rec = dict(before=g.partner_type)
+        # Every write into what follows the stock shard array, kept by a range trace armed for this evolution
+        g.d.cmd("wtrace_disarm_all")
+        g.d.cmd("wtrace_reset")
+        g.d.cmd("wtrace_arm", lo="0x%08X" % STOCK_SHARDS, hi="0x%08X" % BONE_ORDER)
         g.d.write_bytes(struct.pack("<h", 16), VIRUS_BAR)
         target_seen = None
         end = time.time() + 180
@@ -201,6 +210,16 @@ def main():
                 time.sleep(0.05)
         rec["target_written"] = target_seen
         rec["scratch_tops"] = ["0x%08X" % v for v in sorted(tops)][-3:]  # the shard write pointer's last values
+        if g.proc.poll() is None:
+            # inside the array: the trace's own positive control while the scratch is stock; past it: the overrun
+            dump = lambda lo, hi: g.d.cmd("wtrace_dump", addr_lo="0x%08X" % lo, addr_hi="0x%08X" % hi, count=4096,
+                                          pc_lo="0x%08X" % SHARD_PC[0], pc_hi="0x%08X" % SHARD_PC[1])["entries"]
+            rec["shard_writes_in_array"] = len(dump(STOCK_SHARDS, FLASH_BUFFER))
+            hits = dump(FLASH_BUFFER, BONE_ORDER)
+            rec["shard_writes_past_array"] = len(hits)
+            rec["shard_write_span"] = (["0x%08X" % min(int(e["addr"], 16) for e in hits),
+                                        "0x%08X" % max(int(e["addr"], 16) for e in hits)] if hits else None)
+            g.d.cmd("wtrace_disarm_all")
         rec["dead"] = alive()
         rec["after"] = g.partner_type if rec["dead"] is None else None
         rec["virus_bar"] = h16(VIRUS_BAR) if rec["dead"] is None else None
@@ -209,12 +228,19 @@ def main():
 
     try:
         f.enter()
-        if not check(struct.unpack("<H", g.d.read(DETECT_LUI, 2))[0] == 0x9F00, "roster on in the active plan"):
+        detect = struct.unpack("<H", g.d.read(DETECT_LUI, 2))[0]
+        if a.dw15:      # roster-15 has no retarget patches, so the plugin's fill and hooks must stay off
+            text = open(log, errors="replace").read()
+            if not check("roster-15" in text and "arena 9F000000 filled" not in text and detect != 0x9F00,
+                         "roster-15 active, the roster plugin's fill off (detect word 0x%04X)" % detect):
+                return 2
+        elif not check(detect == 0x9F00, "roster on in the active plan"):
             return 2
         to_machinedramon(MACHINEDRAMON if a.mode == "beam" else a.from_type)
-        moves = list(g.d.read(DIGIMON_DATA + g.partner_type * DIGIMON_STRIDE + DD_MOVES, 16))
-        print("partner type %d %s, moves %s" % (g.partner_type, g.digimon_record(g.partner_type)["name"], moves),
-              flush=True)
+        moves = list(g.d.read(f.species + g.partner_type * DIGIMON_STRIDE + DD_MOVES, 16))
+        print("partner type %d %s, moves %s" % (g.partner_type,
+                                                 g.d.read(f.species + g.partner_type * DIGIMON_STRIDE, 20).split(bytes(1))[0],
+                                                 moves), flush=True)
         if a.mode == "beam":
             if not check(ALL_RANGE_BEAM in moves, "All Range Beam (tech %d) is in DIGIMON_DATA[%d].moves"
                          % (ALL_RANGE_BEAM, MACHINEDRAMON)):
@@ -246,8 +272,9 @@ def main():
                 rec["n"] = n + 1
                 attempts.append(rec)
                 check(rec["over"], "evolution %d: type %d -> %s, EVOLUTION_TARGET written by the game %s, virusBar "
-                      "now %s, shard pointer reached %s; %s" % (n + 1, rec["before"], rec["after"], rec["target_written"],
-                                      rec["virus_bar"], rec["scratch_tops"][-1:],
+                      "now %s, shard pointer reached %s, shard writes in the stock array %s, past it %s %s; %s"
+                      % (n + 1, rec["before"], rec["after"], rec["target_written"], rec["virus_bar"],
+                         rec["scratch_tops"][-1:], rec.get("shard_writes_in_array"), rec.get("shard_writes_past_array"), rec.get("shard_write_span") or "",
                                       "completed, player in control" if rec["over"] else "dead: %s" % rec["dead"]))
                 if rec.get("dead"):
                     rec["log_tail"] = log_tail()

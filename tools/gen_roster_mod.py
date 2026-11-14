@@ -60,9 +60,10 @@ assert _ARENA_END <= ARENA_SIZE and _ARENA_END < 0x8000, _ARENA_END
 # array (see EVL_SHARD_* below). Runs to the arena's end (0x2F00 bytes).
 OFF_EVL_SHARDS = 0x5100
 assert _ARENA_END <= OFF_EVL_SHARDS < ARENA_SIZE
-# 0x5000-0x50B3 belongs to the cup bracket icon table (the "cups" branch,
-# 180 bytes); the shards must stay above it.
-assert OFF_EVL_SHARDS >= 0x5100, "EVL shards would overlap the bracket icon table at 0x5000"
+# The cup bracket icon table (the "cups" branch: one byte per type at 0x5000)
+# sits below the shards. After the merge use that branch's own constant here.
+OFF_BRACKET_ICONS = 0x5000
+assert OFF_BRACKET_ICONS + N_TYPES <= OFF_EVL_SHARDS, "EVL shards overlap the bracket icon table"
 
 # ---- the evolution shatter overran its scratch --------------------------------
 # When a partner evolves, EVL breaks the OLD model into shards: for each bone

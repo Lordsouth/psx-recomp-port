@@ -902,8 +902,10 @@ rather than reporting them as regressions.
 **The training tables** (`TRAINING_ANIM_IDS` `0x8008F050` in `TRN_REL.BIN`,
 `TRN2_D_8008DA20` `0x8008DA20` in `TRN2_REL.BIN`) are `s8[68][2]` indexed by
 raw type, so any type past 68 reads off the end. Without a fix, offense
-training picks an invalid animation and **MP training soft-locks** (its
-threshold reads zero).
+training picks an invalid animation, and in TRN2 the frame byte it reads is
+zero, which **soft-locks the offense session** (§9). Only the two offense
+ticks read these tables (dw_decomp `src/trn/trn_off.c`, `src/trn2/trn2_off.c`);
+the old "MP training" label was wrong.
 
 0.2.0 fixed this in place: index 114 lands 92 bytes past the table, inside the
 string `"Give it all you "`, and two disc patches rewrote those bytes. Correct
@@ -2348,7 +2350,10 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
   set. Those announcements stay skipped and species raised under the old scheme
   read as un-raised. Nothing is corrupted; nothing is recovered either.
 * ~~**A full training session with a new species is not proven.**~~ **CLOSED
-  2026-11-14** by `tools/verify_roster_training.py all` [run], for Offense,
+  2026-11-14** by `tools/verify_roster_training.py plan --plan ...` runs
+  (`112:0`, then `107:0,78:0,112:68,112:90,107:114,107:68,78:114`; the
+  `112:114` row from an `all` run that halted later on the evolution bug)
+  [run], for Offense,
   the only training that reads the relocated tables (`TRN_tickOffenseTraining`,
   `TRN2_tickOffenseTraining`; dw_decomp `src/trn/trn_off.c`, `src/trn2/trn2_off.c`).
 
@@ -2384,8 +2389,9 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
   on the seed card the tamer stands on its 0x53 cells, script 75 with section
   0x53 is loaded and the script is idle, yet CROSS never calls the section and
   no machine is drawn there; cause not found. HP, Defense, Speed, MP and
-  Brains training read no per-species table, so a roster species cannot
-  change them; not run. The gain formula was not measured. Writing the tamer's
+  Brains training read no per-species *animation* table (they do read
+  `RAISE_DATA[type]` and `DIGIMON_DATA[type]` in the shared reward code, both
+  roster-filled), so the frame-byte park cannot happen there; not run. The gain formula was not measured. Writing the tamer's
   position does not stick (the game puts it back), so the test only walks.
 
   The two runs before the evolution fix below crashed on a setup step, not on
@@ -2405,7 +2411,8 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
   `EVOLUTION_TARGET` 39 itself, halted with the runtime's "unknown dispatch
   addr=0x80090CEC ra=0x293C"; the always-on write trace showed
   `EVL_buildShardSet` (pc 0x80061E7C) writing 0x80066274 through 0x8009169B,
-  the cascade over the EXE's first page where a kernel handler node lives.
+  the cascade over the EXE's first page, where a kernel handler node lives
+  [inferred from the dispatch's ra 0x293C].
   The fix retargets the one `lui a0`/`addiu a0` pair (EVL 0x80063154,
   0x8006315C) to the roster arena's free tail, 0x9F005100-0x9F007FFF
   (0x5000-0x50B3 is the cup bracket icon table; the generator asserts the
@@ -2415,9 +2422,17 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
   completed in the training run, at the earlier 0x9F005000 placement
   (`tools/verify_roster_battles.py suka`). Guardromon unfixed
   ran 114 B into the flash buffer (pointer 0x80067822) and completed once.
-  **1.5 is not fixed:** roster-15 has no arena and 1.5's EVL keeps the same
-  array, so a 1.5 Guardromon still overruns those 114 B (one stock-edition run
-  completed; 1.5 not run). Machinedramon is not in roster-15.
+  **1.5 needs no fix: it bounds the shatter itself.** 1.5's EVL jumps from
+  0x80061DE0 (inside `EVL_buildShardSet`) to 1.5 code at 0x801F9160, which
+  sends a shard set that would cross 0x800677B0 to a spare buffer at
+  0x80050000-0x80053FFF, or skips it when that is full too. Seen [run
+  2026-11-14, `verify_roster_battles.py suka --dw15 --from-type 92`, twice]:
+  a roster-15 Guardromon evolving to Sukamon completed, with a write trace
+  armed over 0x80066274-0x80067993 showing at least 2,048 shard writes inside
+  the stock array and none past it. Roster-15 therefore leaves the scratch
+  where it is (an arena address would fail 1.5's bound every time), and
+  `gen_roster_dw15.py` fails if 1.5's jump or bound changes. Machinedramon is
+  not in roster-15.
 * **Widescreen, not covered by the plate walk** (§5.0d): for the ~10-20
   frames of an iris in which the circle's edge sits inside a reveal, the game
   draws no band on that side, so a lit strip shows there; the STD lose wipe
