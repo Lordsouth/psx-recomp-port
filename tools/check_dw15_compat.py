@@ -144,9 +144,14 @@ EXTRA_EXE = [
     (0x800A936C, 0x800A97E0, WS, "renderStatusBars (bracketed)"),
     # dw_newmaps.c's getScript filter hard-codes the ACTIVE_MAP_SCRIPT and MAP_SCRIPT_PTR the stock body uses
     (0x80106218, 0x8010629C, "dw.newmaps.factory/factory", "getScript (the factory's filter assumes its globals)"),
+    # dw_smooth60.c matches these by return address
+    (0x800EFB68, 0x800EFCB0, "dw.smooth60/smooth60", "gameLoop through its VSync call (pass point, RA match)"),
+    (0x800C366C, 0x800C3860, "dw.smooth60/smooth60", "renderUIBoxAnim (box zoom drawLine3P, RA match)"),
 ]
 EXTRA_FILE = [
     ("/BTL_REL.BIN", 0x80052AE0, 0x80073280, 16, WS, "BTL bar slide table"),
+    ("/BTL_REL.BIN", 0x80052AE0, 0x8005DEC4, 0x104, "dw.smooth60/smooth60", "BTL_battleTickFrame (VSync pass point, RA match)"),
+    ("/BTL_REL.BIN", 0x80052AE0, 0x80061258, 0x1D4, "dw.smooth60/smooth60", "BTL_renderCommandShout (GsSortSprite, RA match)"),
 ]
 
 # Test Build 1.3.1's entry stub (0x80135000) copies three blocks out of the

@@ -21,7 +21,7 @@ game_id = "SLUS-01032"
 [[feature]]
 id = "smooth60"
 name = "Smooth 60 FPS"
-description = "Draws two extra frames between each of the game's own frames, in the field and in battle, so the camera, Digimon and the scenery move smoothly. Effects, damage numbers, fades and the HUD sliding in are smoothed too. The game logic is unchanged: timers, battles and inputs run exactly as before, with no added delay. Menus, text boxes and cutscenes still move at the original rate."
+description = "Draws two extra frames between each of the game's own frames, in the field and in battle, so the camera, Digimon and the scenery move smoothly. Effects, damage numbers, fades, the HUD sliding in, text boxes and menus opening and closing, the battle command menu and the evolution scene are smoothed too. The game logic is unchanged: timers, battles and inputs run exactly as before, with no added delay. Tournaments and VS battles still move at the original rate."
 group = "Video"
 default_enabled = false
 vsync = "off"

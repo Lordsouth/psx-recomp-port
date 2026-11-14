@@ -24,6 +24,10 @@ ap.add_argument("--idle-fp-load", help="tag of an --idle-fp-save run: load its s
 ap.add_argument("--shout", action="store_true", help="battle: dump the command menu slide-in and a command shout")
 ap.add_argument("--evo", type=int, default=0, help="force a stock evolution into this species and dump it")
 ap.add_argument("--evo-dumps", type=int, default=4)
+ap.add_argument("--evo-cam", action="store_true", help="evo: dump the camera zoom phase")
+ap.add_argument("--inv", action="store_true", help="menu: open the inventory and dump its boxes zooming")
+ap.add_argument("--talk", action="store_true", help="talk to an NPC in Jijimon's house and dump the box zoom")
+ap.add_argument("--respawn", action="store_true", help="battle: two commands in quick succession (shout restart)")
 ap.add_argument("--evo-gap", type=float, default=2.0)
 ap.add_argument("--win", action="store_true", help="battle: win it and dump the ending (menu slide-out, result boxes)")
 ap.add_argument("--tag", required=True)
@@ -241,6 +245,25 @@ try:
                     break
             res["menu_open"] = tri() == -1
             time.sleep(1)
+            if a.inv and res["menu_open"]:
+                # Item (option 1): the menu box closes and the two inventory boxes zoom open
+                # (game_menu.c handleGameMenuSelection, inventory.c:513-528).
+                d.write_bytes(struct.pack("<h", 1), 0x80123E8C)      # MENU_OPTIONS[0] cursor
+                time.sleep(0.3)
+                dump("dump_inv_open", 24)
+                g.route("4:cross,30:none")
+                time.sleep(2)
+                g.artifact_shot(os.path.join(out, "inventory.png"))
+                for _ in range(3):
+                    g.route("4:triangle,30:none")
+                    time.sleep(0.5)
+                f.wait_for(lambda: tri() != -1, 6)
+                time.sleep(1)
+                for _ in range(4):
+                    g.route("6:triangle,40:none")
+                    if f.wait_for(lambda: tri() == -1, 4):
+                        break
+                time.sleep(1)
             dump("dump_menu")
             g.artifact_shot(os.path.join(out, "menu.png"))
             time.sleep(1)
@@ -253,6 +276,35 @@ try:
             res["menu_closed"] = tri() != -1
             g.artifact_shot(os.path.join(out, "menu_after.png"))
             time.sleep(1)
+    if a.talk:
+        # Jijimon's house (map 205): walk up to an NPC and press confirm; the dialogue box
+        # zooms open from the speaker (script_textbox.c:484).
+        with Stage("talk"):
+            g.warp(205, 0)
+            time.sleep(2)
+            npc = next((f.npc(s) for s in range(8) if f.npc(s) and f.npc(s)["on_map"]), None)
+            res["talk_npc"] = npc and npc["type"]
+            if npc:
+                x, z = npc["pos"][0], npc["pos"][2]
+                vec = f.calibrate()
+                f.go((x, z), lambda: f.near(x, z, r=330), limit=60, vec=vec)
+                for _ in range(3):                       # bump into it, which also faces it
+                    p = f.pos()
+                    want = (x - p[0], z - p[2])
+                    f.walk(max(vec, key=lambda k: vec[k][0] * want[0] + vec[k][1] * want[1]), 0.4)
+                f.pad(0)
+                res["talk_dist"] = [x - f.pos()[0], z - f.pos()[2]]
+                time.sleep(1)
+                dump("dump_talk", 16)
+                g.route("4:cross,20:none")
+                time.sleep(1.5)
+                res["talk_open"] = f.i32(0x80134FF4) != 1
+                g.artifact_shot(os.path.join(out, "talk.png"))
+                end = time.time() + 40
+                while time.time() < end and f.i32(0x80134FF4) != 1:
+                    g.route("4:cross,20:none")
+                    time.sleep(0.3)
+                res["talk_closed"] = f.i32(0x80134FF4) == 1
     if a.evo:
         # A forced stock evolution (verify_roster_evolution.py's recipe): the EVL overlay's sequence
         # runs as world objects inside gameLoop.
@@ -265,6 +317,20 @@ try:
             g.set("evolution_target", a.evo)
             g.set_atomic(("tamer_state", 6), ("tamer_substate", 0))
             g.set_atomic(("partner_state", 13), ("partner_sub_state", 0))
+            if a.evo_cam:
+                # The camera phase (evl.c:711-752, sequence frames 0x20-0x60): GS_VIEWPOINT starts
+                # to move when the zoom begins. Dump the whole of it and sample the distance.
+                vp0 = d.read(0x80185BA8, 24)
+                end = time.time() + 90
+                while time.time() < end and d.read(0x80185BA8, 24) == vp0:
+                    time.sleep(0.01)
+                res["evo_cam_seen"] = d.read(0x80185BA8, 24) != vp0
+                dump("dump_evo_cam", 90)
+                vd, end = [], time.time() + 4
+                while time.time() < end:
+                    vd.append((d.frame(), struct.unpack("<i", d.read(0x80134ED4, 4))[0]))
+                    time.sleep(0.02)
+                res["evo_vd"] = vd
             for k in range(a.evo_dumps):
                 time.sleep(a.evo_gap)
                 dump("dump_evo%d" % k, 12)
@@ -413,8 +479,14 @@ try:
                 dump("dump_battle")
                 if a.shout:
                     time.sleep(1)
-                    dump("dump_shout", 12)           # the command shout hops for 20 ticks
+                    dump("dump_shout", 24)           # the command shout grows, then hops for 20 ticks
                 g.route("4:cross,20:none")
+                if a.respawn:
+                    # A second command while the first shout is up restarts it at frame 0 on the
+                    # same object (command_shout.c:61-65): it must grow again, never shrink.
+                    time.sleep(1.5)
+                    dump("dump_respawn", 30)
+                    g.route("4:cross,12:none,4:cross,20:none")
                 time.sleep(1)
                 dump("dump_battle2")
                 time.sleep(4)

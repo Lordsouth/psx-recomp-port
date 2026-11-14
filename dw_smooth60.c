@@ -122,6 +122,7 @@ static int s_snap_ok;
 static const uint32_t k_slide[] = { CLOCK_OFFSET_X, STATUS_UI_OFFSET_X, BTL_COMMAND_MENU_X, BTL_COMMAND_MENU_Y };
 #define N_SLIDE (sizeof k_slide / sizeof k_slide[0])
 static int16_t s_hud[2][N_SLIDE];
+static int32_t s_vd[2];         /* VIEWPORT_DISTANCE_COPY of the last two captures (zoom counter) */
 static int s_hud_n;
 
 /* 2D emitter calls of the last two stock frames. */
@@ -180,6 +181,9 @@ static void capture(void) {
     psx_motion_track(s_set, PSX_MOTION_SVECTOR, MAP_CAMERA, 5);  /* z = w|h<<8, constant */
     psx_motion_track(s_set, PSX_MOTION_VECTOR, GS_VIEWPOINT_COPY, 6);
     psx_motion_track(s_set, PSX_MOTION_VECTOR, GS_VIEWPOINT_COPY + 12, 7);
+    psx_motion_track(s_set, PSX_MOTION_SCALAR, VIEWPORT_DISTANCE_COPY, 8);  /* the evolution's zoom */
+    s_vd[0] = s_vd[1];
+    s_vd[1] = rd32(VIEWPORT_DISTANCE_COPY);
     for (uint32_t e = 0; e < 10; e++) {
         const uint32_t ent = psx_mod_read_word(ENTITY_TABLE + 4 * e);
         if (ent < 0x80000000u || ent >= 0x80200000u) continue;
@@ -387,8 +391,13 @@ static void emitter(struct CPUState* cpu, int fn) {
     const Rec* p = find_rec(s_cur ^ 1, fn, key, ordinal);
     const Rec* c = find_rec(s_cur, fn, key, ordinal);
     if (!p || !c) { psx_mod_counter_add("dw.smooth60.2d_unmatched", 1); return; }
+    /* Every corner of a box zoom; x and y for the rest. A shout never shrinks while it
+     * lives: a smaller scale is a new shout restarted on the same object. */
     const int lim = fn == FN_LINE3 ? MAX_STEP_BOX_PX : MAX_STEP_PX;
-    if (fn != FN_FADE && (abs(c->v[0] - p->v[0]) > lim || abs(c->v[1] - p->v[1]) > lim)) {
+    int snap = fn == FN_GSSPRITE && c->v[2] < p->v[2];
+    for (int i = 0; fn != FN_FADE && i < (fn == FN_LINE3 ? 6 : 2); i++)
+        if (abs(c->v[i] - p->v[i]) > lim) snap = 1;
+    if (snap) {
         psx_mod_counter_add("dw.smooth60.2d_snapped", 1);
         return;
     }
@@ -424,6 +433,10 @@ static int pass(struct CPUState* cpu, void* user, uint32_t alpha_q16) {
     s_alpha = alpha_q16 / 65536.0;
     s_npass = 0;
     psx_motion_apply(s_set, s_alpha);
+    {   /* observability: a pass drawn at a zoom between the two ticks' */
+        const int32_t vd = rd32(VIEWPORT_DISTANCE_COPY);
+        if (vd != s_vd[0] && vd != s_vd[1]) psx_mod_counter_add("dw.smooth60.zoom_between", 1);
+    }
     for (uint32_t i = 0; i < s_nflg; i++) psx_mod_write_word(s_flg[i], 0);   /* GsGetLws recomputes */
     if (s_hud_n == 2) {
         const uint32_t n = s_mode == MODE_BATTLE ? N_SLIDE : 2;
