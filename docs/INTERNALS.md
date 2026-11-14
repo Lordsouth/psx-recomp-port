@@ -726,6 +726,9 @@ instruction pair that materialises one of those table addresses.
 | `TRAINING_ANIM_IDS` `0x8008F050` | 68 | 5 | `disc_user` (TRN) |
 | `TRN2_D_8008DA20` `0x8008DA20` | 68 | 3 | `disc_user` (TRN2) |
 
+Two STD tables are relocated the same way: the battle-intro name glyphs (`0x80079CBC`, 6 sites) and the
+cup bracket's projectile icons (`0x8007A50C`, 4 sites, "Cup bracket" below).
+
 All eight are grown to **180 entries**, the engine's hard ceiling (`loadMMD`
 rejects type ≥ `0xB4`). That is 91 `lui` + 91 `lo16` retargets. Site counts are
 asserted in the generator, because silently patching a different number of
@@ -939,6 +942,21 @@ persists in restored RAM.
 starts on its lowest-power move (`MOVE_FIXES` in `gen_roster_mod.py`; `gen_roster_dw15.py` writes the same byte at
 1.5's table). Every `gen_roster_mod.py` run, `--check` included, asserts that each non-empty move slot of every
 roster species is on its EFE list, read from the disc (GAME.md 12.2); `tools/verify_roster_moves.py` proves it in game.
+
+**Cup bracket.** The bracket portrait (GAME.md 15.5) is fixed by nine guarded code words in `STD_REL.BIN`'s
+`STD_renderBracketDigimon` (`STD_BRACKET` in `gen_roster_mod.py`): the sheet comes from `(type-1)/64`, so Gigadramon
+draws its own portrait (sheet 0 cell 63, the art's row 6), and the palette index is clamped to 111, so no type reads
+past the 112-entry table; 112 keeps its portrait and row 0, the byte the stock read happened to return. 113 and 114
+have no portrait in the art and draw sheet 1's effect-icon cells 48 and 49 instead; nothing new was drawn. The
+projectile icon table (`STD_PROJ_ICONS`, 112 entries) has its four references retargeted into the arena at `0x5000`
+(180 entries; it must end below `0x5100`, where sdd/train's EVL shard area starts, and the generator asserts it). Nothing
+is baked: STD's own table stays in place, so `dw_roster.c` copies it into the arena on every VBlank while the patched
+`lui` is resident (only during a cup) and adds donor rows for 112-114 (`STD_ICON_DONORS`). Copying every VBlank keeps it
+right after a savestate load inside a cup, since the arena is not in the snapshot. The 1.5 edition writes the same nine
+words (the function is unchanged in 1.5) but has no arena, so on 1.5 the projectile icon of 112 reads the next table's
+first byte (a valid icon), and 113 its second, which then indexes the palette table at -1 (a junk 8x8 patch, no crash).
+Roster species above 66 are on no cup's entry list, so the schedule refuses them (GAME.md 15.3); that is not
+changed. `tools/verify_cups.py --roster N` checks the portrait from the GPU commands; `--revert-fix` is the control.
 
 Regenerate: `py -3.12 tools/gen_roster_mod.py` (`--check` verifies only).
 
@@ -1252,7 +1270,8 @@ test and the Prosperity bound are the stock roster's patches, unchanged on 1.5.
 
 Not carried over: Machinedramon (slot 114 is Veemon); the battle-intro name glyphs, which
 1.5 still reads from the stock 112-row table, so WaruSeadramon and Meteormon show garbage
-on the arena banner, as they do without the roster; and the chart cursor fix.
+on the arena banner, as they do without the roster; the cup bracket's projectile icon table
+(the bracket's code fix is carried over, 4.1 "Cup bracket"); and the chart cursor fix.
 
 Checked in game (2026-11-11), `tools/verify_roster15.py`, 1.5's own choosers picking from
 shaped stats: Airdramon to Gigadramon (Champion), Meteormon to MudFrigimon (a roster source)

@@ -54,7 +54,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 from check_dw15_compat import RAM_BASE, RELOCATED, Disc, Exe, sha256  # noqa: E402
-from gen_roster_mod import DD_MOVES, MOVE_FIXES, NEW_SPECIES  # noqa: E402  the same species, requirements, donors, move fixes
+from gen_roster_mod import (DD_MOVES, MOVE_FIXES, NEW_SPECIES, STD_BRACKET_LBA,  # noqa: E402  the same species, requirements,
+                            std_bracket_patches)                               # donors, move fixes, cup bracket
 
 MANIFEST = os.path.join(ROOT, "mods", "preloaded", "packages", "dw.vanilla.roster", "1.0.0", "manifest.toml")
 DW15_MANIFEST = os.path.join(ROOT, "mods", "preloaded", "packages", "dw.1_5", "1.0.0", "manifest.toml")
@@ -206,6 +207,16 @@ def build(disc, exe):
         if ram(addr, 4) != struct.pack("<I", old):
             problems.append("0x%08X differs on 1.5" % addr)
         exe_patch(why, addr, struct.pack("<I", new))
+    # The cup bracket's sheet and palette fix: 1.5 left STD_renderBracketDigimon as stock.
+    # The projectile icon table is not relocated here (no arena on 1.5), so 112 and 113
+    # still read its two neighbouring bytes for that icon.
+    if disc.files.get("/STD_REL.BIN", (None,))[0] != STD_BRACKET_LBA:
+        problems.append("STD_REL.BIN is not at LBA %d on 1.5" % STD_BRACKET_LBA)
+    else:
+        try:
+            out.extend(std_bracket_patches(disc.user(STD_BRACKET_LBA * 2048, 0xB000), "roster-15"))
+        except AssertionError as e:
+            problems.append(str(e))
     return problems, "\n".join(out) + "\n"
 
 

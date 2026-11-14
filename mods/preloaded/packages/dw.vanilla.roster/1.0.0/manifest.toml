@@ -1252,6 +1252,38 @@ offset = 303468204
 expected = "08 80 02 3c"
 replace = "00 9f 02 3c"
 
+# STD_REL.BIN 0x8005E250: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303472496
+expected = "08 80 02 3c"
+replace = "00 9f 02 3c"
+
+# STD_REL.BIN 0x8005E29C: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303472572
+expected = "08 80 02 3c"
+replace = "00 9f 02 3c"
+
+# STD_REL.BIN 0x8005E3B8: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303472856
+expected = "08 80 02 3c"
+replace = "00 9f 02 3c"
+
+# STD_REL.BIN 0x8005E404: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303472932
+expected = "08 80 02 3c"
+replace = "00 9f 02 3c"
+
 # TRN2_REL.BIN 0x80089C60: table ref -> arena
 [[patch]]
 feature = "roster"
@@ -1428,6 +1460,38 @@ offset = 303468208
 expected = "bc 9c 42 24"
 replace = "00 46 42 24"
 
+# STD_REL.BIN 0x8005E254: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303472500
+expected = "0c a5 42 24"
+replace = "00 50 42 24"
+
+# STD_REL.BIN 0x8005E2A0: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303472576
+expected = "0c a5 42 24"
+replace = "00 50 42 24"
+
+# STD_REL.BIN 0x8005E3BC: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303472860
+expected = "0c a5 42 24"
+replace = "00 50 42 24"
+
+# STD_REL.BIN 0x8005E408: table ref -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303472936
+expected = "0c a5 42 24"
+replace = "00 50 42 24"
+
 # TRN2_REL.BIN 0x80089C64: table ref -> arena
 [[patch]]
 feature = "roster"
@@ -1539,6 +1603,78 @@ target = "disc_user"
 offset = 303626068
 expected = "50 f0 42 24"
 replace = "00 42 42 24"
+
+# cup bracket 0x8005D5B0
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303469264
+expected = "21 a0 20 02"
+replace = "70 00 21 2e"
+
+# cup bracket 0x8005D5B4
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303469268
+expected = "03 00 21 06"
+replace = "02 00 20 14"
+
+# cup bracket 0x8005D5B8
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303469272
+expected = "83 c9 11 00"
+replace = "21 a0 20 02"
+
+# cup bracket 0x8005D5BC
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303469276
+expected = "3f 00 22 26"
+replace = "6f 00 14 24"
+
+# cup bracket 0x8005D5C0
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303469280
+expected = "83 c9 02 00"
+replace = "ff ff 22 26"
+
+# cup bracket 0x8005D5C4
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303469284
+expected = "80 11 19 00"
+replace = "83 99 02 00"
+
+# cup bracket 0x8005D5C8
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303469288
+expected = "21 98 20 03"
+replace = "c0 ff 42 30"
+
+# cup bracket 0x8005D5F4
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303469332
+expected = "21 10 51 00"
+replace = "21 10 54 00"
+
+# cup bracket 0x8005D660
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303469440
+expected = "ff ff 83 22"
+replace = "ff ff 23 22"
 
 [[patch]]
 feature = "roster"
@@ -4953,4 +5089,76 @@ target = "main_exe"
 address = 0x800EFAD4
 expected = "3b 00 01 2a"
 replace = "72 00 01 2a"
+
+# cup bracket 0x8005D5B0
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303469264
+expected = "21 a0 20 02"
+replace = "70 00 21 2e"
+
+# cup bracket 0x8005D5B4
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303469268
+expected = "03 00 21 06"
+replace = "02 00 20 14"
+
+# cup bracket 0x8005D5B8
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303469272
+expected = "83 c9 11 00"
+replace = "21 a0 20 02"
+
+# cup bracket 0x8005D5BC
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303469276
+expected = "3f 00 22 26"
+replace = "6f 00 14 24"
+
+# cup bracket 0x8005D5C0
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303469280
+expected = "83 c9 02 00"
+replace = "ff ff 22 26"
+
+# cup bracket 0x8005D5C4
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303469284
+expected = "80 11 19 00"
+replace = "83 99 02 00"
+
+# cup bracket 0x8005D5C8
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303469288
+expected = "21 98 20 03"
+replace = "c0 ff 42 30"
+
+# cup bracket 0x8005D5F4
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303469332
+expected = "21 10 51 00"
+replace = "21 10 54 00"
+
+# cup bracket 0x8005D660
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303469440
+expected = "ff ff 83 22"
+replace = "ff ff 23 22"
 
