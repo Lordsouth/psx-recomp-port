@@ -1,0 +1,27 @@
+# Digimon World - Evolution Guide. Plugin: dw_evoguide.c (chooser model in
+# dw_evolution.c). Hand-written: no patches, no hooks, no game data. The panel
+# reads the live evolution tables and draws over the game through the
+# framework's HUD layer (OpenGL). Closed, the plugin computes nothing; open, it
+# reads guest memory and writes none, so saves are unaffected.
+format_version = 5
+id = "dw.evoguide"
+version = "1.0.0"
+name = "Evolution Guide"
+author = "DigimonWorldRecomp"
+description = "An on-screen panel that shows what your partner can evolve into and how close it is to each. Off by default: it gives the evolution requirements away."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-01032"
+
+[[feature]]
+id = "evoguide"
+name = "Evolution Guide"
+description = "Press F2, or Select + L3 on a controller, to show or hide a panel listing every Digimon your partner can evolve into next. For each it shows the requirements the game checks (care mistakes, weight, stats and one bonus condition), your partner's current values in green when met and red when not, and how many of the four are met out of the three needed. It also shows the evolution timer and which Digimon the game would choose right now. The game keeps running while the panel is open. It follows other mods that change evolutions, such as Expanded Roster and Evolution Unbound. OpenGL renderer only. Not available on Digimon World 1.5."
+group = "Partner"
+default_enabled = false
+
+[[plugin]]
+feature = "evoguide"
+id = "dw.evoguide"

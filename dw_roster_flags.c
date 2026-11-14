@@ -66,6 +66,7 @@
  * save does not gain back what the old scheme consumed.
  */
 #include "cpu_state.h"
+#include "dw_evolution.h"
 #include "mod_plugins.h"
 
 #define DW_SET_DIGIMON_RAISED 0x800FF7F8u
@@ -133,16 +134,24 @@ static int dw_set_digimon_raised(struct CPUState* cpu, uint32_t address) {
     return 1;
 }
 
-static int dw_has_digimon_raised(struct CPUState* cpu, uint32_t address) {
-    int32_t id;
-    uint32_t addr;
+/* hasDigimonRaised as the game answers it right now: this file's bank with
+ * the roster on, else the stock isTriggerSet((species + 0x200) & 0xFFFF)
+ * (0x800FF824 -> 0x8010643C, which returns 1 or 0). Read-only; the
+ * Evolution Guide's chooser model (dw_evolution.c) shares it. */
+int dw_species_raised(uint32_t species) {
     uint8_t mask = 0;
+    const int32_t id = dw_roster_active()
+        ? dw_raised_trigger(species)
+        : (int32_t)((species + DW_STOCK_BASE) & 0xFFFFu);
+    const uint32_t addr = dw_trigger_byte(id, &mask);
+    return (addr && (psx_mod_read_byte(addr) & mask)) ? 1 : 0;
+}
+
+static int dw_has_digimon_raised(struct CPUState* cpu, uint32_t address) {
     (void)address;
     if (!dw_roster_active())
         return 0;
-    id = dw_raised_trigger(cpu->gpr[4]);
-    addr = dw_trigger_byte(id, &mask);
-    cpu->gpr[2] = (addr && (psx_mod_read_byte(addr) & mask)) ? 1u : 0u;
+    cpu->gpr[2] = (uint32_t)dw_species_raised(cpu->gpr[4]);
     cpu->pc = cpu->gpr[31];
     return 1;
 }
