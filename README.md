@@ -119,7 +119,7 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 | **Evolution Guide** | An on-screen panel (`F2`, or Select+L3 on a controller) listing what your partner can evolve into and its live progress toward each: care mistakes, weight, stats, the bonus condition, and which one the game would pick now. Off by default: it is a spoiler. Needs the OpenGL renderer | Not on 1.5 (the panel says so) |
 | **Gameplay** | Better odds of learning techniques in battle; lower the stat requirements for evolutions | Yes. On 1.5, Evolution Unbound switches to a 1.5 edition by itself, the new lines included |
 | **Widescreen** | 16:9, 16:10 or 21:9. The wider view is rendered at full width and shown 1:1, so nothing is stretched — menus, text boxes and the HUD keep their original shapes, and the extra width is real extra view on both sides. Two rough edges remain, listed under Mods below | Yes |
-| **Smooth 60 FPS** | The game draws at 20 frames per second; this draws two extra frames between each of its own, in the field and in battle, so the camera, Digimon, scenery and effects move smoothly. The game itself still runs at its own speed, with no added input delay. 60 or Match display. Needs the OpenGL renderer | Yes |
+| **Smooth 60 FPS** | The game draws at 20 frames per second; this draws two extra frames between each of its own, in the field and in battle, so the camera, Digimon, scenery and effects move smoothly, and so do text boxes and menus opening and closing, the battle command menu, the battle's opening and results, and the evolution scene. Tournaments and VS battles stay at the original rate. The game itself still runs at its own speed, with no added input delay. 60 or Match display. Needs the OpenGL renderer | Yes |
 | **HD Texture Packs** | Loads replacement art. With the free **HD Backdrops** download, every background is redrawn at 4x — see [HD Backdrops](#hd-backdrops-optional-download) | Yes |
 | **Rewind** | Step back in time: press `F8` (or Select+R3 on a controller), pick a moment from the strip of pictures with Left/Right, and press Cross to carry on from there. Keeps about the last 12 seconds by default; a bigger buffer reaches further back. Off by default because the history lives in memory, about 185 MB at the default size | Yes (short test) |
 | **Cheats** | All 57 GameShark-style codes as toggles, grouped by what they affect — infinite HP, freeze the clock, max stats, every card and item, and more. Off by default; while it is off, `cheats.txt` decides instead | Yes |
@@ -182,7 +182,9 @@ own; no game data is in the mod.
   image the game will not start while it is ticked: untick it to get back in.
 * **It works with Digimon World 1.5**: with 1.5 ticked it runs a 1.5 edition by
   itself, the same map and fight written where 1.5 keeps the files it moved.
-* It is small for now: it has no other Digimon, and no items of its own yet.
+* **Beating the secret fight for the first time pays 3 Omni Disks**, once. With a
+  full bag it takes nothing and says so, and the reward waits for your next win.
+* It is small for now: it has no other Digimon.
 
 ### What is still rough in Widescreen
 

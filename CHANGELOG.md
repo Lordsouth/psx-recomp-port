@@ -18,9 +18,12 @@ makes each step bigger. With Smooth 60 FPS on, the game still runs at its own
 speed, but two extra frames are drawn between each of its own, so the camera,
 the Digimon, the scenery, effects, damage numbers and fades move smoothly. It
 adds no input delay. Choose **60** or **Match display** for the frame rate. It
-works with widescreen, Run Speed, HD texture packs and Digimon World 1.5. Menus,
-text boxes and cutscenes still move at the original rate. It needs the OpenGL
-renderer; it is off by default.
+works with widescreen, Run Speed, HD texture packs and Digimon World 1.5. It also
+smooths text boxes and menus as they open and close, the battle command menu
+sliding in and out, the command shouts, the battle's opening and its results boxes,
+and the evolution scene. Tournaments and VS battles still run at the original rate,
+and so does text appearing letter by letter. It needs the OpenGL renderer; it is off
+by default.
 
 **New: Evolution Guide.** Tick it under **Mods**; it is off by default, because it
 is a spoiler. In the game, press **F2**, or **Select + L3** on a controller, to show
@@ -49,9 +52,35 @@ Savestates made before this update belong to the old mod settings, so they appea
 only with these four fixes unticked. The jukebox fix was tested on the function the
 menu uses, not in the jukebox menu itself.
 
+**Expanded Roster: Machinedramon can evolve again.** With the roster on, any
+evolution out of Machinedramon froze the game, including the virus bar turning it
+into Sukamon. The evolution's shatter effect breaks the old body into pieces, and
+Machinedramon has more pieces than the game set room for, so the overflow ran into
+the game's own code. The pieces now go to the roster's spare memory. Guardromon was
+a few pieces over too and is covered by the same fix. Digimon World 1.5 already caps
+the effect itself, so its edition of the roster needed no change.
+
 **Expanded Roster: Tankmon starts on a move it can use.** A Tankmon you raise now
 starts on Red Inferno instead of Spit Fire, a move the game's effect data never lists
 for Tankmon, on Digimon World 1.5 too.
+
+**Expanded Roster: checked in the gyms, in battle and at the arena.**
+
+* Machinedramon, Gotsumon and Tekkamon each ran a full Offense session in Green Gym,
+  and Machinedramon and Gotsumon also did in the Beetle Land gym. Each came out
+  stronger and none got stuck.
+* All Range Beam against three enemies, which was reported elsewhere to crash, ran
+  clean in all seven battles tried in Mt. Infinity and Beetle Land.
+* Tournaments were run in this port for the first time: a full Grade D cup, from
+  the Arena Lobby desk to the prize, and a loss. On the cup bracket Gigadramon now
+  shows its own portrait instead of an empty cell.
+* The Digimon the roster adds after Myotismon cannot enter cups. The arena's entry
+  lists predate them, and this update does not change that.
+
+**Hidden Glade: a reward for the secret fight.** Beating the glade's boss for the
+first time pays 3 Omni Disks, once. With a full bag it takes nothing and says so, and
+the reward waits for your next win. Later wins are as before. It works on Digimon
+World 1.5 too.
 
 **Widescreen: a recruit's "X joins the city!" no longer freezes the game.**
 A player reported "Agumon joins the city!" staying on screen for good: the world
