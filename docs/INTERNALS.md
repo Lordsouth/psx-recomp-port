@@ -1588,7 +1588,7 @@ all; the black there is in the 4:3 game too.
 
 `tools/scan_painted_extent.py` (stdlib, reads the disc, `--png` dumps the
 candidates) proposes the extents: 16 maps have a dark edge run of 6 px or
-more. Classified by eye and then swept (source: the lost research archive; not re-checked; 8 walks x 12
+more. Classified by eye and then swept (`ws_research/p6a`, 8 walks x 12
 stops per map, widescreen off, 16:9, 16:10; door-fade frames excluded):
 
 | map | scan | kind | vanilla C | edge void at the wide clamp ends, 16:9 / 16:10 | entry possible |
