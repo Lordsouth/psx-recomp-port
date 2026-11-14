@@ -33,6 +33,7 @@ default_enabled = false
 # them turns 1.5 off.
 conflicts = [
   "dw.vanilla.qol/end-box-fix",
+  "dw.vanilla.qol/evo-item-fix",
 ]
 
 # The author's patch, unchanged. Applied to the player's verified stock disc.
@@ -6822,4 +6823,14 @@ target = "main_exe"
 address = 0x8013475C
 expected = "25 21 23 57 00 00 00 00"
 replace = "20 70 63 74 21 23 57 00"
+
+# Evolution Item Fix, part of 1.5 here: docs/GAME.md 12.2
+
+# EVL_REL.BIN 0x80063AF0: EVL_applyEvolution, the last branch's delay slot: nop -> sb zero,-27866(gp), HAS_USED_EVOITEM = 0
+[[patch]]
+feature = "dw15"
+target = "disc_user"
+offset = 302758640
+expected = "00 00 00 00"
+replace = "26 93 80 a3"
 

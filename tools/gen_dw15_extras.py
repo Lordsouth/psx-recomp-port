@@ -81,7 +81,10 @@ ROOT = os.path.normpath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 from check_dw15_compat import RELOCATED, Disc, Exe, sha256  # noqa: E402
 from gen_gameplay_mods import EVO_CHOICES, STAT_FIELDS  # noqa: E402  same option
-from gen_qol_mods import END_BOX, END_BOX_EXE, end_box_offset, end_box_patches  # noqa: E402  same writes
+from gen_qol_mods import BUGFIXES, END_BOX, END_BOX_EXE, end_box_offset, end_box_patches, fix_patches  # noqa: E402  same writes
+
+# Bug fixes whose writes land in sectors 1.5's delta owns, where 1.5 keeps the bytes: dw15 makes them itself.
+DW15_FIXES = ("evo-item-fix",)
 
 MANIFEST = os.path.join(ROOT, "mods", "preloaded", "packages", "dw.1_5",
                         "1.0.0", "manifest.toml")
@@ -266,8 +269,13 @@ def render_evo(skipped, rows, bases):
     return "\n".join(out)
 
 
-def render_end_box():
-    return "\n".join(["# Battle End Freeze Fix, part of 1.5 here: docs/GAME.md 12.1", ""] + end_box_patches("dw15"))
+def render_end_box(disc):
+    out = ["# Battle End Freeze Fix, part of 1.5 here: docs/GAME.md 12.1", ""] + end_box_patches("dw15")
+    for fid, name, _desc, writes in BUGFIXES:
+        if fid in DW15_FIXES:      # raises on a guard 1.5 does not keep
+            assert all(w[0] != "exe" for w in writes), "%s: dw15 renders disc writes only, no exe image here" % fid
+            out += ["# %s, part of 1.5 here: docs/GAME.md 12.2" % name, ""] + fix_patches(writes, "dw15", None, disc.user)
+    return "\n".join(out)
 
 
 def render(named, drops):
@@ -347,7 +355,7 @@ def main():
           % (named, SLOTS, len(drops)))
     print("1.5 EVOLUTION_REQS: %d chooser targets have stat walls; placeholder "
           "targets skipped: %s" % (len(rows), skipped))
-    new = head + render(named, drops) + "\n" + render_evo(skipped, rows, bases) + "\n" + render_end_box() + "\n"
+    new = head + render(named, drops) + "\n" + render_evo(skipped, rows, bases) + "\n" + render_end_box(disc) + "\n"
     tomllib.loads(new)                     # never write a manifest that does not parse
     if a.check:
         print("--check: manifest is %s" % ("current" if new == text else "STALE"))

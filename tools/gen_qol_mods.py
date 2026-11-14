@@ -48,6 +48,10 @@ One more is a plain bug fix, built here:
     on by default. 1.5 owns those sectors but keeps these bytes, so
     gen_dw15_extras.py gives the dw15 feature the same writes.
 
+Four more bug fixes follow the same pattern, each its own default-on feature (BUGFIXES,
+docs/GAME.md 12.2): Jukebox Freeze Fix, Lost Techniques Fix, Sleep Healing Fix and
+Evolution Item Fix. The last patches EVL_REL.BIN, so its guard is read from the disc image.
+
 Guards are read from our own extracted executable, never copied from
 dw_decomp -- Vice patches the binary and constants do move.
 
@@ -136,6 +140,96 @@ END_BOX_DESC = (
     "lifts your partner's Brains past 700, 800, 900 or 999, and everything since "
     "your last save is lost. With this on, the game shows its MP bonus message and "
     "carries on.")
+
+
+# Four more fixes for bugs of the original game (docs/GAME.md 12.2), each its own feature in the
+# pattern of end-box-fix. Each write is (where, address, stock word, new word, note): `where` is
+# "exe" or an overlay name in OVERLAYS. The stock words are instruction encodings the guards are
+# checked against; the guards written to the manifest are the bytes read from the owner's exe or disc.
+OVERLAYS = {"EVL_REL.BIN": (147824, 0x80060000)}   # name -> (LBA, load address)
+BUGFIXES = [
+    ("jukebox-fix", "Jukebox Freeze Fix",
+     "Fixes a bug in the original game where the jukebox menu could freeze on a song with a long title.",
+     # padWithSpaces loops while its count is not 0; a title too long for the row makes it negative.
+     [("exe", 0x800FF54C, 0x14C0FFF6, 0x1CC0FFF6, "padWithSpaces: bne a2,zero -> bgtz a2, stop at 0 or below")]),
+    ("tech-wipe-fix", "Lost Techniques Fix",
+     "Fixes a bug in the original game where forgetting a technique after losing all lives also erased up to 16 "
+     "other techniques your partner had learned.",
+     # unlearnMove builds a 16-bit mask, so the AND clears bits 16-31 of the word. The new code
+     # keeps the bits to clear in a0 (both of a pair: 44/48 are bits 12 and 16, 55/57 bits 23 and
+     # 25 of word 1) and ANDs with its complement.
+     [("exe", 0x800E674C, 0x00000000, 0x3C040001, "unlearnMove: nop -> lui a0,1 (move 48's bit, delay slot)"),
+      ("exe", 0x800E6760, 0x24041000, 0x34841000, "addiu a0,zero,0x1000 -> ori a0,a0,0x1000: 44/48 both"),
+      ("exe", 0x800E6780, 0x00002021, 0x3C040280, "addu a0,zero,zero -> lui a0,0x0280: 55/57 both"),
+      ("exe", 0x800E67A0, 0x3044FFFF, 0x00402021, "andi a0,v0,0xffff -> addu a0,v0,zero: the whole bit"),
+      ("exe", 0x800E67A4, 0x3882FFFF, 0x00802027, "xori v0,a0,0xffff -> nor a0,a0,zero: a 32-bit mask"),
+      ("exe", 0x800E67A8, 0x3044FFFF, 0x00000000, "andi a0,v0,0xffff -> nop")]),
+    ("sleep-heal-fix", "Sleep Healing Fix",
+     "Fixes a bug in the original game where a long sleep could leave a partner with very high max HP or MP "
+     "on a negative value instead of healing it to full.",
+     # The clamp re-reads the 16-bit sum sign-extended, so a sum past 32767 passes `>= max`.
+     # Read unsigned: two non-negative int16 values always sum below 65536.
+     [("exe", 0x800A6FEC, 0x842257F4, 0x942257F4, "sleepRegen HP clamp: lh -> lhu"),
+      ("exe", 0x800A700C, 0x842257F6, 0x942257F6, "sleepRegen MP clamp: lh -> lhu")]),
+    ("evo-item-fix", "Evolution Item Fix",
+     "Fixes a bug in the original game where using an evolution item stopped every later evolution from "
+     "raising your partner's stats and lifespan until the game was reset.",
+     # HAS_USED_EVOITEM (0x80134E52) is cleared only at boot. Clear it as EVL_applyEvolution
+     # returns: after every check of it, so the item evolution itself still skips its gains. The
+     # function reads the flag as lb -27866(gp); the store uses the same address.
+     [("EVL_REL.BIN", 0x80063AF0, 0x00000000, 0xA3809326,
+       "EVL_applyEvolution, the last branch's delay slot: nop -> sb zero,-27866(gp), HAS_USED_EVOITEM = 0")]),
+]
+
+
+def overlay_offset(name, vaddr):
+    lba, base = OVERLAYS[name]
+    return lba * 2048 + vaddr - base
+
+
+def fix_patches(writes, feature, exe_data, disc_user):
+    """[[patch]] lines for one fix's writes. disc_user(offset, n) reads a disc as 2048-byte sectors.
+    Raises ValueError on a guard that does not match."""
+    out = []
+    for where, vaddr, stock, new, note in writes:
+        if where == "exe":
+            cur = exe_data[file_off(vaddr):file_off(vaddr) + 4]
+            loc = ['target = "main_exe"', "address = 0x%08X" % vaddr]
+        else:
+            offset = overlay_offset(where, vaddr)
+            assert offset % 2048 <= 2044, hex(vaddr)       # a disc patch may not cross a sector
+            cur = disc_user(offset, 4)
+            loc = ['target = "disc_user"', "offset = %d" % offset]
+        if cur != struct.pack("<I", stock):
+            raise ValueError("%s 0x%08X is %s, expected %08X" % (feature, vaddr, hexs(cur), stock))
+        out += ["# %s 0x%08X: %s" % ("EXE" if where == "exe" else where, vaddr, note),
+                "[[patch]]", 'feature = "%s"' % feature] + loc + [
+                'expected = "%s"' % hexs(cur), 'replace = "%s"' % hexs(struct.pack("<I", new)), ""]
+    return out
+
+
+def bugfix_lines(exe_data, disc_user):
+    """The four [[feature]] blocks."""
+    out = []
+    for fid, name, desc, writes in BUGFIXES:
+        out += ["[[feature]]", 'id = "%s"' % fid, 'name = "%s"' % name, 'description = "%s"' % desc,
+                'group = "Fixes"', "default_enabled = true", ""] + fix_patches(writes, fid, exe_data, disc_user)
+    return out
+
+
+def disc_reader():
+    """-> disc_user(offset, n) over the owner's stock disc image, or None."""
+    from verify_disc_patches import find_disc
+    path = find_disc([])
+    if not path:
+        return None
+    f = open(path, "rb")
+
+    def read(offset, n):
+        sec, off = divmod(offset, 2048)
+        f.seek(sec * 2352 + 24 + off)
+        return f.read(n)
+    return read
 
 
 def end_box_lines():
@@ -241,6 +335,17 @@ def main():
     print("Save Anywhere, Text Speed, Run Speed: %d patches verified"
           % extra.count("[[patch]]"))
 
+    disc = disc_reader()
+    fixes = []
+    if disc is None:
+        problems.append("no stock disc image (disc/, or build-debug/disc.cfg) for the EVL_REL.BIN guards")
+    else:
+        try:
+            fixes = bugfix_lines(data, disc)
+            print("Bug fixes: %d patches verified" % fixes.count("[[patch]]"))
+        except ValueError as e:
+            problems.append(str(e))
+
     if problems:
         print("\nPROBLEMS:")
         for p in problems:
@@ -261,8 +366,8 @@ def main():
         'author = "DigimonWorldRecomp"',
         'description = "Comfort and pacing: how long your partner lives, how '
         'fast the world clock runs, saving from the field menu, faster '
-        'dialogue and faster running, and a fix for a freeze in the original '
-        'game. Only the fix is on by default, and none turns a mechanic off."',
+        'dialogue and faster running, and fixes for bugs in the original '
+        'game. Only the fixes are on by default, and none turns a mechanic off."',
         'resolver = "declarative"',
         'save_compatibility = "shared"',
         "",
@@ -350,6 +455,7 @@ def main():
 
     out += extra
     out += end_box_lines()
+    out += fixes
 
     dest_dir = os.path.normpath(os.path.join(
         HERE, "..", "mods", "preloaded", "packages", PKG_ID, PKG_VER))
