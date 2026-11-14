@@ -24,8 +24,9 @@ pstat 0xFE (the stat) and calls routine 7, which starts the session
 TILE trigger that needs CONFIRM while standing on a cell whose collision byte
 is the section number (src/main/tamer.c:707-711), so the test reads the live
 collision grid for cells of value 0x53, walks onto the nearest and presses
-CROSS: Begin, then Normal (both first in their menus). Only if the greedy walk
-cannot reach the cell does it place the tamer on it (reported as "placed").
+CROSS: Begin, then Normal (both first in their menus). Writing the tamer's
+position does not stick (the game puts it back), so a cell the walk cannot
+reach fails the session.
 
 THE SESSION. state 0 -> 1 (partner walks to the machine) -> 2/3 (or 7/8)
 repeating until 1200 ticks -> 4 (results box; CROSS applies the gains at once,
@@ -41,8 +42,8 @@ table, so a roster species cannot change it.
     py -3.12 tools/verify_roster_training.py control --no-roster --seed <card dir>
     py -3.12 tools/verify_roster_training.py plan --plan 112:114,107:114
 
-Modes: control = the card's own (stock) partner on maps 112, 107 and 78;
-roster = types 114, 68, 90 on 112, 114 and 68 on 107 (TRN2), 114 on 78;
+Modes: control = the card's own (stock) partner on maps 112 and 107;
+roster = types 114, 68, 90 on 112, 114 and 68 on 107 (TRN2) (map 78: see PLANS);
 all = control then roster in one game; plan = --plan MAP:TYPE[,...] (type 0 =
 keep the current partner). Exit 0 = every session completed with a gain, 3 = a
 check failed, 2 = setup failed.
@@ -80,9 +81,12 @@ BLOCK = {
 }
 # Offense machines: map -> overlay. 112 and 107 tick states 2/3, 78 ticks 7/8.
 OFFENSE_MAPS = {112: "TRN", 78: "TRN", 107: "TRN2"}
+# Map 78 is not in the presets: on the seed card the tamer reaches its 0x53 cells (edge and interior), the
+# script is 75 with section 0x53 loaded and idle, yet CROSS never calls the section (IS_SCRIPT_PAUSED stays 1)
+# and no machine is drawn there [run 2026-11-14]. Its state 7/8 path reads the same relocated TRN entry.
 PLANS = {
-    "control": [(112, 0), (107, 0), (78, 0)],
-    "roster": [(112, 114), (112, 68), (112, 90), (107, 114), (107, 68), (78, 114)],
+    "control": [(112, 0), (107, 0)],
+    "roster": [(112, 114), (112, 68), (112, 90), (107, 114), (107, 68)],
 }
 PLANS["all"] = PLANS["control"] + PLANS["roster"]
 ROSTER_STATE = ('format_version = 2\n\n[[package]]\nid = "dw.vanilla.roster"\nversion = "1.0.0"\n\n'
@@ -209,13 +213,6 @@ def main():
                       key=lambda i: (centre(i)[0] - q[0]) ** 2 + (centre(i)[1] - q[2]) ** 2)
             tried.add(nxt)
             how = "walked" if f.go(centre(nxt), on, limit=20) else None
-        if how is None:                                # the walk could not reach it: stand the tamer on the cell
-            ptr = u32(TAMER + 4)
-            x, z = centre(target)
-            g.d.write_bytes(struct.pack("<i", x), ptr + 120)
-            g.d.write_bytes(struct.pack("<i", z), ptr + 128)
-            g.advance(10)
-            how = "placed" if on() else None
         if not check(how is not None, "%s: tamer on an offense trigger cell (%d cells of 0x53, nearest at %s; "
                      "tamer at %s)" % (tag, len(cells), centre(target), f.pos(TAMER))):
             return

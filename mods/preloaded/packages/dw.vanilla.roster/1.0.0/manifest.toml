@@ -1554,7 +1554,7 @@ feature = "roster"
 target = "disc_user"
 offset = 302756188
 expected = "74 62 84 24"
-replace = "00 50 84 24"
+replace = "00 51 84 24"
 
 [[patch]]
 feature = "roster"

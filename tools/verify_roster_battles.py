@@ -9,7 +9,9 @@ beam: the partner evolves to 114 (setup, the evolution sequence with the target 
     slots all hold All Range Beam (tech 25, found in the live DIGIMON_DATA[114].moves), slot 3 its finisher, with
     MP to spare, so Your Call can only pick All Range Beam. Each battle: away to row 112 and back, so the room
     reloads with all its wild Digimon; they walk into the tamer and handleBattleStart pulls in every one on screen
-    up to its cap of 3 enemies (src/main/btl.c:256-300). The enemies are kept alive until the partner has cast the
+    up to its cap of 3 enemies (src/main/btl.c:256-300). That pull-in caught fewer than 3 in the tries made here, so
+    --three names three of the room's own Digimon as the fight's group (pstats 0xFA-0xFD, as a scripted group fight
+    does) and the count is read after the intro. The enemies are kept alive until the partner has cast the
     beam --casts times, then left on 1 HP to fall. A battle passes when it ends with the player in control on the
     room. Rooms: 166 (MGEN01, Mt. Infinity's first room: 5 wild, 3 Digimon 88 and 2 Digimon 108) and 105 (BETL01,
     Beetle Land: 4 wild) -- MAPHEAD rows 166 and 105 (`tools/dis_script.py --maphead 166`).
@@ -23,7 +25,7 @@ A crash is the process exiting or the debug server going silent; a hang is the g
 battle or evolution not finishing in its budget. On any of them the tail of the game log (the runtime's freeze
 heartbeat prints there) is kept in the result.
 
-    py -3.12 tools/verify_roster_battles.py beam --rows 166,105 --battles 5 --seed <card dir> --port 7410
+    py -3.12 tools/verify_roster_battles.py beam --three --rows 166,105 --battles 4 --seed <card dir> --port 7410
     py -3.12 tools/verify_roster_battles.py suka --count 3 --seed <card dir> --port 7411
 
 Exit 0 = every attempt completed, 3 = a crash, hang or failed check, 2 = setup failed.
@@ -39,7 +41,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game, DIGIMON_DATA, DIGIMON_STRIDE      # noqa: E402
 from dwdbg import Dead, Wedge                              # noqa: E402
 from field_drive import (Field, BATTLE, IS_SCRIPT_PAUSED, NPC_BASE, NPC_SIZE, PARTNER_STATS, PARTNER_MAX_HP,
-                         PARTNER_ANIM)                     # noqa: E402
+                         PARTNER_ANIM, PSTAT_BASE)         # noqa: E402
 from verify_roster_training import ROSTER_STATE, DETECT_LUI, force, fresh, idle, seed_cards   # noqa: E402
 
 MACHINEDRAMON, SUKAMON, ALL_RANGE_BEAM = 114, 39, 25
@@ -55,6 +57,8 @@ def main():
     ap.add_argument("mode", choices=("beam", "suka"))
     ap.add_argument("--rows", default="166,105", help="beam: rooms to fight in")
     ap.add_argument("--battles", type=int, default=5, help="beam: battles per room")
+    ap.add_argument("--three", action="store_true",
+                    help="beam: the battle takes three of the room's wild Digimon (see beam_battle)")
     ap.add_argument("--casts", type=int, default=3, help="beam: All Range Beam casts per battle before the kill")
     ap.add_argument("--count", type=int, default=3, help="suka: evolutions")
     ap.add_argument("--from-type", type=int, default=MACHINEDRAMON, help="suka: the partner that catches the virus")
@@ -117,13 +121,25 @@ def main():
                                     beam_anim, beam_anim, beam_anim, fin_anim, 9999, 9999, 9999, 9999), PARTNER_STATS)
         g.warp(row)
         rec = dict(row=row)
+        if a.three:
+            # Name three of the room's own wild Digimon, both species where it has two, as the battle's fighters:
+            # pstat 0xFA = 1 and 0xFB-0xFD = their SCRIPT ids, the inputs a scripted group fight uses: a wild
+            # Digimon's contact runs its talk section, whose START_BATTLE turns those script ids into entity ids
+            # for handleBattleStart (src/main/script_interp.c:1897-1913, src/main/btl.c:230-258). The battle
+            # still starts by contact. Without this the room's own pull-in caught 1 or 2 of them [run].
+            npcs = [(n["script"], n["type"]) for n in map(f.npc, range(8)) if n and n["on_map"]]
+            pick = sorted(npcs, key=lambda sn: [t for _, t in npcs].count(sn[1]))[:3]
+            g.d.write_bytes(bytes([1] + [sid for sid, _ in pick] + [0xFF] * (3 - len(pick))), PSTAT_BASE + 0xFA)
         if not f.wait_for(lambda: f.gstate() in BATTLE, 90):
             # nobody came: walk at the nearest wild Digimon on the map
             npcs = [n for n in map(f.npc, range(8)) if n and n["on_map"] and n["pos"]]
             if npcs:
                 e = npcs[0]["pos"]
                 f.go((e[0], e[2]), lambda: f.gstate() in BATTLE, limit=40)
-        rec["started"] = f.wait_for(lambda: f.gstate() == 1, 60)
+        # 3 loading, 2 intro, 1 fighting; a brief 1 can show before the loading, with the last battle's data
+        rec["started"] = f.wait_for(lambda: f.gstate() in (2, 3), 60) and f.wait_for(lambda: f.gstate() == 1, 60)
+        if a.three:
+            g.d.write_bytes(bytes(1), PSTAT_BASE + 0xFA)          # only this battle is a group fight
         if not rec["started"]:
             rec["dead"] = alive()
             return rec
@@ -152,6 +168,10 @@ def main():
         rec["dead"] = alive()
         rec["over"] = rec["dead"] is None and f.gstate() == 0 and g.tamer_state == 0
         rec["screen"] = f.screen() if rec["dead"] is None else None
+        if rec["dead"] is None and not rec["over"]:        # what an unfinished battle looks like
+            rec["stuck"] = dict(game_state=f.gstate(), tamer_state=g.tamer_state, partner_hp=h16(PARTNER_MAX_HP + 4),
+                                enemies=[f.npc(s) for s in enemies], frame=g.d.frame())
+            g.artifact_shot(os.path.join(out, "stuck_%d.png" % row))
         return rec
 
     def suka_once():
@@ -206,6 +226,13 @@ def main():
                     rec = beam_battle(row, beam, fin)
                     rec["n"] = n + 1
                     attempts.append(rec)
+                    if not rec.get("started") and not rec.get("dead"):
+                        # Nobody came: the room's wild Digimon do not come back after a won fight (MAPHEAD 105 runs
+                        # STORE_DATE). Naming the beaten ones as a group anyway gave a fight they never fell in and a
+                        # loss to Jijimon's [run 2026-11-14, twice], so the room ends here rather than test that.
+                        print("INFO room %d battle %d: no wild Digimon came; the room is spent, next room"
+                              % (row, n + 1), flush=True)
+                        break
                     ok = rec.get("over") and rec.get("screen") == row and rec.get("casts", 0) >= a.casts
                     check(ok, "room %d battle %d: %s enemies %s, All Range Beam cast %s times, %s"
                           % (row, n + 1, len(rec.get("enemies", [])), rec.get("enemies"), rec.get("casts"),

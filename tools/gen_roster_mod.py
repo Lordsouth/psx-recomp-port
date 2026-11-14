@@ -57,9 +57,12 @@ ARENA_SIZE = 0x8000
 _ARENA_END = OFF_STD_GLYPH + N_TYPES * 14
 assert _ARENA_END <= ARENA_SIZE and _ARENA_END < 0x8000, _ARENA_END
 # The evolution overlay's shard scratch, moved here from EVL's own 5,436-byte
-# array (see EVL_SHARD_* below). Runs to the arena's end.
-OFF_EVL_SHARDS = 0x5000
+# array (see EVL_SHARD_* below). Runs to the arena's end (0x2F00 bytes).
+OFF_EVL_SHARDS = 0x5100
 assert _ARENA_END <= OFF_EVL_SHARDS < ARENA_SIZE
+# 0x5000-0x50B3 belongs to the cup bracket icon table (the "cups" branch,
+# 180 bytes); the shards must stay above it.
+assert OFF_EVL_SHARDS >= 0x5100, "EVL shards would overlap the bracket icon table at 0x5000"
 
 # ---- the evolution shatter overran its scratch --------------------------------
 # When a partner evolves, EVL breaks the OLD model into shards: for each bone
