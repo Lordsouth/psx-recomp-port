@@ -1,49 +1,52 @@
 #!/usr/bin/env python3
-"""Prove the roster's training-table relocation works IN A GYM.
-
-docs/INTERNALS.md section 9 has said since 0.3.0 that this was "proven on paper
-and at the guard, not on screen". Here is the screen.
+"""Run real Offense training sessions with stock and roster partners, to completion.
 
 WHAT CAN GO WRONG. Only TRN_tickOffenseTraining and TRN2_tickOffenseTraining
-read the per-species training-animation tables, and they read them at the RAW
-partner type with no clamp:
+read the per-species training-animation tables (dw_decomp src/trn/trn_off.c,
+src/trn2/trn2_off.c; no other training reads them), and they read them at the
+RAW partner type with no clamp. The stock tables hold 68 entries, so a roster
+partner such as type 114 reads past the end -- in TRN into the string
+"Technique mastered." (anim 101, frame 32), in TRN2 into a neighbouring table
+(anim 0, FRAME 0). Frame 0 is the trap: state 2 (state 7 for the map-78
+machine) advances only when its counter EQUALS the table's frame byte, and has
+no timeout and no input escape (the CANCEL early-out lives in states 3 and 8),
+so a frame byte of 0 parks the session until an int16 counter wraps. The roster
+relocates both tables into the arena; this proves the relocation carries a real
+session to its end.
 
-    lw  v0, PARTNER_ENTITY      ; Entity.type
-    sll v1, v0, 1               ; index = type * 2
-    lb  a1, TRAINING_ANIM_IDS(v1)
+WHERE THE MACHINES ARE. Map 112 (Green Gym) runs DG script 108 (MAPHEAD row
+112: SET_SCRIPT 108). Its sections 0x51..0x56 are the six signs; each sets
+pstat 0xFE (the stat) and calls routine 7, which starts the session
+(src/main/script_interp.c:1682-1723). Offense is pstat 0xFE = 1, section 0x53
+("Tree Striking") on map 112, section 0x53 ("Striking", script 103) on map 107
+(TRN2) and section 0x53 ("Striking Special", script 75) on map 78.
+`py -3.12 tools/dis_script.py 108 0x53` shows it. A section 0x50..0x6F is a
+TILE trigger that needs CONFIRM while standing on a cell whose collision byte
+is the section number (src/main/tamer.c:707-711), so the test reads the live
+collision grid for cells of value 0x53, walks onto the nearest and presses
+CROSS: Begin, then Normal (both first in their menus). Writing the tamer's
+position does not stick (the game puts it back), so a cell the walk cannot
+reach fails the session.
 
-The stock tables hold 68 entries. A roster partner is type 114, so the stock
-read lands 92 bytes past the end -- in TRN inside the string "Technique
-mastered." (anim 101, frame 32), in TRN2 inside a neighbouring table (anim 0,
-FRAME 0). Frame 0 is the trap: the state machine's state 2 advances only when
-its frame counter EQUALS the table's frame byte, and state 2 has no timeout and
-no input check, so a frame byte of 0 parks the session until an int16 counter
-wraps -- about 36 minutes. Holding a direction does not rescue it, because the
-only early-out lives in state 3.
+THE SESSION. state 0 -> 1 (partner walks to the machine) -> 2/3 (or 7/8)
+repeating until 1200 ticks -> 4 (results box; CROSS applies the gains at once,
+src/trn/trn_hud.c) -> 5 -> 6 -> TRAINING_COMPLETE = 1 and the player has
+control. The soft-lock signature is checked exactly: in state 2 or 7 the
+counter can only legitimately reach the frame byte (an s8, at most 127), so a
+counter past 127 is a parked session.
 
-The nastiest part is that a naive liveness check sees nothing wrong: the
-session's own tick counter keeps incrementing the whole time. The state byte is
-what stops.
+HP training (the button-mash boulder) is out of scope: it does not read either
+table, so a roster species cannot change it.
 
-WHAT THIS CHECKS, in order of strength:
+    py -3.12 tools/verify_roster_training.py all --port 7400 --seed <card dir>
+    py -3.12 tools/verify_roster_training.py control --no-roster --seed <card dir>
+    py -3.12 tools/verify_roster_training.py plan --plan 112:114,107:114
 
-  1. Every read site is retargeted. The generator asserts a census of 5 sites
-     in TRN and 3 in TRN2; this re-reads the words out of the LOADED overlay
-     and confirms each forms an arena address, not the stock one. A patch that
-     applied on disc but not in RAM would show here.
-  2. The relocated tables hold a sane entry for the partner's type -- in
-     particular a NON-ZERO frame byte, which is exactly the hang condition.
-  3. A real Offense session runs to completion, with the soft-lock signature
-     polled for throughout: state == 2 held while the tick counter climbs.
-
-Map 107 (Beetle Land) is the default because it is served by TRN2, where the
-stock-table failure is the hang rather than merely a wrong animation. Map 112
-(Green Gym) exercises the TRN path.
-
-    py -3.12 tools/verify_roster_training.py --port 4384 --map 107
-
-Exit 0 = proven, 3 = a check failed, 5 = the session could not be started (the
-byte checks still report).
+Modes: control = the card's own (stock) partner on maps 112 and 107;
+roster = types 114, 68, 90 on 112, 114 and 68 on 107 (TRN2) (map 78: see PLANS);
+all = control then roster in one game; plan = --plan MAP:TYPE[,...] (type 0 =
+keep the current partner). Exit 0 = every session completed with a gain, 3 = a
+check failed, 2 = setup failed.
 """
 import argparse
 import json
@@ -54,13 +57,14 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game                                    # noqa: E402
+from field_drive import Field, TAMER, HOUR, MAP_COLLISION, IS_SCRIPT_PAUSED  # noqa: E402
 
 ARENA = 0x9F000000
 OFF_TRAIN_ANIM, OFF_TRN2_ANIM = 0x4200, 0x4400
-DETECT_LUI = 0x800E2610
-PARTNER_ENTITY = 0x801557A8
-TAMER_STATE = 0x80134C91
+DETECT_LUI = 0x800E2610             # roster retarget site; imm reads 0x9F00 when on
 OFF_STAT = 0x801557E0
+TAMER_STATE = 0x80134C91
+OFFENSE_SECTION = 0x53
 
 # Read sites for the animation tables, derived by disassembling the overlays.
 # Each is a lui/addiu pair: the lui carries the high half of the table address.
@@ -70,271 +74,218 @@ SITES = {
 }
 # Per-overlay session state (main-exe RAM, distinct blocks per overlay).
 BLOCK = {
-    "TRN":  {"state": 0x80135371, "slot": 0x80135370, "ticks": 0x8013537A,
-             "anim": 0x8013537E, "box": 0x80135394, "resident": 0x8008B820,
-             "table_off": OFF_TRAIN_ANIM},
-    "TRN2": {"state": 0x801353BD, "slot": 0x801353BC, "ticks": 0x801353C2,
-             "anim": 0x801353C6, "box": 0x801353D4, "resident": 0x80089B64,
-             "table_off": OFF_TRN2_ANIM},
+    "TRN":  {"state": 0x80135371, "ticks": 0x8013537A, "anim": 0x8013537E,
+             "resident": 0x8008B820, "table_off": OFF_TRAIN_ANIM},
+    "TRN2": {"state": 0x801353BD, "ticks": 0x801353C2, "anim": 0x801353C6,
+             "resident": 0x80089B64, "table_off": OFF_TRN2_ANIM},
 }
-TRN_MAPS = {112: "TRN", 78: "TRN", 119: "TRN",
-            99: "TRN2", 107: "TRN2", 108: "TRN2", 165: "TRN2"}
-PSTAT_STAT_SELECT = 0x801BE12F      # pstat 0xFE: 0 hp,1 off,2 speed,3 def,4 mp,5 brain
-PSTAT_SLOT_MODE = 0x801BE127        # pstat 0xF6: 0 = timed, 1 = slot minigame
+# Offense machines: map -> overlay. 112 and 107 tick states 2/3, 78 ticks 7/8.
+OFFENSE_MAPS = {112: "TRN", 78: "TRN", 107: "TRN2"}
+# Map 78 is not in the presets: on the seed card the tamer reaches its 0x53 cells (edge and interior), the
+# script is 75 with section 0x53 loaded and idle, yet CROSS never calls the section (IS_SCRIPT_PAUSED stays 1)
+# and no machine is drawn there [run 2026-11-14]. Its state 7/8 path reads the same relocated TRN entry.
+PLANS = {
+    "control": [(112, 0), (107, 0)],
+    "roster": [(112, 114), (112, 68), (112, 90), (107, 114), (107, 68)],
+}
+PLANS["all"] = PLANS["control"] + PLANS["roster"]
+ROSTER_STATE = ('format_version = 2\n\n[[package]]\nid = "dw.vanilla.roster"\nversion = "1.0.0"\n\n'
+                '[[feature]]\npackage_id = "dw.vanilla.roster"\nid = "roster"\nenabled = true\n')
+
+
+def tile_trigger(x, z):
+    """The collision cell index getTileTrigger reads for world (x, z) (src/main/map_collision.c:32-45)."""
+    tx = int(x / 100) + 50 - (x < 0)
+    tz = 50 - int(z / 100) - (z > 0)
+    return tx + tz * 100
+
+
+def idle(g):
+    return g.tamer_state == 0 and g.partner_state == 1
+
+
+def fresh(g):
+    """Nothing in the raise sim may interrupt: no poop, no tiredness, no old age, daytime."""
+    g.set("remaining_lifetime", 9999)
+    g.set("poop_level", 0)
+    g.set("tiredness", 0)
+    g.d.write_bytes(struct.pack("<hh", 12, 0), HOUR)
+
+
+def force(g, target):
+    """Setup only: the evolution sequence with the target supplied (as tools/dwtest.py does)."""
+    fresh(g)
+    if g.script_sync_bit == 0:
+        g.set("script_sync_bit", 1)
+    g.set("evolution_target", target)
+    g.set_atomic(("tamer_state", 6), ("tamer_substate", 0))
+    g.set_atomic(("partner_state", 13), ("partner_sub_state", 0))
+    for _ in range(200):
+        g.advance(30)
+        if g.partner_type == target:
+            break
+    for _ in range(60):
+        if idle(g):
+            break
+        g.route("4:cross,30:none")
+    g.advance(120)
+    return g.partner_type == target and idle(g)
+
+
+def seed_cards(seed, cards):
+    """A fresh sandbox card dir from the seed's card1/card2; False when the seed has no card1."""
+    shutil.rmtree(cards, ignore_errors=True)
+    os.makedirs(cards)
+    for f in ("card1.mcd", "card2.mcd"):
+        if os.path.exists(os.path.join(seed, f)):
+            shutil.copy(os.path.join(seed, f), cards)
+    return os.path.exists(os.path.join(cards, "card1.mcd"))
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=4384)
-    ap.add_argument("--map", type=int, default=107)
-    ap.add_argument("--type", type=int, default=114,
-                    help="partner type to test; must be a roster species")
-    ap.add_argument("--setup-type", type=int, default=5)
-    ap.add_argument("--out", default=None)
-    ap.add_argument("--cards", default=None,
-                    help="memory-card dir with a save in slot 1 "
-                         "(default: a sandbox seeded from saves/)")
-    a = ap.parse_args()
-
-    if a.map not in TRN_MAPS:
-        print("map %d hosts no training. Known: %s"
-              % (a.map, sorted(TRN_MAPS)), file=sys.stderr)
-        return 2
-    ov = TRN_MAPS[a.map]
-    blk = BLOCK[ov]
-
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    out = a.out or os.path.join(root, "build-debug", "roster_train_%d" % a.port)
-    os.makedirs(out, exist_ok=True)
-    # A sandbox card directory: the game must never be pointed at the
-    # player's real saves. Seeded from the project's own saves/ on first use
-    # because enter_game() needs a save in slot 1 to reach the world.
-    cards = a.cards or os.path.join(out, 'cards')
-    os.makedirs(cards, exist_ok=True)
-    if not os.path.exists(os.path.join(cards, 'card1.mcd')):
-        src = os.path.join(root, 'saves')
-        got = False
-        for f in ('card1.mcd', 'card2.mcd'):
-            if os.path.exists(os.path.join(src, f)):
-                shutil.copy(os.path.join(src, f), os.path.join(cards, f))
-                got = True
-        if not got:
-            print('No memory card to seed the sandbox from. Put a card with a '
-                  'save in slot 1 at %s, or pass --cards.' % src, file=sys.stderr)
-            return 2
+    ap = argparse.ArgumentParser()
+    ap.add_argument("mode", choices=("control", "roster", "all", "plan"))
+    ap.add_argument("--plan", default="", help="plan mode: MAP:TYPE,... (type 0 keeps the partner)")
+    ap.add_argument("--no-roster", action="store_true", help="roster off (a stock control only)")
+    ap.add_argument("--port", type=int, default=7400)
+    ap.add_argument("--build", default=os.path.join(root, "build-debug"))
+    ap.add_argument("--seed", default=os.path.join(root, "saves"))
+    a = ap.parse_args()
+    plan = PLANS.get(a.mode) or [tuple(int(v) for v in p.split(":")) for p in a.plan.split(",") if p]
+    if not plan or any(m not in OFFENSE_MAPS for m, _ in plan):
+        print("bad plan %r; offense machines are on maps %s" % (plan, sorted(OFFENSE_MAPS)), file=sys.stderr)
+        return 2
+    if a.no_roster and any(t > 67 for _, t in plan):
+        print("a roster type needs the roster on", file=sys.stderr)
+        return 2
 
-    g = Game.launch(port=a.port, memcard_dir=cards,
+    out = os.path.join(a.build, "roster_train_%s%s" % (a.mode, "_off" if a.no_roster else ""))
+    cards = os.path.join(out, "cards")
+    if not seed_cards(a.seed, cards):
+        print("No memory card to seed from at %s" % a.seed, file=sys.stderr)
+        return 2
+    with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
+        fh.write("format_version = 2\n" if a.no_roster else ROSTER_STATE)
+
+    fails, results = [], []
+
+    def check(cond, msg):
+        print(("PASS " if cond else "FAIL ") + msg, flush=True)
+        if not cond:
+            fails.append(msg)
+        return cond
+
+    g = Game.launch(exe=os.path.join(a.build, "Digimon_World_Recompiled.exe"), port=a.port,
+                    memcard_dir=cards, extra_args=["--headless-opengl"],
                     log_path=os.path.join(out, "game.log"),
                     env={"PSX_OVERLAY_CAPTURES": os.path.join(out, "captures.json")})
+    f = Field(g, check)
+    u8 = lambda x: g.d.read(x, 1)[0]
+    i8 = lambda x: struct.unpack("<b", g.d.read(x, 1))[0]
+    i16 = lambda x: struct.unpack("<h", g.d.read(x, 2))[0]
+    u32 = lambda x: struct.unpack("<I", g.d.read(x, 4))[0]
+    shot = lambda n: g.artifact_shot(os.path.join(out, n + ".png"))
 
-    def u8(x):
-        return g.d.read(x, 1)[0]
-
-    def i8(x):
-        return struct.unpack("<b", g.d.read(x, 1))[0]
-
-    def i16(x):
-        return struct.unpack("<h", g.d.read(x, 2))[0]
-
-    def u32(x):
-        return struct.unpack("<I", g.d.read(x, 4))[0]
-
-    def force(target):
-        g.set("remaining_lifetime", 9999)
-        g.set("poop_level", 0)
-        g.set("tiredness", 0)
-        if g.script_sync_bit == 0:
-            g.set("script_sync_bit", 1)
-        g.set("evolution_target", target)
-        g.set_atomic(("tamer_state", 6), ("tamer_substate", 0))
-        g.set_atomic(("partner_state", 13), ("partner_sub_state", 0))
-        for _ in range(200):
-            g.advance(30)
-            if g.partner_type == target:
-                return True
-        return False
-
-    rc, report = 0, {}
-    try:
-        print("partner", g.enter_game(), flush=True)
-        if struct.unpack("<H", g.d.read(DETECT_LUI, 2))[0] != 0x9F00:
-            print("ABORT: the roster mod is not in the active plan")
-            return 2
-
-        if g.partner_type != a.type:
-            print("forcing partner to %d via %d ..." % (a.type, a.setup_type), flush=True)
-            force(a.setup_type)
-            g.advance(120)
-            for _ in range(60):
-                if g.tamer_state == 0 and g.partner_state == 1:
-                    break
-                g.route("4:cross,30:none")
-            g.set("evolution_target", -1)
-            if not force(a.type):
-                print("could not reach partner type %d" % a.type)
-                return 2
-        g.advance(180)
-        for _ in range(60):
-            if g.tamer_state == 0 and g.partner_state == 1:
-                break
-            g.route("4:cross,30:none")
+    def session(row, want):
+        ov, blk = OFFENSE_MAPS[row], BLOCK[OFFENSE_MAPS[row]]
+        if want and g.partner_type != want and not force(g, want):
+            check(False, "map %d: could not set up partner type %d (is %d)" % (row, want, g.partner_type))
+            return
         ptype = g.partner_type
-        print("partner type %d %r" % (ptype, g.digimon_record(ptype)["name"]), flush=True)
-
-        g.warp(a.map)
-        g.advance(240)
-        print("on map %d (%s)" % (a.map, ov), flush=True)
-        g.d.cmd("screenshot", path=os.path.join(out, "1_gym.png"))
-
-        # The overlay is NOT loaded by arriving on the map. It is loaded by the
-        # map's own script, at the machine: probing showed the region all zeroes
-        # through 900 frames of standing on map 112, and populated immediately
-        # after a walk-left and a CROSS. So walk into things until it appears,
-        # rather than assuming a warp is enough -- assuming it is what made the
-        # first run of this report a retarget failure that was really an absence.
-        def resident():
-            w = u32(blk["resident"])
-            return (w >> 26) != 0 or (w & 0xFFFF0000) != 0
-
-        if not resident():
-            print("overlay not resident on arrival; looking for the machine ...",
-                  flush=True)
-            # A CUMULATIVE walk, not a set of independent attempts. The probe
-            # that first found the machine reached it only after up, right and
-            # down had already moved the player; starting each direction from
-            # the entrance misses it. So never reset position, and press CROSS
-            # after every leg.
-            found = None
-            for n in (60, 40, 100, 80):
-                for d in ("up", "right", "down", "left"):
-                    g.route("%d:%s,15:none,6:cross,45:none" % (n, d))
-                    if resident():
-                        found = "%d:%s" % (n, d)
-                        break
-                if found:
-                    break
-            if found:
-                print("   loaded after %s" % found, flush=True)
-            else:
-                print("   still not resident after the search", flush=True)
-
-        # ---- check 1: the overlay is resident, and every read site retargeted
-        #
-        # Residency is checked FIRST and separately. An unloaded overlay reads
-        # as zeroes, and zeroes are not 0x9F00, so folding the two together
-        # reports a retarget failure when the truth is that there is nothing
-        # there yet -- which is exactly what the first run of this said.
-        first = u32(blk["resident"])
-        resident = (first >> 26) != 0 or (first & 0xFFFF0000) != 0
-        print("offense tick first word = 0x%08X -> overlay %s"
-              % (first, "resident" if resident else "NOT resident"), flush=True)
-        sites = {}
-        for va in SITES[ov]:
-            sites["0x%08X" % va] = "0x%04X" % (u32(va) & 0xFFFF)
-        print("read sites -> %s" % sites, flush=True)
-        if not resident:
-            print("CHECK 1 INCONCLUSIVE: %s is not loaded, so its instructions "
-                  "cannot be inspected. The overlay loads from the map's own "
-                  "script (opcode 0x64 0x27); a warp that lands on the map "
-                  "without running that script leaves it absent." % ov, flush=True)
-            site_ok = None
-        else:
-            site_ok = all(v == "0x9F00" for v in sites.values())
-            print("CHECK 1 every %s animation-table read site retargeted to the "
-                  "arena: %s" % (ov, "PASS" if site_ok else "FAIL"), flush=True)
-            if not site_ok:
-                rc = 3
-
-        # ---- check 2: the relocated entry for this type is sane
-        ent = g.d.read(ARENA + blk["table_off"] + ptype * 2, 2)
-        anim, frame = ent[0], ent[1]
-        stock = g.d.read(ARENA + blk["table_off"] + 3 * 2, 2)
-        print("relocated %s entry for type %d: anim=0x%02X frame=0x%02X "
-              "(a stock entry reads anim=0x%02X frame=0x%02X)"
-              % (ov, ptype, anim, frame, stock[0], stock[1]), flush=True)
-        entry_ok = frame != 0
-        print("CHECK 2 frame byte is non-zero, so state 2 can advance: %s"
-              % ("PASS" if entry_ok else "FAIL -- this is the hang"), flush=True)
-        if not entry_ok:
-            rc = 3
-
-        # ---- check 3: run a session and watch for the soft-lock signature
-        g.d.write_bytes(b"\x00", PSTAT_SLOT_MODE)      # timed, not the slot game
-        g.d.write_bytes(b"\x01", PSTAT_STAT_SELECT)    # Offense
-        base_off = i16(OFF_STAT)
-        print("\nbaseline offense = %d; looking for a training machine ..."
-              % base_off, flush=True)
-
-        started = False
-        for route in ("40:up,20:none,6:cross,40:none",
-                      "40:right,20:none,6:cross,40:none",
-                      "40:down,20:none,6:cross,40:none",
-                      "40:left,20:none,6:cross,40:none",
-                      "80:up,20:none,6:cross,40:none",
-                      "80:right,20:none,6:cross,40:none",
-                      "80:down,20:none,6:cross,40:none",
-                      "80:left,20:none,6:cross,40:none"):
-            g.route(route)
-            g.advance(30)
-            if u8(TAMER_STATE) == 8 or i8(blk["state"]) != 0:
-                started = True
+        name = g.digimon_record(ptype)["name"]
+        tag = "map %d %s, %s (type %d)" % (row, ov, name, ptype)
+        if g.current_screen != row:
+            g.warp(row)
+        g.advance(120)
+        fresh(g)
+        coll = g.d.read(MAP_COLLISION, 10000)
+        cells = [i for i, v in enumerate(coll) if v == OFFENSE_SECTION]
+        p = f.pos(TAMER)
+        centre = lambda i: ((i % 100 - 50) * 100 + 50, (50 - i // 100) * 100 - 50)
+        target = min(cells, key=lambda i: (centre(i)[0] - p[0]) ** 2 + (centre(i)[1] - p[2]) ** 2)
+        on = lambda: (lambda q: q is not None and coll[tile_trigger(q[0], q[2])] == OFFENSE_SECTION)(f.pos(TAMER))
+        how = "walked" if f.go(centre(target), on, limit=60) else None
+        tried = set()
+        while how is None and len(tried) < 6:          # an edge cell can sit against the machine: try its neighbours
+            q = f.pos(TAMER)
+            nxt = min((i for i in cells if i not in tried),
+                      key=lambda i: (centre(i)[0] - q[0]) ** 2 + (centre(i)[1] - q[2]) ** 2)
+            tried.add(nxt)
+            how = "walked" if f.go(centre(nxt), on, limit=20) else None
+        if not check(how is not None, "%s: tamer on an offense trigger cell (%d cells of 0x53, nearest at %s; "
+                     "tamer at %s)" % (tag, len(cells), centre(target), f.pos(TAMER))):
+            return
+        g.advance(20)
+        off0, ticks_seen = i16(OFF_STAT), 0
+        shot("map%d_type%d_sign" % (row, ptype))
+        trace = []                                     # what each press did, for a session that never starts
+        for _ in range(30):
+            g.route("6:cross,40:none")
+            q = f.pos(TAMER)
+            trace.append((u8(TAMER_STATE), f.i32(IS_SCRIPT_PAUSED), coll[tile_trigger(q[0], q[2])] if q else None))
+            if u8(TAMER_STATE) == 8:
                 break
-        print("session started: %s (tamer_state=%d, %s state=%d)"
-              % (started, u8(TAMER_STATE), ov, i8(blk["state"])), flush=True)
+        if u8(TAMER_STATE) != 8:
+            print("   presses (tamer_state, IS_SCRIPT_PAUSED, trigger under the tamer): %s" % trace[:12], flush=True)
+            shot("map%d_type%d_nostart" % (row, ptype))
+        if not check(u8(TAMER_STATE) == 8, "%s: CROSS at the sign started a session (%s there, tamer_state %d)"
+                     % (tag, how, u8(TAMER_STATE))):
+            return
+        resident_word = u32(blk["resident"])
+        sites = {"0x%08X" % va: "0x%04X" % (u32(va) & 0xFFFF) for va in SITES[ov]}
+        anim, frame = struct.unpack("<Bb", g.d.read(ARENA + blk["table_off"] + ptype * 2, 2)) if not a.no_roster \
+            else (None, None)
+        if not a.no_roster:
+            check(resident_word != 0 and all(v == "0x9F00" for v in sites.values()),
+                  "%s: %s resident (first word 0x%08X) and every table read site retargeted to the arena %s"
+                  % (tag, ov, resident_word, sites))
+            check(frame > 0, "%s: relocated entry anim 0x%02X frame %d (non-zero, so the hit state can advance)"
+                  % (tag, anim, frame))
+        seen, parked, done, end = [], None, False, g.d.frame() + 9000
+        while g.d.frame() < end:
+            st, tk, cnt = i8(blk["state"]), i16(blk["ticks"]), i16(blk["anim"])
+            if not seen or seen[-1] != st:
+                seen.append(st)
+            ticks_seen = max(ticks_seen, tk)
+            if st in (2, 7) and cnt > 127:              # past any s8 frame byte: parked
+                parked = (st, cnt, tk)
+                break
+            if 6 in seen and st == 0 and u8(TAMER_STATE) == 0:    # state 6 hands control back and resets to 0
+                done = True
+                break
+            if st == 4:
+                g.route("4:cross,8:none")              # the results box: CROSS applies the gains at once
+            else:
+                g.advance(6)
+        off1 = i16(OFF_STAT)
+        shot("map%d_type%d" % (row, ptype))
+        check(parked is None, "%s: never parked in a hit state (states %s)%s"
+              % (tag, seen, "" if parked is None else ": PARKED in state %d, counter %d, ticks %d" % parked))
+        check(done and ticks_seen >= 1200, "%s: session ran its full 1200 ticks (reached %d) and handed control back"
+              % (tag, ticks_seen))
+        check(off1 > off0, "%s: Offense %d -> %d (+%d)" % (tag, off0, off1, off1 - off0))
+        results.append(dict(map=row, overlay=ov, type=ptype, name=name, reached=how, entry=[anim, frame],
+                            states=seen, ticks=ticks_seen, offense=[off0, off1], completed=done,
+                            parked=parked, sites=sites))
+        g.advance(60)
 
-        if not started:
-            print("Could not walk onto a machine from the map entrance. The "
-                  "trigger's coordinates live in the on-disc map script, not in "
-                  "the decompilation, so this step is a search rather than a "
-                  "known route. Checks 1 and 2 above still stand.", flush=True)
-            report["session"] = "not started"
-            if rc == 0:
-                rc = 5
-        else:
-            stall, last_ticks, hist = 0, -1, []
-            done = False
-            for _ in range(400):
-                st = i8(blk["state"])
-                tk = i16(blk["ticks"])
-                hist.append((st, tk))
-                if st == 2 and tk == last_ticks:
-                    pass
-                stall = stall + 1 if st == 2 else 0
-                last_ticks = tk
-                if st == 4:
-                    g.d.write_bytes(b"\x01", blk["box"])   # dismiss the results box
-                if u8(TAMER_STATE) == 0 and st == 0 and tk > 100:
-                    done = True
-                    break
-                if stall > 120:
-                    break
-                g.advance(15)
-            final_off = i16(OFF_STAT)
-            states = sorted({h[0] for h in hist})
-            print("states visited: %s; ticks reached %d; offense %d -> %d"
-                  % (states, hist[-1][1], base_off, final_off), flush=True)
-            softlock = stall > 120
-            print("CHECK 3 session ran without the state-2 soft-lock: %s"
-                  % ("FAIL -- parked in state 2" if softlock
-                     else "PASS" if done or final_off > base_off
-                     else "INCONCLUSIVE (session did not finish in budget)"),
-                  flush=True)
-            report["session"] = {"states": states, "ticks": hist[-1][1],
-                                 "offense_before": base_off,
-                                 "offense_after": final_off,
-                                 "softlock": softlock, "completed": done}
-            if softlock:
-                rc = 3
-            g.d.cmd("screenshot", path=os.path.join(out, "2_training.png"))
-
-        report.update({"map": a.map, "overlay": ov, "type": ptype,
-                       "sites": sites, "sites_ok": site_ok,
-                       "entry": [anim, frame], "entry_ok": entry_ok})
+    rc = 0
+    try:
+        f.enter()
+        on = struct.unpack("<H", g.d.read(DETECT_LUI, 2))[0] == 0x9F00
+        if not check(on != a.no_roster, "roster %s in the active plan (retarget site reads 0x%04X)"
+                     % ("off" if a.no_roster else "on", struct.unpack("<H", g.d.read(DETECT_LUI, 2))[0])):
+            return 2
+        print("card partner: type %d %s" % (g.partner_type, g.digimon_record(g.partner_type)["name"]), flush=True)
+        for row, t in plan:
+            session(row, t)
+        rc = 3 if fails else 0
     finally:
         g.shutdown()
-    if report:
-        json.dump(report, open(os.path.join(out, "result.json"), "w"), indent=1)
-        print("\nresult -> %s" % os.path.join(out, "result.json"), flush=True)
+        json.dump(dict(mode=a.mode, roster=not a.no_roster, sessions=results, fails=fails),
+                  open(os.path.join(out, "result.json"), "w"), indent=1)
+        print("\n%d sessions, %d failed checks -> %s" % (len(results), len(fails), os.path.join(out, "result.json")))
     return rc
 
 

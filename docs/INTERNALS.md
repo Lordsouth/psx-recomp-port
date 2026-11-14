@@ -913,8 +913,10 @@ rather than reporting them as regressions.
 **The training tables** (`TRAINING_ANIM_IDS` `0x8008F050` in `TRN_REL.BIN`,
 `TRN2_D_8008DA20` `0x8008DA20` in `TRN2_REL.BIN`) are `s8[68][2]` indexed by
 raw type, so any type past 68 reads off the end. Without a fix, offense
-training picks an invalid animation and **MP training soft-locks** (its
-threshold reads zero).
+training picks an invalid animation, and in TRN2 the frame byte it reads is
+zero, which **soft-locks the offense session** (§9). Only the two offense
+ticks read these tables (dw_decomp `src/trn/trn_off.c`, `src/trn2/trn2_off.c`);
+the old "MP training" label was wrong.
 
 0.2.0 fixed this in place: index 114 lands 92 bytes past the table, inside the
 string `"Give it all you "`, and two disc patches rewrote those bytes. Correct
@@ -2391,39 +2393,90 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
   **Migration:** a save made before this fix keeps whatever the old aliasing
   set. Those announcements stay skipped and species raised under the old scheme
   read as un-raised. Nothing is corrupted; nothing is recovered either.
-* **The overlay table retarget is now seen live in a gym — but a full training
-  session with a new species is still not proven.** Partly closed 2026-09-04 by
-  `tools/verify_roster_training.py`; be precise about which part.
+* ~~**A full training session with a new species is not proven.**~~ **CLOSED
+  2026-11-14** by `tools/verify_roster_training.py plan --plan ...` runs
+  (`112:0`, then `107:0,78:0,112:68,112:90,107:114,107:68,78:114`; the
+  `112:114` row from an `all` run that halted later on the evolution bug)
+  [run], for Offense,
+  the only training that reads the relocated tables (`TRN_tickOffenseTraining`,
+  `TRN2_tickOffenseTraining`; dw_decomp `src/trn/trn_off.c`, `src/trn2/trn2_off.c`).
 
-  *Proven.* With a type-114 partner in Green Gym (map 112) and TRN actually
-  resident, all five `TRAINING_ANIM_IDS` read sites in the LOADED overlay carry
-  the arena's high half-word — `0x8008B91C`, `0x8008B9FC`, `0x8008BC30`,
-  `0x8008BE38`, `0x8008BF50` all read 0x9F00. The relocated entry for type 114
-  reads anim 0x2E, frame 0x0A. That matters because the failure mode is
-  specifically a frame byte of **zero**: offense training's state 2 advances
-  only when its counter EQUALS the table's frame byte, and that state has no
-  timeout and no input escape, so a zero parks the session until an int16
-  counter wraps. With the stock 68-entry table, type 114 reads 92 bytes past
-  the end — in TRN into the string "Technique mastered." (anim 101, frame 32),
-  in TRN2 into anim 0, **frame 0**. The relocation is what stops that, and the
-  relocation is live.
+  *How the test reaches a machine.* No blind search: MAPHEAD row 112 runs DG
+  script 108, whose sections 0x51-0x56 are the six signs; each sets pstat 0xFE
+  (0 HP .. 5 Brains) and calls routine 7 (`tools/dis_script.py 108`). Offense
+  is section 0x53 on map 112 ("Tree Striking"), on map 107 (script 103,
+  "Striking", TRN2) and on map 78 (script 75, "Striking Special"). Sections
+  80-109 are tile triggers that need CONFIRM on a cell whose collision byte is
+  the section number (dw_decomp `src/main/tamer.c:707-711`), so the test reads
+  the live collision grid for 0x53 cells, walks onto the nearest and presses
+  CROSS through Begin and Normal. The overlay is loaded by routine 39 at the
+  section's start, not on arrival.
 
-  *Not proven.* An offense session run to completion. One attempt started a
-  session and parked in state 2 for 845 ticks with no stat gain, but the
-  stock-partner control never reached a machine, so that observation cannot be
-  attributed: the walk that finds a machine is a blind search (the trigger
-  coordinates live in the on-disc map script, not in the decompilation), and a
-  blind CROSS may start any exercise — HP training is a button-mash minigame
-  that will sit waiting for input a scripted route never supplies. **Do not
-  cite that run as evidence of a soft-lock, and do not cite the passing checks
-  as evidence there is none.** Settling it needs the machine's coordinates, or
-  the memory-arm route in the tool's docstring.
+  *Proven, every session run to its 1200 ticks, results box closed with CROSS,
+  control handed back, no counter in state 2 past 127 (the park signature):*
 
-  Note the overlay does NOT load on arrival: probing found the region all
-  zeroes through 900 frames of standing on map 112, and populated immediately
-  after walking into the machine. A test that warps and reads is reading
-  nothing — which is what made the first run of this report a "retarget
-  failure" that was really an absence.
+  | Map, overlay | Partner | Relocated entry | Offense |
+  |---|---|---|---|
+  | 112 TRN | Agumon (3), stock control | anim 0x33, frame 12 | 80 -> 88 |
+  | 112 TRN | Machinedramon (114) | 0x2E, 10 | 344 -> 353 |
+  | 112 TRN | Gotsumon (68) | 0x2E, 10 | 97 -> 104 |
+  | 112 TRN | Tekkamon (90) | 0x2F, 30 | 352 -> 362 |
+  | 107 TRN2 | Agumon (3), stock control | | 80 -> 92 |
+  | 107 TRN2 | Machinedramon (114) | | 481 -> 495 |
+  | 107 TRN2 | Gotsumon (68) | | 500 -> 510 |
+
+  All five TRN read sites read 0x9F00 in the loaded overlay each time. TRN2 is
+  the overlay where the stock table hands type 114 frame 0, so the 107 rows are
+  the ones that matter most.
+
+  *Not covered.* Map 78's machine (TRN states 7/8, the same relocated entry):
+  on the seed card the tamer stands on its 0x53 cells, script 75 with section
+  0x53 is loaded and the script is idle, yet CROSS never calls the section and
+  no machine is drawn there; cause not found. HP, Defense, Speed, MP and
+  Brains training read no per-species *animation* table (they do read
+  `RAISE_DATA[type]` and `DIGIMON_DATA[type]` in the shared reward code, both
+  roster-filled), so the frame-byte park cannot happen there; not run. The gain formula was not measured. Writing the tamer's
+  position does not stick (the game puts it back), so the test only walks.
+
+  The two runs before the evolution fix below crashed on a setup step, not on
+  training: forcing Machinedramon to Gotsumon halted the game (same cause).
+* ~~**Evolving out of Machinedramon halts the game.**~~ **FIXED 2026-11-14**
+  in `tools/gen_roster_mod.py` (`evl_shard_patches`). When a partner evolves,
+  EVL shatters the OLD model: per bone, up to 30 shard sets,
+  `EVL_buildShardSet` writes 6 bytes per vertex and per leading textured face
+  centre, unbounded, from the address `EVL_initEvoSequence` gives
+  `EVL_setScratchTop`: `EVL_D_80066274`, a 5,436-byte array, right before the
+  flash buffer and the bone-order table the shatter reads next (dw_decomp
+  `src/evl/evl.c:1001-1115,1300-1325`, `src/evl/evl_bss_us.c:693`). Stock
+  partners need at most 5,292 B (type 60); Machinedramon's model 8,514 B,
+  Guardromon's 5,550 B, every other roster species under 5,436 B (the
+  generator computes this from the disc's MMDs and asserts it). Seen [run]:
+  type 114 through the virus path to Sukamon, the game writing
+  `EVOLUTION_TARGET` 39 itself, halted with the runtime's "unknown dispatch
+  addr=0x80090CEC ra=0x293C"; the always-on write trace showed
+  `EVL_buildShardSet` (pc 0x80061E7C) writing 0x80066274 through 0x8009169B,
+  the cascade over the EXE's first page, where a kernel handler node lives
+  [inferred from the dispatch's ra 0x293C].
+  The fix retargets the one `lui a0`/`addiu a0` pair (EVL 0x80063154,
+  0x8006315C) to the roster arena's free tail, 0x9F005100-0x9F007FFF
+  (0x5000-0x50B3 is the cup bracket icon table; the generator asserts the
+  shards stay above it). After it, three 114 -> Sukamon evolutions completed
+  with the shard pointer at 0x9F007242 (8,514 B, as predicted), a stock
+  Greymon -> Sukamon control at 0x9F00634E (4,686 B), and 114 -> Gotsumon
+  completed in the training run, at the earlier 0x9F005000 placement
+  (`tools/verify_roster_battles.py suka`). Guardromon unfixed
+  ran 114 B into the flash buffer (pointer 0x80067822) and completed once.
+  **1.5 needs no fix: it bounds the shatter itself.** 1.5's EVL jumps from
+  0x80061DE0 (inside `EVL_buildShardSet`) to 1.5 code at 0x801F9160, which
+  sends a shard set that would cross 0x800677B0 to a spare buffer at
+  0x80050000-0x80053FFF, or skips it when that is full too. Seen [run
+  2026-11-14, `verify_roster_battles.py suka --dw15 --from-type 92`, twice]:
+  a roster-15 Guardromon evolving to Sukamon completed, with a write trace
+  armed over 0x80066274-0x80067993 showing at least 2,048 shard writes inside
+  the stock array and none past it. Roster-15 therefore leaves the scratch
+  where it is (an arena address would fail 1.5's bound every time), and
+  `gen_roster_dw15.py` fails if 1.5's jump or bound changes. Machinedramon is
+  not in roster-15.
 * **Widescreen, not covered by the plate walk** (§5.0d): for the ~10-20
   frames of an iris in which the circle's edge sits inside a reveal, the game
   draws no band on that side, so a lit strip shows there; the STD lose wipe

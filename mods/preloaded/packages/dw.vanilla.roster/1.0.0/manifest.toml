@@ -1676,6 +1676,22 @@ offset = 303469440
 expected = "ff ff 83 22"
 replace = "ff ff 23 22"
 
+# EVL_REL.BIN 0x80063154: evolution shard scratch -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 302756180
+expected = "06 80 04 3c"
+replace = "00 9f 04 3c"
+
+# EVL_REL.BIN 0x8006315C: evolution shard scratch -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 302756188
+expected = "74 62 84 24"
+replace = "00 51 84 24"
+
 [[patch]]
 feature = "roster"
 target = "main_exe"
@@ -2074,7 +2090,7 @@ address = 0x8012EDA0
 expected = "33 0c"
 replace = "2e 0a"
 
-# WaruMonzaemon: MP training animation (from Monzaemon)
+# WaruMonzaemon: TRN2 Offense training animation (from Monzaemon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2130,7 +2146,7 @@ address = 0x8012EDC8
 expected = "33 0c"
 replace = "2f 1e"
 
-# Tekkamon: MP training animation (from Giromon)
+# Tekkamon: TRN2 Offense training animation (from Giromon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2194,7 +2210,7 @@ address = 0x8012EDF4
 expected = "33 0c"
 replace = "2e 0a"
 
-# WaruSeadramon: MP training animation (from MegaSeadramon)
+# WaruSeadramon: TRN2 Offense training animation (from MegaSeadramon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2266,7 +2282,7 @@ address = 0x8012ED9A
 expected = "33 0c"
 replace = "2e 0a"
 
-# Yanmamon: MP training animation (from Palmon)
+# Yanmamon: TRN2 Offense training animation (from Palmon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2322,7 +2338,7 @@ address = 0x8012ED9C
 expected = "33 0c"
 replace = "2e 0a"
 
-# Gotsumon: MP training animation (from Patamon)
+# Gotsumon: TRN2 Offense training animation (from Patamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2378,7 +2394,7 @@ address = 0x8012ED9E
 expected = "33 0c"
 replace = "2e 0a"
 
-# Flarerizamon: MP training animation (from Patamon)
+# Flarerizamon: TRN2 Offense training animation (from Patamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2466,7 +2482,7 @@ address = 0x8012EDA4
 expected = "33 0c"
 replace = "31 0a"
 
-# Hyogamon: MP training animation (from Ogremon)
+# Hyogamon: TRN2 Offense training animation (from Ogremon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2522,7 +2538,7 @@ address = 0x8012EDA6
 expected = "33 0c"
 replace = "2e 14"
 
-# PlatinumSukamon: MP training animation (from Sukamon)
+# PlatinumSukamon: TRN2 Offense training animation (from Sukamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2578,7 +2594,7 @@ address = 0x8012EDA8
 expected = "33 0c"
 replace = "2e 0e"
 
-# Dokunemon: MP training animation (from Kunemon)
+# Dokunemon: TRN2 Offense training animation (from Kunemon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2634,7 +2650,7 @@ address = 0x8012EDAA
 expected = "33 0c"
 replace = "2e 14"
 
-# ShimaUnimon: MP training animation (from Unimon)
+# ShimaUnimon: TRN2 Offense training animation (from Unimon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2690,7 +2706,7 @@ address = 0x8012EDAC
 expected = "33 0c"
 replace = "2e 0a"
 
-# Tankmon: MP training animation (from Mojyamon)
+# Tankmon: TRN2 Offense training animation (from Mojyamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2746,7 +2762,7 @@ address = 0x8012EDAE
 expected = "33 0c"
 replace = "2e 0a"
 
-# RedVegiemon: MP training animation (from Vegiemon)
+# RedVegiemon: TRN2 Offense training animation (from Vegiemon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2802,7 +2818,7 @@ address = 0x8012EDB0
 expected = "33 0c"
 replace = "2e 0a"
 
-# J-Mojyamon: MP training animation (from Mojyamon)
+# J-Mojyamon: TRN2 Offense training animation (from Mojyamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2858,7 +2874,7 @@ address = 0x8012EDB2
 expected = "33 0c"
 replace = "2e 0a"
 
-# NiseDrimogemon: MP training animation (from Drimogemon)
+# NiseDrimogemon: TRN2 Offense training animation (from Drimogemon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2914,7 +2930,7 @@ address = 0x8012EDB4
 expected = "33 0c"
 replace = "2e 0a"
 
-# Goburimon: MP training animation (from Patamon)
+# Goburimon: TRN2 Offense training animation (from Patamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -2970,7 +2986,7 @@ address = 0x8012EDB6
 expected = "33 0c"
 replace = "2e 0a"
 
-# MudFrigimon: MP training animation (from Frigimon)
+# MudFrigimon: TRN2 Offense training animation (from Frigimon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3026,7 +3042,7 @@ address = 0x8012EDB8
 expected = "33 0c"
 replace = "2e 14"
 
-# Psychemon: MP training animation (from Gabumon)
+# Psychemon: TRN2 Offense training animation (from Gabumon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3082,7 +3098,7 @@ address = 0x8012EDBA
 expected = "33 0c"
 replace = "2e 14"
 
-# ModokiBetamon: MP training animation (from Betamon)
+# ModokiBetamon: TRN2 Offense training animation (from Betamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3170,7 +3186,7 @@ address = 0x8012EDBE
 expected = "33 0c"
 replace = "2e 0e"
 
-# Piddomon: MP training animation (from Angemon)
+# Piddomon: TRN2 Offense training animation (from Angemon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3226,7 +3242,7 @@ address = 0x8012EDC0
 expected = "33 0c"
 replace = "2e 0a"
 
-# Aruraumon: MP training animation (from Palmon)
+# Aruraumon: TRN2 Offense training animation (from Palmon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3282,7 +3298,7 @@ address = 0x8012EDC2
 expected = "33 0c"
 replace = "2e 14"
 
-# Geremon: MP training animation (from Numemon)
+# Geremon: TRN2 Offense training animation (from Numemon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3338,7 +3354,7 @@ address = 0x8012EDC4
 expected = "33 0c"
 replace = "33 0a"
 
-# Vermilimon: MP training animation (from Monochromon)
+# Vermilimon: TRN2 Offense training animation (from Monochromon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3394,7 +3410,7 @@ address = 0x8012EDC6
 expected = "33 0c"
 replace = "31 0a"
 
-# Fugamon: MP training animation (from Ogremon)
+# Fugamon: TRN2 Offense training animation (from Ogremon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3458,7 +3474,7 @@ address = 0x8012EDCA
 expected = "33 0c"
 replace = "2e 0a"
 
-# MoriShellmon: MP training animation (from Shellmon)
+# MoriShellmon: TRN2 Offense training animation (from Shellmon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3514,7 +3530,7 @@ address = 0x8012EDCC
 expected = "33 0c"
 replace = "2e 0a"
 
-# Guardromon: MP training animation (from Mojyamon)
+# Guardromon: TRN2 Offense training animation (from Mojyamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3570,7 +3586,7 @@ address = 0x8012EDCE
 expected = "33 0c"
 replace = "2e 0a"
 
-# Muchomon: MP training animation (from Penguinmon)
+# Muchomon: TRN2 Offense training animation (from Penguinmon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3618,7 +3634,7 @@ address = 0x8012EDD0
 expected = "33 0c"
 replace = "2e 0a"
 
-# Icemon: MP training animation (from Patamon)
+# Icemon: TRN2 Offense training animation (from Patamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3674,7 +3690,7 @@ address = 0x8012EDD2
 expected = "33 0c"
 replace = "34 0a"
 
-# Akatorimon: MP training animation (from Kokatorimon)
+# Akatorimon: TRN2 Offense training animation (from Kokatorimon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3730,7 +3746,7 @@ address = 0x8012EDD4
 expected = "33 0c"
 replace = "2e 0a"
 
-# Tsukaimon: MP training animation (from Patamon)
+# Tsukaimon: TRN2 Offense training animation (from Patamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3786,7 +3802,7 @@ address = 0x8012EDD6
 expected = "33 0c"
 replace = "2e 0a"
 
-# Sharmamon: MP training animation (from Patamon)
+# Sharmamon: TRN2 Offense training animation (from Patamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3874,7 +3890,7 @@ address = 0x8012EDDA
 expected = "33 0c"
 replace = "2e 0a"
 
-# Weedmon: MP training animation (from Vegiemon)
+# Weedmon: TRN2 Offense training animation (from Vegiemon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3930,7 +3946,7 @@ address = 0x8012EDDC
 expected = "33 0c"
 replace = "2e 0a"
 
-# IceDevimon: MP training animation (from Devimon)
+# IceDevimon: TRN2 Offense training animation (from Devimon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -3986,7 +4002,7 @@ address = 0x8012EDDE
 expected = "33 0c"
 replace = "2e 0a"
 
-# Darkrizamon: MP training animation (from Patamon)
+# Darkrizamon: TRN2 Offense training animation (from Patamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -4042,7 +4058,7 @@ address = 0x8012EDE0
 expected = "33 0c"
 replace = "2e 0a"
 
-# SandYanmamon: MP training animation (from Palmon)
+# SandYanmamon: TRN2 Offense training animation (from Palmon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -4098,7 +4114,7 @@ address = 0x8012EDE2
 expected = "33 0c"
 replace = "2e 0a"
 
-# SnowGoburimon: MP training animation (from Patamon)
+# SnowGoburimon: TRN2 Offense training animation (from Patamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -4154,7 +4170,7 @@ address = 0x8012EDE4
 expected = "33 0c"
 replace = "35 0d"
 
-# BlueMeramon: MP training animation (from Meramon)
+# BlueMeramon: TRN2 Offense training animation (from Meramon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -4218,7 +4234,7 @@ address = 0x8012EDE6
 expected = "33 0c"
 replace = "2e 0a"
 
-# Gururumon: MP training animation (from Garurumon)
+# Gururumon: TRN2 Offense training animation (from Garurumon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -4274,7 +4290,7 @@ address = 0x8012EDE8
 expected = "33 0c"
 replace = "2e 0f"
 
-# Saberdramon: MP training animation (from Birdramon)
+# Saberdramon: TRN2 Offense training animation (from Birdramon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -4346,7 +4362,7 @@ address = 0x8012EDEA
 expected = "33 0c"
 replace = "2e 14"
 
-# Soulmon: MP training animation (from Bakemon)
+# Soulmon: TRN2 Offense training animation (from Bakemon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -4402,7 +4418,7 @@ address = 0x8012EDEC
 expected = "33 0c"
 replace = "2e 0a"
 
-# Rockmon: MP training animation (from Frigimon)
+# Rockmon: TRN2 Offense training animation (from Frigimon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -4458,7 +4474,7 @@ address = 0x8012EDEE
 expected = "33 0c"
 replace = "2e 0a"
 
-# Otamamon: MP training animation (from Patamon)
+# Otamamon: TRN2 Offense training animation (from Patamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -4514,7 +4530,7 @@ address = 0x8012EDF0
 expected = "33 0c"
 replace = "2e 0a"
 
-# Gekomon: MP training animation (from Coelamon)
+# Gekomon: TRN2 Offense training animation (from Coelamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -4570,7 +4586,7 @@ address = 0x8012EDF2
 expected = "33 0c"
 replace = "2e 0a"
 
-# Tentomon: MP training animation (from Patamon)
+# Tentomon: TRN2 Offense training animation (from Patamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"
@@ -4618,7 +4634,7 @@ address = 0x8012EDF6
 expected = "33 0c"
 replace = "2e 0a"
 
-# Meteormon: MP training animation (from Patamon)
+# Meteormon: TRN2 Offense training animation (from Patamon)
 [[patch]]
 feature = "roster-15"
 target = "main_exe"

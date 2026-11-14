@@ -25,9 +25,11 @@
  * Patches applied <=> feature enabled <=> arena is live. With the feature
  * off, the game never reads the arena and behavior is stock.
  *
- * SAVESTATES. The arena is not serialized, but its content is static per
- * process (refilled at every boot); a state save/load cannot observe a
- * mismatch. Expansion-1 reads are wired into every generated load path.
+ * SAVESTATES. The arena is serialized with mod memory (BS_SEC_MODMEM). Its
+ * tables are static per process, but its tail (0x5100+) is the evolution
+ * shard scratch, live state during an evolution: a save or rewind restores it
+ * together with the shard pointer in main RAM. Expansion-1 reads are wired
+ * into every generated load path.
  */
 #include <stdio.h>
 #include <string.h>
