@@ -66,9 +66,8 @@ from field_drive import (  # noqa: E402
     NPC_STATS, PARTNER_STATS, HOUR, CURRENT_FRAME)
 
 
-MAP_SCRIPT_BUFFER = 0x801B9ED8                    # the screen's DG script, 0x4000 B (docs/GAME.md 4.1)
 ITEM_PARA = 0x801269DC                            # the item table, 32 B each, the name first
-ROW_122 = 122                                     # the other map bound to DG script 118 (TUNN07_2)
+ROW_122 = 122                                     # a stock map next door in the table, run to see the glade left it alone (TUNN07_2)
 HOST_EXIT = (1858, -1142)                         # Coela Point's east-exit spawn
 STATE = ('format_version = 2\n\n[[package]]\nid = "%s"\nversion = "1.0.0"\n\n'
          '[[package]]\nid = "dw.vanilla.qol"\nversion = "1.0.0"\n\n'
@@ -380,7 +379,7 @@ def main():
               walk_in, lambda: boss_fresh("after fleeing"), lambda: talk(vec), lose,
               lambda: save_here(on_new_map=False, anywhere=True),
               lambda: g.warp(mp["host_row"], spec["host"]["exit"]), walk_in, lambda: boss_fresh("after losing"))
-        g.warp(ROW_122, 0)                             # the other map on DG script 118
+        g.warp(ROW_122, 0)                             # a stock map that shares nothing with the glade now
         g.advance(120)
         f0 = g.d.frame()
         time.sleep(2)
@@ -392,7 +391,11 @@ def main():
         name = g.d.read(ITEM_PARA + 32 * item, 20).split(b"\0")[0].decode("ascii")      # as the game names it
         paid, full = E.dialog_text(PAID_LINES(name)), E.dialog_text(E.FULL_LINES)
         counts = lambda b: {t: k for t, k in zip(b[:30], b[30:60]) if t != 0xFF}
-        ran = lambda text: text in g.d.read(MAP_SCRIPT_BUFFER, 0x4000)
+        script = open(os.path.join(pkg_dir, "assets", "glade.dg"), "rb").read()      # the bytes the game was served
+        at = {k: script.find(t) for k, t in (("paid", paid), ("full", full))}
+        assert min(at.values()) > 0, "the paid and full boxes must be in glade.dg"
+        # a box shown is one the script pointer was at, just past its text, with SHOW_TEXTBOX active (f.sample_box)
+        shown = lambda k: any(at[k] <= o <= at[k] + len(paid if k == "paid" else full) + 8 for o in f.boxes)
 
         def stop():
             if fails:
@@ -404,6 +407,7 @@ def main():
                 f.set_bag(bag)
             before = f.bag()
             talk(vec)
+            f.boxes.clear()                            # win() samples the text box before every press
             win()
             stop()
             return before, f.bag()
@@ -427,19 +431,22 @@ def main():
         stop()
         fillers = [(t, 1) for t in range(128) if t != item][:size]
         before, after = won(fillers)                   # a full bag
-        check(after == before and not f.trigger(REWARD_TRIGGER) and ran(full),
-              "first win, bag full: the bag is as it was (%s), trigger %d clear, the script that ran holds the full box"
-              % ("same" if after == before else counts(after), REWARD_TRIGGER))
+        check(after == before and not f.trigger(REWARD_TRIGGER) and shown("full") and not shown("paid"),
+              "first win, bag full: the bag is as it was (%s), trigger %d clear, the box shown was the full one "
+              "(boxes seen at script offsets %s; full at %d, paid at %d)"
+              % ("same" if after == before else counts(after), REWARD_TRIGGER, sorted(f.boxes), at["full"], at["paid"]))
         stop()
         before, after = again(fillers[:size - 1])      # one free slot
-        check(counts(after) == {**counts(before), item: n} and f.trigger(REWARD_TRIGGER) and ran(paid),
-              "next win, room: %d of item %d arrived (bag %s -> %s), trigger %d set, the paid box reads %r"
-              % (n, item, counts(before), counts(after), REWARD_TRIGGER, PAID_LINES(name)))
+        check(counts(after) == {**counts(before), item: n} and f.trigger(REWARD_TRIGGER) and shown("paid")
+              and not shown("full"),
+              "next win, room: %d of item %d arrived (bag %s -> %s), trigger %d set, the box shown was the paid one "
+              "%r (boxes seen at script offsets %s)"
+              % (n, item, counts(before), counts(after), REWARD_TRIGGER, PAID_LINES(name), sorted(f.boxes)))
         stop()
         before, after = again(None)
-        check(after == before and f.trigger(REWARD_TRIGGER),
-              "second win: nothing more (%s), trigger %d still set" % ("bag the same" if after == before else counts(after),
-                                                                       REWARD_TRIGGER))
+        check(after == before and f.trigger(REWARD_TRIGGER) and not shown("paid") and not shown("full"),
+              "second win: nothing more (%s), trigger %d still set, neither box shown (boxes seen at %s)"
+              % ("bag the same" if after == before else counts(after), REWARD_TRIGGER, sorted(f.boxes)))
         stop()
         save_here()
         keep_card("reward")

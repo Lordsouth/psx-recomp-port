@@ -434,7 +434,7 @@ script runs into `SCRIPT_STATE` [inferred].
 - 1..198 are all bound by MAPHEAD rows (stock decode). 199..221 are library scripts, reached only by file jumps (`14`, `17`).
 - table[222] = 0xC4800, the file's end, sets script 221's read size: never change it. table[223..511] is stale ASCII and zeros: a guard must expect it.
 - 223..226 are free on stock: no package writes the table. Digimon World 1.5 owns 222-225 (its `table[222..226]`, 0xC5800..0xCD000, the last its file's size).
-- 227..230 are the Abandoned Factory's screens, never in the table: `dw_newmaps.c`'s `getScript` hook serves them from MMM.DAT sectors 1011-1014 (`dw_newmaps_scripts.inc`, `tools/gen_factory.py`). Later maps start at 231. Each ran on arrival [run 2026-11-13: `verify_factory.py walk`, `fights`, `boss`].
+- 227..230 are the Abandoned Factory's screens, never in the table: `dw_newmaps.c`'s `getScript` hook serves them from MMM.DAT sectors 1011-1014 (`dw_newmaps_scripts.inc`, `tools/gen_factory.py`). 231 is the Hidden Glade's boss script, sector 1015 (`tools/gen_newmap.py`). Later maps start at 231. Each ran on arrival [run 2026-11-13: `verify_factory.py walk`, `fights`, `boss`].
 
 Both files share one layout: u16 first-body offset (0x468 in MAPHEAD), then {u16 section, u16 offset from the script
 start} pairs ended by 0xFFFF, then the bodies. Only `setMapHeadActive` reads the first word (`:671-689`, `:2181-2188`).
@@ -691,7 +691,7 @@ enemy [Horizon]; the boss stands 4672 away. followMode 2 with range 1200 turns i
 **5. Write the row section.** The stock free-row filler binds script 180 and must not ship. The glade's goes in the MAPHEAD tail and its
 table entry is repointed (the `MAPHEAD section` patches in `tools/gen_newmap.py`). The row needs flag 0x80. The slot is the record's index.
 ```
-FB 00 76 00 EF 00   SET_SCRIPT 118, row 239
+FB 00 E7 00 EF 00   SET_SCRIPT 231, row 239
 1E 00 F5 00         pstat 0xF5 = 0: day and night music
 5D 01  46 3C        SET_BGM 1; LOAD_DIGIMON 60
 47 3C 00 00  FE 00  SET_DIGIMON 60, slot 0, autotalk 0 (press to fight); end
@@ -705,8 +705,9 @@ FE 00                                     +12 section FE: the arrival END
 27 00  67 00 01 00  66 00                 close the box, wait a frame, START_BATTLE
 FE 00  FF 00                              end of section; end of file
 ```
-- **Trap: the DG slot is shared.** Slot 118 also serves row 122, which has no map Digimon or script tiles, so only its FE runs: FE must stay
-  a bare END. The generator checks the stock bytes and the 0x800 fit (`dg_new` in `tools/gen_newmap.py`). A next map takes a script id 231+ served by the `getScript` hook (2.3, 4.1).
+- **The glade's script is id 231, served from MMM.DAT.** It started in DG slot 118 (shared with row 122, so its FE had to stay a bare END),
+  but on 1.5 a patch there needed a guard repeating 1.5's own script bytes, so it moved to a `getScript` id like the factory's: sector 1015 of
+  MMM.DAT, `SCRIPT_SECTOR` in `tools/gen_newmap.py`, one row of `dw_newmaps_scripts.inc` (written by `gen_factory.py`, which owns the file). Slot 118 and row 122 are stock again. A next map takes 232+ (2.3, 4.1).
 
 **7. Decide about flags.** The boss sets none, though a loss still sets trigger 0x29, as any stock battle does. To add one, put
 `1C 00 tt tt` straight after `66 00`: a flee and a loss never return there (`src/main/script_interp.c:1919-1941`). To hide the NPC
@@ -1040,7 +1041,7 @@ Records are re-read on every map load, so a record's `curHP` below HP applies ag
 - **Hit rolls, acc 80:** it hits a defender of Speed 450 at 65 % moving, 62 % standing, and of Speed 999 at 43 % and 36 %. A Speed 450 attacker hits it at 61 % and 58 %. After Dive or Bug its buffer is -155, so every hit lands for 52 ticks; it takes 86 ticks to reach 100.
 - **Its element sums:** Ice 50, Fire 45, Battle 35, Air 35, Nature 30, Mech 30, Filth 22. Off 600 with a 500-power Battle tech deals 482..589 to it. Poison on it is 88..264 per 100 ticks, about 35 HP/s.
 - **A win** against the default partner of `measure` (5500/5000/600/600/450/450) pays HP +2, MP +4, Off +2, Def +2, Speed +2, Brains +1 at 88 %, 5000 bits and item 0 at 10 %. Learning chances by special slot: Dive 16, 7, 0; Bug 12, 8, 0; Plague 24, 16, 13.
-- **The first win pays 3 Omni Disks, once** (`REWARD`, `reward_tail` in `tools/newmap_engine.py`, the factory's mechanism of 6.2 with one give). Item 18, `Omni Disk` on both the stock disc and 1.5, a Disk of the 0x0F..0x15 band that adds a flat 20 to Off, Def and Speed with no per-battle cap (`src/main/main.c:4354`, case 0x12; 999 still holds, 12.2). It is picked to be useful for the fight it rewards (the boss is tuned for a near-maxed partner) without being the factory's rarer prize (Metalbanana and six chips; the glade boss is 18.8 points easier than Machinedramon's 62.0 % in the sim). The DG script (slot 118, 336 B of its 2048 B) tests trigger 630 first and ends if it is set; else it gives item 18 x3, and a failed give (no free slot, or a full stack) says "Your bag is full." and leaves 630 clear for a later win; else it sets 630 and says "Got Omni Disk x3!". The name is read from the disc's item table at generation. [run: `verify_newmap.py reward`: with the bag full a first win left the bag byte for byte as it was and 630 clear; with one free slot the next win put 3 of item 18 in the bag and set 630; the one after changed nothing; the card saved after it loaded on the stock game with 630 and the items on it, `off --card reward`] Not run: a stack of item 18 already at 99 (read from `giveItem`, [inferred]).
+- **The first win pays 3 Omni Disks, once** (`REWARD`, `reward_tail` in `tools/newmap_engine.py`, the factory's mechanism of 6.2 with one give). Item 18, `Omni Disk` on both the stock disc and 1.5, a Disk of the 0x0F..0x15 band that adds a flat 20 to Off, Def and Speed with no per-battle cap (`src/main/main.c:4354`, case 0x12; 999 still holds, 12.2). It is picked to be useful for the fight it rewards (the boss is tuned for a near-maxed partner) without being the factory's rarer prize (Metalbanana and six chips; the glade boss is 18.8 points easier than Machinedramon's 62.0 % in the sim). The script (id 231, 336 B of its sector) tests trigger 630 first and ends if it is set; else it gives item 18 x3, and a failed give (no free slot, or a full stack) says "Your bag is full." and leaves 630 clear for a later win; else it sets 630 and says "Got Omni Disk x3!". The name is read from the disc's item table at generation. [run: `verify_newmap.py reward`: with the bag full a first win left the bag byte for byte as it was and 630 clear; with one free slot the next win put 3 of item 18 in the bag and set 630; the one after changed nothing; the box on screen is read from the script pointer with SHOW_TEXTBOX active (`ACTIVE_INSTRUCTION` 0x80134FE8, offset = `0x80134FDC` - `0x80134FD8`, as `verify_ws_camera.py` does): the full-bag win showed the full box (offset 334 of 336-byte script) and the paying win the paid one (240), the third neither; the card saved after it loaded on the stock game with 630 and the items on it, `off --card reward`] Not run: a stack of item 18 already at 99 (read from `giveItem`, [inferred]).
 - **Flee point** (3400, 0, 1150) is only a bearing. From wherever the fight ended it heads east, or west if it stands east of x=3400, through whatever is in the way. [inferred]
 - **Repeats:** 5000 bits beats its item cost, as heals of 500, 1500, 5000, 9999 HP cost 100, 500, 1000, 2500 bits (`src/main/item.c:745-781,2064`), and a partner just below a Brains threshold can hit the end box freeze (12.1). [run]
 

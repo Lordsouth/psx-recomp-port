@@ -376,7 +376,7 @@ wrong row and can blank real tiles.
 
 **Delivery** needs no runtime change. Two file-backed `disc_user` `[[overlay]]`s
 lay our MAP and TFS across MGEN17's 247 adjacent sectors (MAP, then TFS, then
-zero padding), and a third lays the DG script over the start of slot 118. Two guarded `main_exe` patches move the files'
+zero padding), and a third lays the boss's script at MMM.DAT sector 1015 (script id 231, served by `getScript`). Two guarded `main_exe` patches move the files'
 `FILE_OFFSET_TABLE` entries (`0x8011FE1C`, 12 bytes each: sector, size, name
 pointer; `lookupFileTable` resolves names there) to match. Overlays need
 `disc_sha256` on the `[[target]]`. Past the end of the disc a `disc_user`
@@ -390,11 +390,9 @@ are live script bytecode; `disc_sha256` and the generator's asserts guard it.
 
 **On 1.5** the glade runs its edition `glade-15` (§4.4, 1.5 editions), written by
 `tools/gen_newmap_dw15.py` below a marker in the manifest; `gen_newmap.py` keeps that
-block when it rewrites the part above. 1.5 leaves row 239, MGEN17's sectors, DG slot
-118 and MAYO03's warp slot 4 free but moves three things: its stub copies the file
-table to `0x801F1000` (MGEN17's entries at `0x801F268C`), DG.SCN grew and sits past
-the stock end at LBA 162388 (slot 118 is rewritten there as a guarded `[[patch]]`,
-since the runtime refuses an overlay on a delta sector), and 1.5's own new MAPHEAD
+block when it rewrites the part above. 1.5 leaves row 239, MGEN17's sectors
+and MAYO03's warp slot 4 free but moves two things: its stub copies the file
+table to `0x801F1000` (MGEN17's entries at `0x801F268C`), and 1.5's own new MAPHEAD
 sections fill the tail to `0x60DE`, so the glade's section goes at `0x60DE`. The
 other writes are the glade's own, their guards checked against 1.5. The edition sits
 in `dw.newmaps` and reaches `dw15` through a `[[requirement]]`, which the runtime
@@ -411,10 +409,10 @@ the player without walking, and autotalk 0 means only a confirm press next to it
 starts the fight, so no one walks into it by accident. Its hit radius is wide: the
 tamer stops about 400 units from its centre.
 
-DG script slot 118 has room for its script. Stock, the slot holds one bare END
-section, and the rest of its 2 KB is junk nothing reads. Row 122 (TUNN07_2) binds
-the same slot, but has no map Digimon and no script tiles, so it only ever runs
-the END. `boss_script()` keeps that END as the arrival section and adds section 5:
+The boss's script is script id 231, served from MMM.DAT sector 1015 by the `getScript`
+hook (the factory's mechanism; it began in DG slot 118, but on 1.5 that needed a
+`[[patch]]` whose guard repeated 212 B of 1.5's own scripts, so it moved). Slot 118 and
+row 122 (TUNN07_2) stay stock. `boss_script()` keeps a bare END as the arrival section and adds section 5:
 pause, the boss's two lines, close the box, wait a frame, `START_BATTLE`. Fleeing
 stays allowed, which no stock press-to-fight battle does, but it shares the code
 path of any other fled battle.
@@ -524,8 +522,8 @@ Still to do:
 the IF on the flag, the gives, the paid box and the rollbacks, so the two cannot drift apart (the factory's package
 is byte-identical to before the move). The flag is trigger 630 (`REWARD_TRIGGER`; GAME.md 4.8, 6.2, 7.17). The
 text's item name is read from the disc's `ITEM_PARA` at generation; `gen_newmap_dw15.py`'s `glade_checks` asserts the
-1.5 image names the id the same, so `glade-15` uses the same `glade.dg` (rewritten into 1.5's DG.SCN slot as before;
-the script grew from 124 B to 336 B of the slot's 2048 B). `verify_newmap.py reward` and `off --card reward` prove it.
+1.5 image names the id the same, so `glade-15` uses the same `glade.dg` (copied as an overlay, as the factory's
+scripts are; no guard on 1.5's DG.SCN is needed). `verify_newmap.py reward` and `off --card reward` prove it.
 - foreground sprites for the rocks, stump and log (their collision comes from
   the painting, so a sprite would need the painted footprint)
 

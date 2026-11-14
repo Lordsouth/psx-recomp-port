@@ -18,7 +18,7 @@ them. The scene drives all outputs, so they cannot drift apart:
   * the 100x100 collision grid: floor where the scene says ground, blocked under
     props, the pond and anything outside the painted frame, and blocked wherever
     the painting shows something other than ground under a character's feet;
-  * the secret fight (BOSS, boss_script), in the entity block and DG script 118, which also pays the boss's one-time
+  * the secret fight (BOSS, boss_script), in the entity block and script id 231 (MMM.DAT), which also pays the boss's one-time
     reward (REWARD, trigger 630);
   * foreground sprites, cut from the art, so characters can walk behind foliage
     and trunks (backdrops always draw behind characters: anything without a
@@ -64,8 +64,11 @@ MAP_ENTRIES = 0x801292D4
 FILE_OFFSET_TABLE = 0x8011FE1C       # {sector, size, name*} per disc file: lookupFileTable resolves names here
 FLAGS = 0x80                         # sound bank 0 (Native Forest), time of day on, map-Digimon format
 LOADING_NAME = 0                     # "Native Forest" on the arrival card
-SCRIPT = 118                         # DG slot we rewrite (boss_script). Stock it is one bare END section, which stays:
-                                     # no arrival side effects, and row 122, the other map bound to it, plays on
+SCRIPT = 231                         # the glade's script id: getScript serves it from MMM.DAT (dw_newmaps.c), after the
+                                     # factory's 227-230, so no DG.SCN byte is written, stock or 1.5 (a guard on 1.5's
+                                     # slot would have to repeat that much of 1.5's own script text)
+MMM_LBA, MMM_SECTORS = 148668, 13500 # docs/GAME.md 2.3
+SCRIPT_SECTOR = 1015                 # in MMM.DAT, right after the factory's four (gen_factory.py asserts it fits)
 BGM, BGM_PSTAT = 0x01, 0             # the Native Forest theme, day/night variants as MAYO01/02
 MH_NEW, MH_BUFFER = 0x6070, 0x61A8   # MAPHEAD.SCN ends at 0x606E; MAPHEAD_SCRIPT_BUFFER size
 # The entrance: on Native Forest's north edge a lit lane runs on between the bushes, over a notch of floor.
@@ -422,9 +425,9 @@ def main():
         assert k < 1000, "MGEN17.MAP not found in FILE_OFFSET_TABLE"
     fte = FILE_OFFSET_TABLE + 12 * k
     assert struct.unpack_from("<2i", exe, ram(fte) + 12) == (slot + MAP_SECTORS, files[FILE + ".TFS"][1])
-    dg = rd("DG.SCN")
-    so = struct.unpack_from("<I", dg, 4 * SCRIPT)[0]
-    assert dg[so + 2:so + 8] == bytes.fromhex("fe000800ffff") and dg[so + 8:so + 10] == b"\xfe\x00"
+    assert files["MMM.DAT"] == (MMM_LBA, MMM_SECTORS * 2048)
+    assert struct.unpack_from("<I", rd("DG.SCN"), 222 * 4)[0] == files["DG.SCN"][1], "table[222] must be DG.SCN's size"
+    assert SCRIPT > 222, "the script id must be past DG.SCN's table"
     cstr = lambda addr: exe[ram(addr):exe.index(b"\0", ram(addr))].decode("ascii")
     item_name = cstr(ITEM_PARA + 32 * REWARD[0][0])
     # the decomp sits beside the main checkout; a worktree under wt/ is one level deeper
@@ -437,7 +440,8 @@ def main():
         print("no dw_decomp checkout at %s: the reward id is not checked against its ITEM_PARA_NAME" % item_c)
 
     dg_new = boss_script(item_name)
-    assert len(dg_new) <= struct.unpack_from("<I", dg, 4 * SCRIPT + 4)[0] - so, "the script must fit its DG slot"
+    assert len(dg_new) <= 0x4000 and sectors(dg_new) == 1, "the script must fit its one MMM.DAT sector (served as id %d)" % SCRIPT
+    assert not any(sector(f, MMM_LBA + SCRIPT_SECTOR)), "MMM.DAT sector %d is not zero" % SCRIPT_SECTOR
     mh = rd("MAPHEAD.SCN")
     p = 2
     while struct.unpack_from("<H", mh, p)[0] != ROW:
@@ -504,8 +508,9 @@ def main():
     # A file, not a [[patch]]: a patch must repeat the stock bytes it replaces, and these are live script bytecode.
     # The generator's asserts above and disc_sha256 guard the slot.
     assets["glade.dg"] = dg_new
-    out += ["# DG script %d: the arrival END, plus the boss's section" % SCRIPT, "[[overlay]]", 'feature = "glade"',
-            'target = "disc_user"', "offset = %d" % (files["DG.SCN"][0] * 2048 + so), 'file = "assets/glade.dg"',
+    out += ["# The boss's script, id %d, at MMM.DAT sector %d (LBA %d): dw_newmaps.c's getScript serves it "
+            "(dw_newmaps_scripts.inc)" % (SCRIPT, SCRIPT_SECTOR, MMM_LBA + SCRIPT_SECTOR), "[[overlay]]", 'feature = "glade"',
+            'target = "disc_user"', "offset = %d" % ((MMM_LBA + SCRIPT_SECTOR) * 2048), 'file = "assets/glade.dg"',
             'sha256 = "%s"' % hashlib.sha256(dg_new).hexdigest(), ""]
     patch = lambda target, where, old, new: ('target = "%s"\n%s = %s\nexpected = "%s"\nreplace = "%s"'
                                              % (target, "address" if target == "main_exe" else "offset",

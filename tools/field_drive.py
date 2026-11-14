@@ -32,6 +32,7 @@ NPC_MODELS = 0x80137140                               # 5 x 0x1C: useCount, mode
 ENEMY_IDS = 0x8013D640 + 0x66C                        # COMBAT_DATA.player.entityIds[4]: 1 (partner), then enemy entity ids
 ENEMY_COUNT = 0x80134D6C                              # i16: how many of them are this battle's (the rest are stale)
 PARTNER_LIVES = 0x801557A8 + 0x7C                     # PartnerEntity.lives, i8
+ACTIVE_SCRIPT, ACTIVE_INSTRUCTION = 0x80134FD8, 0x80134FE8   # the running script: base, pointer (+4); active op
 INVENTORY = 0x8013D474                                # types[30], amounts[30], names[30], size u8 (docs/GAME.md 6.2)
 SLIVER_NCC = 0.9      # plan 1 measured 0.991 and 1.000 for a served map's edges; a black or missing edge is far below
 SPECIES, PARTNER = 0x8012CEB4, 0x801557A8             # DIGIMON_DATA (52 B each: radius, height i16 at +24); PARTNER_ENTITY
@@ -44,6 +45,7 @@ class Field:
         self.g, self.check = g, check
         self.species = SPECIES_15 if dw15 else SPECIES
         self.shot = shot or (lambda name: None)       # shot(name) -> screenshot path, for the caller's own folder
+        self.boxes = set()                            # script offsets a text box was up at, see sample_box
 
     def enter(self):
         """Title -> CONTINUE. DOWN waits for the menu to take input: an early DOWN is dropped and the crosses then
@@ -72,6 +74,14 @@ class Field:
 
     def screen(self):
         return self.g.d.read(CURRENT_SCREEN, 1)[0]
+
+    def sample_box(self):
+        """Note where the running script's text box is, if one is up: SHOW_TEXTBOX (1A) as the active op, the script
+        pointer just past its text (verify_ws_camera.py's at_box). win and win_group call it before every press, so
+        any box that is waiting for one is seen; self.boxes holds the offsets, from the script's start."""
+        base, ptr = struct.unpack("<2I", self.g.d.read(ACTIVE_SCRIPT, 8))
+        if self.g.d.read(ACTIVE_INSTRUCTION, 1)[0] == 0x1A and 0 <= ptr - base < 0x4000:
+            self.boxes.add(ptr - base)
 
     def pstat(self, n):
         return self.g.d.read(PSTAT_BASE + n, 1)[0]
@@ -133,6 +143,7 @@ class Field:
                 for s in slots:
                     if struct.unpack("<h", g.d.read(NPC_BASE + NPC_SIZE * s + 0x4C, 2))[0] > 1:
                         g.d.write_bytes(struct.pack("<h", 1), NPC_BASE + NPC_SIZE * s + 0x4C)
+            self.sample_box()
             g.route("4:cross,20:none")
         check(done and gstate() == 0 and g.tamer_state == 0 and self.screen() == row,
               "won: the run-off ended, player in control, still on map %d" % row)
@@ -396,6 +407,7 @@ class Field:
                 box = g.d.read(END_BUFFER, 200).split(b"\0")[0]
                 self.shot("end_box")
                 print("MEASURE end box, %d rows: %r" % (rows, box), flush=True)
+            self.sample_box()
             g.route("4:cross,20:none")
         check(hit and gstate() == 0 and g.tamer_state == 0 and self.screen() == row,
               "won: the run-off ended, player in control, still on map %d" % row)
