@@ -56,6 +56,29 @@ N_TYPES = 180
 ARENA_SIZE = 0x8000
 _ARENA_END = OFF_STD_GLYPH + N_TYPES * 14
 assert _ARENA_END <= ARENA_SIZE and _ARENA_END < 0x8000, _ARENA_END
+# The evolution overlay's shard scratch, moved here from EVL's own 5,436-byte
+# array (see EVL_SHARD_* below). Runs to the arena's end.
+OFF_EVL_SHARDS = 0x5000
+assert _ARENA_END <= OFF_EVL_SHARDS < ARENA_SIZE
+
+# ---- the evolution shatter overran its scratch --------------------------------
+# When a partner evolves, EVL breaks the OLD model into shards: for each bone
+# (up to 30 shard sets) EVL_buildShardSet writes 6 bytes per vertex and per
+# textured face centre, with no bound, from the address EVL_initEvoSequence
+# passes to EVL_setScratchTop: EVL_D_80066274, a 5,436-byte array (906 entries;
+# dw_decomp src/evl/evl.c:1001-1115, :1300-1301, src/evl/evl_bss_us.c:693).
+# Right after it lie the flash buffer and the bone-order table the shatter
+# reads next, so an overrun feeds garbage bone ids back in and cascades. Stock
+# partners fit (largest, type 60: 882 entries); Machinedramon's model needs
+# 1,419 and Guardromon's 925. Seen in the game 2026-11-14: Machinedramon (114)
+# evolving out wrote from 0x80066274 through 0x8009169B -- over the EXE's
+# first page, where the kernel's handler node points -- and the runtime halted
+# on a dispatch into the garbage (writer EVL_buildShardSet, pc 0x80061E7C).
+# The fix retargets that one lui/addiu pair to the arena's free tail.
+EVL_SHARD_LUI, EVL_SHARD_LO = 0x80063154, 0x8006315C    # lui a0,0x8006 / (jal delay) addiu a0,a0,0x6274
+EVL_SHARD_STOCK = 0x80066274
+EVL_SHARD_STOCK_BYTES = 5436
+EVL_SKELETONS = 0x8011CE60      # DIGIMON_SKELETONS: SkeletonBone* per type, {s8 objIndex, s8 parent}
 
 # ---- tables being relocated, main EXE --------------------------------------
 RELOC = {
@@ -1080,6 +1103,66 @@ def _ovl_word_patch(images, fn, va, old, new, lba):
         struct.pack("<I", new), "%s 0x%08X: table ref -> arena" % (fn, va))
 
 
+def shard_demand(rd, read_file, model_type):
+    """Bytes EVL_buildShardSet writes when a partner of this model evolves out:
+    6 per vertex plus 6 per leading textured face (mode 0x34/0x36/0x3C/0x3E;
+    the loop stops advancing at any other mode) of each bone's TMD object,
+    bones 1..boneCount-1 in a random order, at most 30 shard sets -- so the
+    worst case is the 30 largest. None when the type has no model file."""
+    from dw_tables import SPECIES_FILES
+    p = struct.unpack("<I", rd(SPECIES_FILES + model_type * 4, 4))[0]
+    name = rd(p, 16).split(b"\0")[0].decode()
+    try:
+        mmd = read_file(name + ".MMD")
+    except KeyError:
+        return None
+    bones = struct.unpack("<i", rd(DIGIMON_DATA_VA + model_type * DIGIMON_STRIDE + 20, 4))[0]
+    skel = struct.unpack("<I", rd(EVL_SKELETONS + model_type * 4, 4))[0]
+    objs = struct.unpack_from("<I", mmd, 0)[0] + 12
+    per = []
+    for bone in range(1, bones):
+        obj = struct.unpack("<b", rd(skel + bone * 2, 1))[0]
+        if obj < 0:
+            continue
+        _vt, vn, _nt, _nn, pt, pn, _sc = struct.unpack_from("<7I", mmd, objs + obj * 28)
+        q, faces = objs + pt, 0
+        while faces < pn and mmd[q + 3] in (0x34, 0x36, 0x3C, 0x3E):
+            faces += 1
+            q += 4 + mmd[q + 1] * 4
+        per.append(vn + faces)
+    return 6 * sum(sorted(per, reverse=True)[:30])
+
+
+def evl_shard_patches(rd, images):
+    """Retarget EVL's shard scratch to the arena, after proving every partner
+    model the roster makes raisable fits there and the stock array really is
+    too small for some of them."""
+    sys.path.insert(0, HERE)
+    from dw_tables import Disc, DEFAULT_BIN
+    disc = Disc(DEFAULT_BIN)
+    need = {t: shard_demand(rd, disc.read, 115 if t == 114 else t)
+            for t in [s["type"] for s in NEW_SPECIES] + [114]}
+    worst = max(need, key=need.get)
+    stock_max = max(v for v in (shard_demand(rd, disc.read, t) for t in range(63)) if v)
+    print("EVL shard scratch: worst roster model type %d needs %d B, stock partners at most %d B, "
+          "stock array %d B, arena tail %d B"
+          % (worst, need[worst], stock_max, EVL_SHARD_STOCK_BYTES, ARENA_SIZE - OFF_EVL_SHARDS))
+    assert stock_max <= EVL_SHARD_STOCK_BYTES < need[114], "the overrun model no longer holds"
+    assert need[worst] <= ARENA_SIZE - OFF_EVL_SHARDS, "the arena tail is too small for type %d" % worst
+    img = images["EVL_REL.BIN"]
+    base = OVL_BASES["EVL_REL.BIN"]
+    lui, lo = (struct.unpack_from("<I", img, va - base)[0] for va in (EVL_SHARD_LUI, EVL_SHARD_LO))
+    assert lui == 0x3C048006 and lo == 0x24840000 | (EVL_SHARD_STOCK & 0xFFFF), (hex(lui), hex(lo))
+    new = ARENA + OFF_EVL_SHARDS
+    new_lui, new_lo = 0x3C040000 | (new >> 16), 0x24840000 | (new & 0xFFFF)
+    check_pair(new_lui, new_lo, new, "EVL shard scratch")
+    out = []
+    for va, old, nw in ((EVL_SHARD_LUI, lui, new_lui), (EVL_SHARD_LO, lo, new_lo)):
+        out += disc_bytes_patch(disc_offset(OVL_LBAS["EVL_REL.BIN"], va, base), struct.pack("<I", old),
+                                struct.pack("<I", nw), "EVL_REL.BIN 0x%08X: evolution shard scratch -> arena" % va)
+    return out
+
+
 def main():
     check_only = "--check" in sys.argv
     data = open(EXE, "rb").read()
@@ -1129,6 +1212,8 @@ def main():
         funcs.add(lui_va & ~0x3F)   # coarse; report only
     print("~%d functions touched (drop to interpreter while feature is on)"
           % len(funcs))
+
+    shard_patches = evl_shard_patches(lambda va, n: data[va - LOAD_ADDR + HDR:va - LOAD_ADDR + HDR + n], ovl_images)
 
     if check_only:
         print("--check: nothing written")
@@ -1230,6 +1315,7 @@ def main():
     for lo_va, old, new in sorted(lo_patches):
         out += word_patch(lo_va, old, new)
     out += overlay_retarget(ovl_sites, ovl_images)
+    out += shard_patches
     out += AUTHORED["extra_patches"]
 
     dest_dir = os.path.join(ROOT, "mods", "preloaded", "packages", PKG_ID, PKG_VER)

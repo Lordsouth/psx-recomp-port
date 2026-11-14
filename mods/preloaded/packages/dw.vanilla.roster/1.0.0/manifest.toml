@@ -1540,6 +1540,22 @@ offset = 303626068
 expected = "50 f0 42 24"
 replace = "00 42 42 24"
 
+# EVL_REL.BIN 0x80063154: evolution shard scratch -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 302756180
+expected = "06 80 04 3c"
+replace = "00 9f 04 3c"
+
+# EVL_REL.BIN 0x8006315C: evolution shard scratch -> arena
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 302756188
+expected = "74 62 84 24"
+replace = "00 50 84 24"
+
 [[patch]]
 feature = "roster"
 target = "main_exe"
