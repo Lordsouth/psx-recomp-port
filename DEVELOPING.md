@@ -146,10 +146,10 @@ VRAM sliver when the four-column ring falls short) as hooks on the game's own
 functions; none of them is a code patch. Do NOT enable `nw_hud_corners` -- it
 was tested here and shifts world polygons.
 
-They are measured and recorded in `research/widescreen-survey/README.md`. **That
-tree sits outside this repository and is not packaged**, and every `research/...`
-path in these docs is the same: cited so the reasoning can be traced by someone
-with the working tree, not because the file ships to anyone.
+They were measured and recorded in a `research/` archive that is now lost. **That
+archive sat outside this repository and was not packaged, and it cannot be found.**
+Its citations were removed on 2026-11-14, so these measurements are unproven until
+they are re-checked.
 
 **16:9, 16:10 and 21:9 are offered**, via a game-owned copy of the framework's
 widescreen manifest under `mods/preloaded/packages/psx.enhancement.widescreen`. 21:9 asks

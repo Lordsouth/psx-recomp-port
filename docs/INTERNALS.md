@@ -776,7 +776,6 @@ The EXE-resident tables are scanned in every overlay; the two overlay-resident
 tables are scanned only in the overlay that owns them, because TRN and TRN2
 share an address window and would otherwise match each other's unrelated data.
 
-The reference census that found those sites is in `research/roster-xref-census.md`.
 Two properties made the relocation safe, both verified mechanically: every
 reference is a plain `lui`/`lo16` pair (no gp-relative access, no mid-table
 constants beyond entry-0 field offsets), and **no patched `lui` feeds any
@@ -1589,7 +1588,7 @@ all; the black there is in the 4:3 game too.
 
 `tools/scan_painted_extent.py` (stdlib, reads the disc, `--png` dumps the
 candidates) proposes the extents: 16 maps have a dark edge run of 6 px or
-more. Classified by eye and then swept (`ws_research/p6a`, 8 walks x 12
+more. Classified by eye and then swept (source: the lost research archive; not re-checked; 8 walks x 12
 stops per map, widescreen off, 16:9, 16:10; door-fade frames excluded):
 
 | map | scan | kind | vanilla C | edge void at the wide clamp ends, 16:9 / 16:10 | entry possible |
@@ -1908,7 +1907,7 @@ both aspects.
 
 Full evidence, the refutation, and the recommended next step (expose an
 engagement counter through the existing debug snapshot instead of continuing
-with printf archaeology) are in `research/widescreen-w2-dossier.md`.
+with printf archaeology) were in the lost research archive; not re-checked.
 
 ---
 
@@ -2239,7 +2238,7 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
 * ~~The widened raised-flag guard's trigger ids were never audited against the
   disc scripts.~~ **AUDITED 2026-09-04, and it was a real collision. Fixed.**
 
-  `research/roster-band-authoring.md` carried a "VERIFY BEFORE SHIPPING" note
+  `research/roster-band-authoring.md` (now lost) carried a "VERIFY BEFORE SHIPPING" note
   to check that trigger id 0x272 was script-unused. It is not.
   `tools/scan_trigger_ids.py` decodes the shipped bytecode in `DG.SCN` and
   `MAPHEAD.SCN` -- 1834 sections, zero decode errors -- and finds **88 of the
@@ -2375,7 +2374,7 @@ Two things are not solved by the relocation:
   shows 62 cells, so the new Digimon do not all appear on it.
 * ~~Prosperity Points still ignore new recruits.~~ Stale; see above.
 
-Full analysis in `research/rel_flagship.txt`. Tier-3 (type ids beyond 179) was
+Full analysis was in the lost research archive; not re-checked. Tier-3 (type ids beyond 179) was
 costed and **rejected**: 304 relocation sites, ALLTIM exactly full, and no
 models for the new slots.
 
@@ -2383,18 +2382,9 @@ models for the new slots.
 
 ## 10. Research archive
 
-**Every `research/...` path in this document is one of these, and none of them
-ships in the package.** They are cited so the reasoning can be traced by anyone
-working on the port, not because a player can open them. If you have only the
-released zip, the citation is a dead end and that is expected.
-
-`research/` (outside this repository, not packaged) holds the raw investigation
-output behind everything above: the reference census of every table reference
-site, the free-RAM analysis, the parallel-table landmines, the widescreen deep
-tier and backdrop path, the training grading and gain math, the cheat surveys,
-and the pre-release audit. Numbers in this document come from those files, with
-the addresses re-verified against the executable before use. A search of the
-owner's home directory to depth 6, skipping AppData, for `roster-xref-census*`,
-`widescreen-w2-dossier*`, `rel_flagship*` and `roster-band-authoring*` finds none of
-them, so the citations may be dead for the owner too. Treat a number that rests on
-one as unproven until it is checked against the decomp or the executable.
+The `research/` archive is lost. It sat outside this repository, was not packaged,
+and a search of the owner's home directory (depth 6, skipping AppData) for
+`roster-xref-census*`, `widescreen-w2-dossier*`, `rel_flagship*` and
+`roster-band-authoring*` found none of its files. The citations to it were removed
+on 2026-11-14. Numbers that came from it are unproven until they are checked against
+the decomp or the executable; where they are cited, the text says so.
