@@ -6,7 +6,7 @@ id = "dw.vanilla.qol"
 version = "1.0.0"
 name = "Quality of Life"
 author = "DigimonWorldRecomp"
-description = "Comfort and pacing: how long your partner lives, how fast the world clock runs, saving from the field menu, faster dialogue and faster running, and a fix for a freeze in the original game. Only the fix is on by default, and none turns a mechanic off."
+description = "Comfort and pacing: how long your partner lives, how fast the world clock runs, saving from the field menu, faster dialogue and faster running, and fixes for bugs in the original game. Only the fixes are on by default, and none turns a mechanic off."
 resolver = "declarative"
 save_compatibility = "shared"
 
@@ -305,4 +305,112 @@ target = "main_exe"
 address = 0x8013475C
 expected = "25 21 23 57 00 00 00 00"
 replace = "20 70 63 74 21 23 57 00"
+
+[[feature]]
+id = "jukebox-fix"
+name = "Jukebox Freeze Fix"
+description = "Fixes a bug in the original game where the jukebox menu could freeze on a song with a long title."
+group = "Fixes"
+default_enabled = true
+
+# EXE 0x800FF54C: padWithSpaces: bne a2,zero -> bgtz a2, stop at 0 or below
+[[patch]]
+feature = "jukebox-fix"
+target = "main_exe"
+address = 0x800FF54C
+expected = "f6 ff c0 14"
+replace = "f6 ff c0 1c"
+
+[[feature]]
+id = "tech-wipe-fix"
+name = "Lost Techniques Fix"
+description = "Fixes a bug in the original game where forgetting a technique after losing all lives also erased up to 16 other techniques your partner had learned."
+group = "Fixes"
+default_enabled = true
+
+# EXE 0x800E674C: unlearnMove: nop -> lui a0,1 (move 48's bit, delay slot)
+[[patch]]
+feature = "tech-wipe-fix"
+target = "main_exe"
+address = 0x800E674C
+expected = "00 00 00 00"
+replace = "01 00 04 3c"
+
+# EXE 0x800E6760: addiu a0,zero,0x1000 -> ori a0,a0,0x1000: 44/48 both
+[[patch]]
+feature = "tech-wipe-fix"
+target = "main_exe"
+address = 0x800E6760
+expected = "00 10 04 24"
+replace = "00 10 84 34"
+
+# EXE 0x800E6780: addu a0,zero,zero -> lui a0,0x0280: 55/57 both
+[[patch]]
+feature = "tech-wipe-fix"
+target = "main_exe"
+address = 0x800E6780
+expected = "21 20 00 00"
+replace = "80 02 04 3c"
+
+# EXE 0x800E67A0: andi a0,v0,0xffff -> addu a0,v0,zero: the whole bit
+[[patch]]
+feature = "tech-wipe-fix"
+target = "main_exe"
+address = 0x800E67A0
+expected = "ff ff 44 30"
+replace = "21 20 40 00"
+
+# EXE 0x800E67A4: xori v0,a0,0xffff -> nor a0,a0,zero: a 32-bit mask
+[[patch]]
+feature = "tech-wipe-fix"
+target = "main_exe"
+address = 0x800E67A4
+expected = "ff ff 82 38"
+replace = "27 20 80 00"
+
+# EXE 0x800E67A8: andi a0,v0,0xffff -> nop
+[[patch]]
+feature = "tech-wipe-fix"
+target = "main_exe"
+address = 0x800E67A8
+expected = "ff ff 44 30"
+replace = "00 00 00 00"
+
+[[feature]]
+id = "sleep-heal-fix"
+name = "Sleep Healing Fix"
+description = "Fixes a bug in the original game where a long sleep could leave a partner with very high max HP or MP on a negative value instead of healing it to full."
+group = "Fixes"
+default_enabled = true
+
+# EXE 0x800A6FEC: sleepRegen HP clamp: lh -> lhu
+[[patch]]
+feature = "sleep-heal-fix"
+target = "main_exe"
+address = 0x800A6FEC
+expected = "f4 57 22 84"
+replace = "f4 57 22 94"
+
+# EXE 0x800A700C: sleepRegen MP clamp: lh -> lhu
+[[patch]]
+feature = "sleep-heal-fix"
+target = "main_exe"
+address = 0x800A700C
+expected = "f6 57 22 84"
+replace = "f6 57 22 94"
+
+[[feature]]
+id = "evo-item-fix"
+name = "Evolution Item Fix"
+description = "Fixes a bug in the original game where using an evolution item stopped every later evolution from raising your partner's stats and lifespan until the game was reset."
+group = "Fixes"
+default_enabled = true
+
+# EVL_REL.BIN 0x80063AF0: EVL_applyEvolution, the last branch's delay slot: nop -> sb zero,-27866(gp), HAS_USED_EVOITEM = 0
+[[patch]]
+feature = "evo-item-fix"
+target = "disc_user"
+offset = 302758640
+expected = "00 00 00 00"
+replace = "26 93 80 a3"
 
