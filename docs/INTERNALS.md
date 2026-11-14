@@ -1062,7 +1062,11 @@ reached in a test; no caller was found.
 | Sleep Healing Fix (`sleep-heal-fix`) | 2 `main_exe` | `sleepRegen`'s HP and MP clamps (0x800A6FEC, 0x800A700C) re-read the sum with `lhu`, not `lh`: two non-negative int16 values sum below 65536, so a sum past 32767 now fails `< max` and is clamped |
 | Evolution Item Fix (`evo-item-fix`) | 1 `disc_user` | `EVL_REL.BIN` 0x80063AF0, the delay slot of `EVL_applyEvolution`'s last branch: `nop` becomes `sb zero,-27866(gp)`, the address the function reads `HAS_USED_EVOITEM` from. It runs after every check of the flag, so the item's own evolution still skips its gains |
 
-The three `main_exe` fixes byte-patch their functions, which then run interpreted, not compiled; all three are short and rarely called. On 1.5 they work unchanged: 1.5 keeps those bytes (`tools/check_dw15_compat.py`). The EVL write lands in a sector 1.5's delta owns, though 1.5 keeps that instruction, so `dw15` makes the same write itself (`gen_dw15_extras.py`) and `evo-item-fix` gives way, as `end-box-fix` does. The roster's own clear of the flag (`dw_roster.c`, §4.1.3) still runs when the roster is on; both write 0, so they do not collide.
+The three `main_exe` fixes byte-patch their functions, which then run interpreted, not compiled; all three are short and rarely called. 1.5 keeps those bytes (`tools/check_dw15_compat.py`). The EVL write lands in a sector 1.5's delta owns, though 1.5 keeps that instruction, so `dw15` makes the same write itself (`gen_dw15_extras.py`) and `evo-item-fix` gives way, as `end-box-fix` does.
+
+On 1.5 [run], `tools/verify_bugfixes.py --dw15` (each run first confirms 1.5 is the game running: 0x800ED2A0 holds `lui v0,0x801F`, stock `lui v0,0x8013`): all nine `main_exe` words read back fixed from guest memory, and stock with the fix off; the EVL word read `sb zero,-27866(gp)` while the overlay was resident during an evolution. Sleep: HP and MP ended at 9999, and at -29261 with the fix off. Tech wipe: only the picked move went (16), and with the fix off the pick (3) took 16-19 with it. Evolution item: the flag went 1 to 0, the item's evolution skipped its gains and the next one raised them. The jukebox mode was not run on 1.5; its word read back fixed.
+
+The roster's own clear of the flag (`dw_roster.c`, §4.1.3) still runs when the roster is on; both write 0, so they do not collide. `evoitem --roster` [run]: the EVL word read fixed, the flag went 1 to 0, the item's evolution skipped its gains and the next raised them. That run sets the flag after the sequence has begun, as the item does: set while the partner idles, the roster clears it before the evolution starts.
 
 **Run Speed** (`walk-speed`, 3 `main_exe` writes, 2 live). The game already
 runs by default: a held direction plays anim 3 (run, 50 units per logic frame),
@@ -1152,7 +1156,7 @@ slide table changed. Save Anywhere, Text Speed and Run Speed touch no byte
 game's own `DIGIMON_DATA[0].radius` behind a gate on which executable is
 running (§6.1).
 
-The `dw15` feature's `conflicts` list names all five (package format 12, see
+The `dw15` feature's `conflicts` list names the two with no 1.5 edition, `end-box-fix` and `evo-item-fix` (package format 12, see
 "Feature conflicts" in `psxrecomp/docs/MOD_PACKAGES.md`): ticking 1.5 unticks
 them, ticking one of them unticks 1.5. `check_dw15_compat.py` fails when that
 list and its own result disagree.
@@ -2104,7 +2108,7 @@ sandbox memory card seeded from `saves/`; none of them touches your own saves.
 | `extract_disc_file.py` | pull a file off the disc image by its ISO path, so a probe comes from the same disc as the build |
 | `verify_newmap.py` | does a map on row 239 work like a real map? `--map spike` or `glade`; `run1` walks in, runs the map's checks, saves and walks out; `run2` relaunches and continues (the glade: just outside it, then walks in and out and saves next door); `off --map glade --card glade\|host` loads those cards with the mod off; `fight --map glade [--wide] [--brains N] [--no-end-fix] [--drops]` wins, flees and loses the secret fight, and `--brains` crosses a stock end-box threshold, which freezes only with `--no-end-fix` (`GAME.md` 12.1); `measure --map glade --stats ... [--heal N]` plays a real fight, with nothing poked but `--heal`'s stand-in for recovery items, and only prints; `--dw15` runs a mode on Digimon World 1.5, through `glade-15` (§3.1, §3.2, `GAME.md` 7.18) |
 | `verify_endfix15.py` | Battle End Freeze Fix on 1.5: `N` (699, 799, 899 or 998) wins a fight on DGHA01 with Brains at N, and checks the end box finishes on its MP bonus message and control comes back (`GAME.md` 12.1) |
-| `verify_bugfixes.py` | the four stock bug fixes in `dw.vanilla.qol`: `evoitem`, `sleep`, `techwipe [--set word\|pairs]` and `jukebox` each set the bug up and let the game's code run it; `--off` unticks that fix, the control where the stock bug must show (`GAME.md` 12.2) |
+| `verify_bugfixes.py` | the four stock bug fixes in `dw.vanilla.qol`: `evoitem`, `sleep`, `techwipe [--set word\|pairs\|late]` and `jukebox` each set the bug up and let the game's code run it; `--off` unticks that fix, the control where the stock bug must show; `--dw15` runs on Digimon World 1.5, `--roster` ticks Expanded Roster too; every run first reads each `main_exe` fix's word back from guest memory, and `evoitem` reads the EVL one while the overlay is resident (`GAME.md` 12.2) |
 | `dis_script.py` | disassembles a DG script or a MAPHEAD section from your disc; prints only (`GAME.md` 4) |
 | `dw_tables.py` | writes the map records, species and moves as CSV under `build/tables/`. Derived game data, so it refuses a tracked folder |
 | `fight_sim.py` | an estimate of a fight against `BOSS`, from your disc's move data, and how the stock bosses compare (`GAME.md` 7.17) |

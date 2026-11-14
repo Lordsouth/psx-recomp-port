@@ -1371,7 +1371,7 @@ Nine VAB slots with fixed SPU addresses and RAM headers (`src/main/sound.c:22-56
 
 ## 12. Known bugs in the stock game
 
-Status says how far each one is proven: `code` is read in the decomp, `disc` is confirmed in the stock bytes, `claim` is reported elsewhere and not checked here. 12.1 and the four rows of 12.2 that the port fixes (jukebox, tech wipe, sleep heal, evolution-item flag) have been run in the game; every other code row is also [not run].
+Status says how far each one is proven: `code` is read in the decomp, `disc` is confirmed in the stock bytes, `claim` is reported elsewhere and not checked here. 12.1 and the tech wipe, sleep heal and evolution-item rows of 12.2 have been run in the game. For the jukebox row, `padWithSpaces` with a count below 0 was run from the naming screen, not from the jukebox menu. Every other code row is also [not run].
 
 ### 12.1 The battle end box freezes when Brains crosses 700, 800, 900 or 999
 

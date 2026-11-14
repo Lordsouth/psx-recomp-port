@@ -18,8 +18,15 @@ control, where the stock bug must show.
   jukebox   Jukebox Freeze Fix. padWithSpaces with a count below 0, as a long jukebox title gives
             it. See the mode's docstring for how it gets there.
 
+  --dw15    on Digimon World 1.5 (cards live in dw15/). There Evolution Item Fix gives way and dw15
+            makes its write itself, so --off does not apply to evoitem.
+  --roster  Expanded Roster ticked too (its own clear of HAS_USED_EVOITEM runs beside the fix).
+
+Every run first reads each main_exe fix's instruction back from guest memory; evoitem also reads
+the EVL_REL.BIN one while the overlay is resident during the evolution.
+
   cmake --build build-debug --target psx-runtime
-  py -3.12 tools/verify_bugfixes.py evoitem [--off] --seed <card dir> --port N
+  py -3.12 tools/verify_bugfixes.py evoitem [--off] [--dw15] [--roster] --seed <card dir> --port N
 """
 import argparse
 import os
@@ -31,12 +38,18 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game  # noqa: E402
 from field_drive import (Field, IS_SCRIPT_PAUSED, PARTNER_MAX_HP, PARTNER_STATS, PARTNER_LIVES,  # noqa: E402
-                         INVENTORY, BATTLE)
+                         BATTLE)
+from gen_qol_mods import BUGFIXES  # noqa: E402  the writes, to read back
 
 FIXES = {"evoitem": "evo-item-fix", "sleep": "sleep-heal-fix", "techwipe": "tech-wipe-fix",
          "jukebox": "jukebox-fix"}
 STATE = 'format_version = 2\n\n[[package]]\nid = "dw.vanilla.qol"\nversion = "1.0.0"\n\n'
 FEATURE = '[[feature]]\npackage_id = "dw.vanilla.qol"\nid = "%s"\nenabled = %s\n\n'
+DW15 = ('[[package]]\nid = "dw.1_5"\nversion = "1.0.0"\n\n'
+        '[[feature]]\npackage_id = "dw.1_5"\nid = "dw15"\nenabled = true\n\n')
+ROSTER = ('[[package]]\nid = "dw.vanilla.roster"\nversion = "1.0.0"\n\n'
+          '[[feature]]\npackage_id = "dw.vanilla.roster"\nid = "roster"\nenabled = true\n\n')
+ON_15 = ("jukebox-fix", "tech-wipe-fix", "sleep-heal-fix")   # evo-item-fix gives way to dw15
 
 
 def main():
@@ -48,22 +61,30 @@ def main():
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
     ap.add_argument("--port", type=int, default=7000)
     ap.add_argument("--seed", default=os.path.join(root, "saves"))
+    ap.add_argument("--dw15", action="store_true", help="on Digimon World 1.5")
+    ap.add_argument("--roster", action="store_true", help="Expanded Roster ticked too")
     a = ap.parse_args()
+    if a.dw15 and a.off and a.mode == "evoitem":
+        ap.error("on 1.5 dw15 makes the evo-item write itself: there is no off case")
 
-    out = os.path.join(a.build, "bf_%s%s" % (a.mode, "_off" if a.off else ""))
+    tags = "".join("_" + t for t in ("off", "dw15", "roster") if getattr(a, t))
+    out = os.path.join(a.build, "bf_%s%s" % (a.mode, tags))
     cards = os.path.join(out, "cards")
+    card_dir = os.path.join(cards, "dw15") if a.dw15 else cards     # 1.5 keeps its own cards (dw_dw15.c)
     shutil.rmtree(out, ignore_errors=True)
-    os.makedirs(cards)
+    os.makedirs(card_dir)
     for name in ("card1.mcd", "card2.mcd"):
         if a.mode != "jukebox" and os.path.exists(os.path.join(a.seed, name)):   # jukebox: blank cards, NEW GAME
-            shutil.copy(os.path.join(a.seed, name), cards)
-    if a.mode != "jukebox" and not os.path.exists(os.path.join(cards, "card1.mcd")):
+            shutil.copy(os.path.join(a.seed, name), card_dir)
+    if a.mode != "jukebox" and not os.path.exists(os.path.join(card_dir, "card1.mcd")):
         print("No memory card to seed from at %s" % a.seed, file=sys.stderr)
         return 2
     # Every fix named, so the run does not depend on defaults; only the one under test may be off.
+    # On 1.5 the fix that gives way to dw15 is left to its default, as verify_endfix15.py leaves end-box-fix.
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
         fh.write(STATE + "".join(FEATURE % (fid, "false" if a.off and m == a.mode else "true")
-                                 for m, fid in sorted(FIXES.items())))
+                                 for m, fid in sorted(FIXES.items()) if not a.dw15 or fid in ON_15)
+                 + (DW15 if a.dw15 else "") + (ROSTER if a.roster else ""))
 
     fails = []
 
@@ -75,31 +96,67 @@ def main():
     g = Game.launch(exe=os.path.join(a.build, "Digimon_World_Recompiled.exe"), port=a.port, memcard_dir=cards,
                     extra_args=["--headless-opengl"], log_path=os.path.join(out, "game.log"))
     shot = lambda n: g.artifact_shot(os.path.join(out, n + ".png"))
-    f = Field(g, check, shot)
+    f = Field(g, check, shot, a.dw15)
     try:
         if a.mode != "jukebox":                       # jukebox starts a NEW GAME instead
             f.enter()
             check(True, "in the world on map %d" % f.screen())
+            readback(g, check, a)
         {"evoitem": evoitem, "sleep": sleep, "techwipe": techwipe, "jukebox": jukebox}[a.mode](g, f, check, a)
     except Exception as e:  # a hang or a dead game is a result too
         check(False, "%s: %s" % (type(e).__name__, e))
     finally:
         shot("end")
         g.shutdown()
-        print("RESULT %s%s: %s" % (a.mode, " --off" if a.off else "", "FAIL %s" % fails if fails else "PASS"),
+        print("RESULT %s%s: %s" % (a.mode, tags.replace("_", " --"), "FAIL %s" % fails if fails else "PASS"),
               flush=True)
     return 1 if fails else 0
 
 
-def evolve(g, f, check, target):
-    """The game's own evolution sequence to `target`, started the way verify_newmap.py measure starts it."""
+GAME_PROBE = (0x800ED2A0, 0x3C028013, 0x3C02801F)    # lui v0,0x8013 stock, lui v0,0x801F 1.5 (its moved table)
+
+
+def readback(g, check, a):
+    """Which executable runs, then each main_exe fix's instruction as guest memory holds it: the new
+    word when ticked, stock when not."""
+    addr, stock_word, w15 = GAME_PROBE
+    got = struct.unpack("<I", g.d.read(addr, 4))[0]
+    check(got == (w15 if a.dw15 else stock_word), "the game running is %s: 0x%08X holds %08X"
+          % ("1.5" if a.dw15 else "stock", addr, got))
+    for mode, fid in sorted(FIXES.items()):
+        on = not (a.off and mode == a.mode)
+        for where, vaddr, stock, new, _note in next(w for i, _n, _d, w in BUGFIXES if i == fid):
+            if where != "exe":
+                continue
+            got = struct.unpack("<I", g.d.read(vaddr, 4))[0]
+            check(got == (new if on else stock),
+                  "%s 0x%08X holds %08X (%s)" % (fid, vaddr, got, "fixed" if on else "stock"))
+
+
+EVL_SITE = next(w for i, _n, _d, w in BUGFIXES if i == "evo-item-fix")[0]
+EVL_BRANCH = 0x10430002                               # beq v0,v1,+2 just before the site: the overlay is resident
+
+
+def evolve(g, f, check, target, evl=None, item=False):
+    """The game's own evolution sequence to `target`, started the way verify_newmap.py measure starts it.
+    `evl`, a list, gets the EVL_REL.BIN site's word whenever the overlay is resident during the sequence.
+    `item`: HAS_USED_EVOITEM set once the sequence has begun, as handleEvoItems leaves it
+    (src/main/item.c:2211). Set while the partner idles, the roster's own clear would wipe it first."""
     for field, value in (("remaining_lifetime", 9999), ("poop_level", 9999), ("tiredness", 0),
                          ("script_sync_bit", 1), ("evolution_target", target)):
         g.set(field, value)
     g.set_atomic(("tamer_state", 6), ("tamer_substate", 0))
     g.set_atomic(("partner_state", 13), ("partner_sub_state", 0))
-    ok = f.wait_for(lambda: g.partner_type == target and g.evolution_target == -1
-                    and (g.partner_state == 1 or g.tamer_state == 20), 240)
+    if item:
+        g.set("has_used_evoitem", 1)
+
+    def done():
+        if evl is not None:
+            b = struct.unpack("<2I", g.d.read(EVL_SITE[1] - 4, 8))
+            if b[0] == EVL_BRANCH:
+                evl.append(b[1])
+        return g.partner_type == target and g.evolution_target == -1 and (g.partner_state == 1 or g.tamer_state == 20)
+    ok = f.wait_for(done, 240)
     for _ in range(12):
         if g.tamer_state == 0 and g.partner_state == 1:
             break
@@ -115,9 +172,14 @@ def evoitem(g, f, check, a):
     # Below MetalGreymon's gains, so a natural evolution raises them all.
     g.d.write_bytes(struct.pack("<4h", 100, 100, 100, 100), PARTNER_STATS)
     g.d.write_bytes(struct.pack("<4h", 1000, 1000, 1000, 1000), PARTNER_MAX_HP)
-    g.set("has_used_evoitem", 1)             # what handleEvoItems leaves behind (src/main/item.c:2211)
     before = stats()
-    evolve(g, f, check, 12)                  # MetalGreymon
+    evl = []
+    evolve(g, f, check, 12, evl, item=True)  # MetalGreymon
+    _w, vaddr, stock, new, _n = EVL_SITE
+    on = not a.off
+    print("MEASURE EVL_REL.BIN 0x%08X while resident: %s" % (vaddr, sorted({"%08X" % w for w in evl})), flush=True)
+    check(bool(evl) and all(w == (new if on else stock) for w in evl),
+          "EVL_REL.BIN 0x%08X held the %s word while the overlay was resident" % (vaddr, "fixed" if on else "stock"))
     flag, first = g.has_used_evoitem, stats()
     print("MEASURE first evolution: flag 1 -> %d, stats %s -> %s" % (flag, before, first), flush=True)
     check(first == before, "the evolution right after the item skipped its gains, as stock does")

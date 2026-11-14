@@ -273,6 +273,7 @@ def render_end_box(disc):
     out = ["# Battle End Freeze Fix, part of 1.5 here: docs/GAME.md 12.1", ""] + end_box_patches("dw15")
     for fid, name, _desc, writes in BUGFIXES:
         if fid in DW15_FIXES:      # raises on a guard 1.5 does not keep
+            assert all(w[0] != "exe" for w in writes), "%s: dw15 renders disc writes only, no exe image here" % fid
             out += ["# %s, part of 1.5 here: docs/GAME.md 12.2" % name, ""] + fix_patches(writes, "dw15", None, disc.user)
     return "\n".join(out)
 
