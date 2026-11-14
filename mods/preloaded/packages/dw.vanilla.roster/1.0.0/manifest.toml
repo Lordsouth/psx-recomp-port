@@ -1753,6 +1753,13 @@ replace = "72 00 01 2a"
 [[patch]]
 feature = "roster"
 target = "main_exe"
+address = 0x8012DE47
+expected = "02"
+replace = "01"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
 address = 0x800B98D8
 expected = "11 00 00 10"
 replace = "10 00 00 10"
@@ -4482,6 +4489,14 @@ target = "main_exe"
 address = 0x8012F0F6
 expected = "33 0c"
 replace = "2e 0a"
+
+# Tankmon: move slot 0 2 -> 1 (the old one is not on its effect list, so it only animates)
+[[patch]]
+feature = "roster-15"
+target = "main_exe"
+address = 0x801F5293
+expected = "02"
+replace = "01"
 
 # Koromon evolves into Agumon, Gabumon, Flarerizamon, SnowAgumon, Psychemon, ToyAgumon (the exe's copy)
 [[patch]]

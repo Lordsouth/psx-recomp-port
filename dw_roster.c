@@ -14,7 +14,7 @@
  *      (tools/gen_roster_mod.py) can hard-code retargeted addresses.
  *   2. The manifest's guarded main_exe patches rewrite every lui/lo16 pair
  *      that materializes a grown table's address (site list measured by the
- *      reference census, research/roster-xref-census.md) to the arena copy.
+ *      reference census; the sites are asserted in the generator) to the arena copy.
  *   3. At a function-entry hook on initializeHeap (0x800EEBDC -- runs once,
  *      after the BSS memfill, before any table consumer), this plugin copies
  *      the stock tables out of guest RAM into the arena and appends the
@@ -88,7 +88,7 @@
 #define DETECT_LUI_VADDR ROSTER_DETECT_LUI_VADDR
 
 /* ---- authored type-114 entries (values researched from the game's own
- * tables; see research/roster-* docs). Filled by data below. -------------- */
+ * tables; docs/GAME.md 12.2). Filled by data below. -------------- */
 #include "dw_roster_data.inc"
 
 static uint32_t roster_arena = 0;

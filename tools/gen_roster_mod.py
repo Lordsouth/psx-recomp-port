@@ -128,6 +128,69 @@ OVL_LBAS = {
 
 # ---- game tables read during generation -------------------------------------
 DIGIMON_DATA_VA, DIGIMON_STRIDE = 0x8012CEB4, 52
+DD_MOVES = 35          # offset of DIGIMON_DATA.moves[16] in a record
+
+# DIGIMON_DATA.moves[slot] rewrites, {type: (slot, stock move id, new move id)}.
+# Tankmon's slot 0 is Spit Fire (2), which is not in that move's EFE species list,
+# so a new Tankmon's starting move (the lowest-power one, src/evl/evl.c:1434-1455)
+# animates and can never hit (docs/GAME.md 12.2). Move 1 is on species 76's list and
+# is stronger than Red Inferno (3), so the pick falls to Red Inferno.
+# Shared with gen_roster_dw15.py, which writes the same byte at 1.5's table.
+MOVE_FIXES = {76: (0, 2, 1)}
+
+
+# (roster type, move) pairs the strict rule rejects only because Disc.efe_lists returns a junk extra list for the move.
+# In each the species is on the real list, which was checked by hand; the junk list is not a species list.
+SPURIOUS_LIST = {
+    (73, 51): "second list is animation data (ends in zeros)",
+    (73, 52): "second list is a copy of the first list's tail",
+    (77, 36): "first list is junk (a short list with a repeated id, which lacks the move's own users)",
+    (86, 36): "same junk first list as 77",
+    (91, 36): "same junk first list as 77",
+    (99, 36): "same junk first list as 77",
+    (111, 36): "same junk first list as 77",
+}
+
+
+def check_moves_usable(rd, bin_path=None):
+    """Generator assert: every non-empty raw DIGIMON_DATA.moves slot of every species the
+    roster makes raisable is usable by that species. `rd(va, n)` reads the stock EXE.
+
+    Reads the raw field the EFE load uses (src/main/btl.c:469), after MOVE_FIXES. A move
+    is usable when getOriginalType(species) is on EVERY species list Disc.efe_lists finds
+    for its EFE script. The finder also returns a few junk lists, so exactly the pairs in
+    SPURIOUS_LIST are excused (and only for being on at least one list); a pair there that
+    the strict rule no longer rejects fails too, so the list cannot rot. Slot 114
+    (Machinedramon) takes 115's record and original type, as the patches below make it."""
+    sys.path.insert(0, HERE)
+    from dw_tables import DEFAULT_BIN, Disc
+    disc = Disc(bin_path or DEFAULT_BIN)
+    lists = {}
+    bad, used = [], set()
+    for t in [s["type"] for s in NEW_SPECIES] + [114]:
+        src = 115 if t == 114 else t
+        ot = 115 if t == 114 else disc.original_type(t)
+        moves = bytearray(rd(DIGIMON_DATA_VA + src * DIGIMON_STRIDE + DD_MOVES, 16))
+        if t in MOVE_FIXES:
+            slot, old, new = MOVE_FIXES[t]
+            assert moves[slot] == old, "type %d slot %d is %d, not %d" % (t, slot, moves[slot], old)
+            moves[slot] = new
+        for slot, m in enumerate(moves):
+            if m == 0xFF:
+                continue
+            if m not in lists:
+                lists[m] = disc.efe_lists(m)
+            ls = lists[m]
+            if ls and all(ot in l for l in ls):
+                continue
+            if (t, m) in SPURIOUS_LIST and any(ot in l for l in ls):
+                used.add((t, m))
+                continue
+            bad.append("type %d slot %d: move %d is not usable by original type %d" % (t, slot, m, ot))
+    assert not bad, "roster species with a move that only animates: " + "; ".join(bad)
+    stale = sorted(set(SPURIOUS_LIST) - used)
+    assert not stale, "SPURIOUS_LIST entries no longer needed: %s" % stale
+    print("moves: every slot of %d roster species is on its EFE list (%d excused)" % (len(NEW_SPECIES) + 1, len(used)))
 EVO_PATHS_VA, EVO_PATHS_STRIDE = 0x8012B66C, 11
 EVO_REQ_VA, EVO_REQ_STRIDE = 0x8012ABEC, 28
 RAISE_VA, RAISE_STRIDE = 0x801225BC, 28
@@ -423,7 +486,7 @@ NEW_SPECIES = [
 # feature was always described in terms of. Tyrannomon reaches both.
 MACHINEDRAMON_SRC = [("Tyrannomon", 8), ("Greymon", 5)]
 
-# ---- authored constants (from research/roster-* + the data workflow) -------
+# ---- authored constants (from the data-authoring work, not read off the disc) --
 # Filled by fill_authored() below -- kept in one place on purpose.
 AUTHORED = {}
 
@@ -520,7 +583,7 @@ def build_species_rows(rd, name_of, level_of):
 
 
 def authored_research(rd):
-    """Constants sourced from the data-authoring research (research/roster-*):
+    """Constants sourced from the data-authoring work (docs/GAME.md 12.2):
     evolution wiring, guard widening, disc fixes, and the 114 entries."""
     extra = []
     # 5. raised-flag guard: DELIBERATELY NOT PATCHED ANY MORE.
@@ -653,6 +716,12 @@ def authored_research(rd):
     pp = 0x800EFAD4
     assert rd(pp, 4) == struct.pack("<I", 0x2A01003B), "PP loop bound drifted"
     extra += word_patch(pp, 0x2A01003B, 0x2A010072)
+
+    # 9b. Moves that only animate (MOVE_FIXES).
+    for t, (slot, old, new) in sorted(MOVE_FIXES.items()):
+        va = DIGIMON_DATA_VA + t * DIGIMON_STRIDE + DD_MOVES + slot
+        assert rd(va, 1) == bytes([old]), "type %d move slot %d drifted" % (t, slot)
+        extra += bytes_patch(va, bytes([old]), bytes([new]))
 
     # 10. Evolution-chart cursor: stop empty cells opening a bogus page.
     #
@@ -1014,6 +1083,7 @@ def _ovl_word_patch(images, fn, va, old, new, lba):
 def main():
     check_only = "--check" in sys.argv
     data = open(EXE, "rb").read()
+    check_moves_usable(lambda va, n: data[va - LOAD_ADDR + HDR:va - LOAD_ADDR + HDR + n])
 
     sites = scan_sites(data)
     from collections import Counter

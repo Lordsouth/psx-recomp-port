@@ -54,7 +54,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 from check_dw15_compat import RAM_BASE, RELOCATED, Disc, Exe, sha256  # noqa: E402
-from gen_roster_mod import NEW_SPECIES  # noqa: E402  the same species, requirements and donors
+from gen_roster_mod import DD_MOVES, MOVE_FIXES, NEW_SPECIES  # noqa: E402  the same species, requirements, donors, move fixes
 
 MANIFEST = os.path.join(ROOT, "mods", "preloaded", "packages", "dw.vanilla.roster", "1.0.0", "manifest.toml")
 DW15_MANIFEST = os.path.join(ROOT, "mods", "preloaded", "packages", "dw.1_5", "1.0.0", "manifest.toml")
@@ -179,6 +179,15 @@ def build(disc, exe):
                 problems.append("%s (type %d) has no free evolution slot on 1.5" % (src_name, src))
                 continue
             row[row.index(-1)] = t
+    # Moves that only animate: the stock roster's fix (MOVE_FIXES) at 1.5's table. The EFE
+    # lists are not re-read here (the stock generator's assert covers the stock disc), so
+    # 1.5 must still hold the stock move byte, else the fix is unproven for it.
+    for t, (slot, old, new) in sorted(MOVE_FIXES.items()):
+        va = DIGIMON_DATA + t * DD_STRIDE + DD_MOVES + slot
+        if ram(va, 1) != bytes([old]):
+            problems.append("1.5's %s move slot %d is %d, not the stock %d" % (name(t), slot, ram(va, 1)[0], old))
+        exe_patch("%s: move slot %d %d -> %d (the old one is not on its effect list, so it only animates)"
+                  % (name(t), slot, old, new), va, bytes([new]))
     for src, row in sorted(paths.items()):
         mod_patch("%s evolves into %s" % (name(src), ", ".join(name(x) for x in row if x != -1)),
                   EVO_PATHS + (src - 1) * 24 + 10, struct.pack("<7h", *row))
