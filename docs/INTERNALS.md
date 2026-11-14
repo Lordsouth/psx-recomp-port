@@ -686,7 +686,7 @@ place (below).
 
 ### 4.1 `dw.vanilla.roster` — 52 raisable Digimon
 
-**1 feature, 245 patches, 1 manifest-declared plugin** (`dw.roster`) **plus a
+**1 feature, 246 patches, 1 manifest-declared plugin** (`dw.roster`) **plus a
 second plugin source** (`dw_roster_flags.c`) that reaches the game through
 `mod_function_replace_funcs` and therefore needs no manifest block.
 
@@ -926,6 +926,12 @@ zeros — the game died at PC 0 after one to four minutes. A per-VBlank check no
 fills the arena on those boots too. Related: a savestate taken under a
 *different* mod plan is poisonous on resume, because the old plan's patched code
 persists in restored RAM.
+
+**Move data.** The species' `DIGIMON_DATA.moves` are the disc's own, with one byte changed: Tankmon's
+`moves[0]` goes from Spit Fire (2) to 1, because the species is not on Spit Fire's EFE list and a new form
+starts on its lowest-power move (`MOVE_FIXES` in `gen_roster_mod.py`; `gen_roster_dw15.py` writes the same byte at
+1.5's table). Every `gen_roster_mod.py` run, `--check` included, asserts that each non-empty move slot of every
+roster species is on its EFE list, read from the disc (GAME.md 12.2); `tools/verify_roster_moves.py` proves it in game.
 
 Regenerate: `py -3.12 tools/gen_roster_mod.py` (`--check` verifies only).
 
