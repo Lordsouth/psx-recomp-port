@@ -12,8 +12,8 @@
  * the origin lag the ideal one by up to 15 px. Walking left never produced a
  * left-edge deficit in 387 measured stops, so only the right is handled.
  *
- * A fifth column has nowhere to live. A VRAM census (research/widescreen-
- * survey/VRAM.md, three methods, disc-wide TIM census plus runtime reads and
+ * A fifth column has nowhere to live. A VRAM census (source: the lost research
+ * archive; not re-checked; three methods, disc-wide TIM census plus runtime reads and
  * writes) found no free 64x128 slot anywhere. But the deficit is not a column,
  * it is a strip of one, and the strip the census cleared -- x 651..703,
  * between the Digi-Card image page (8bpp, 75 halfwords from 576, so it ends
