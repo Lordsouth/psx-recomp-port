@@ -114,13 +114,14 @@ did, and the only symptom was a table in guest RAM still reading its stock
 value in a live battle. If a callback appears not to exist, check the manifest
 before the code.
 
-Twelve plugins live here:
+Thirteen plugins live here:
 
 | File | What it does |
 |---|---|
 | `dw_roster.c` | the Expansion-1 arena and the grown tables (§4.1) |
 | `dw_roster_flags.c` | re-banks the new species' raised flags off the game's story flags (§4.1) |
-| `dw_evolution.c` | proof of the replacement primitive; ships disabled |
+| `dw_evolution.c` | proof of the replacement primitive (ships disabled), and the read-only C copy of the game's evolution chooser that the Evolution Guide uses |
+| `dw_evoguide.c` | Evolution Guide: the F2 / Select + L3 panel of the partner's evolutions, read from the live tables and drawn on the host overlay |
 | `dw_ws_backdrop.c` | fade plate, parked HUD, the clock and field gauges as single widgets, the battle bars' slide table (§5) |
 | `dw_ws_camera.c` | both camera clamps, the tile-ladder shift, the load-time nudge (§5) |
 | `dw_ws_sliver.c` | the fifth backdrop tile column, as a VRAM sliver (§5) |

@@ -97,7 +97,7 @@ to keep for the long term.
 
 ## Mods
 
-Click **Mods** in the launcher. Everything is off by default — including widescreen from 0.1.7 on — except Battle End Freeze Fix, which only stops a crash-like freeze; tick what you want.
+Click **Mods** in the launcher. Everything is off by default — including widescreen from 0.1.7 on — except the five fixes for bugs in the original game, which only stop freezes and lost progress; tick what you want.
 
 | Mod | What it does | With 1.5 |
 |---|---|---|
@@ -115,6 +115,8 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 | **Text Speed** | Dialogue without the wait. Fast draws each page at once; Instant also opens the box without its zoom-in. The text itself is unchanged | Yes |
 | **Run Speed** | Your tamer runs 1.5x or 2x faster in the field. Walls, doors, exits and talking work as normal; your partner catches up when you stop | Yes |
 | **Battle End Freeze Fix** | **On by default.** Fixes a freeze in the original game: a battle hung on its results when the win lifted Brains past 700, 800, 900 or 999, losing everything since your last save | Built into 1.5 here |
+| **Jukebox Freeze Fix**, **Lost Techniques Fix**, **Sleep Healing Fix**, **Evolution Item Fix** | **On by default.** Four more fixes for the original game: the jukebox freezing on a long song title; losing all lives erasing up to 16 extra techniques; a long sleep leaving very high HP or MP negative; an evolution item stopping later evolutions from raising stats until a reset | Yes. The Evolution Item Fix is built into 1.5 here |
+| **Evolution Guide** | An on-screen panel (`F2`, or Select+L3 on a controller) listing what your partner can evolve into and its live progress toward each: care mistakes, weight, stats, the bonus condition, and which one the game would pick now. Off by default: it is a spoiler. Needs the OpenGL renderer | Not on 1.5 (the panel says so) |
 | **Gameplay** | Better odds of learning techniques in battle; lower the stat requirements for evolutions | Yes. On 1.5, Evolution Unbound switches to a 1.5 edition by itself, the new lines included |
 | **Widescreen** | 16:9, 16:10 or 21:9. The wider view is rendered at full width and shown 1:1, so nothing is stretched — menus, text boxes and the HUD keep their original shapes, and the extra width is real extra view on both sides. Two rough edges remain, listed under Mods below | Yes |
 | **Smooth 60 FPS** | The game draws at 20 frames per second; this draws two extra frames between each of its own, in the field and in battle, so the camera, Digimon, scenery and effects move smoothly. The game itself still runs at its own speed, with no added input delay. 60 or Match display. Needs the OpenGL renderer | Yes |

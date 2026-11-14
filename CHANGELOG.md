@@ -22,6 +22,37 @@ works with widescreen, Run Speed, HD texture packs and Digimon World 1.5. Menus,
 text boxes and cutscenes still move at the original rate. It needs the OpenGL
 renderer; it is off by default.
 
+**New: Evolution Guide.** Tick it under **Mods**; it is off by default, because it
+is a spoiler. In the game, press **F2**, or **Select + L3** on a controller, to show
+or hide a panel listing everything your partner can evolve into next. For each
+Digimon it shows the care mistakes, weight, stats and bonus condition the game
+checks, your partner's current value against each one (green when met, red when
+not), and how many of the four are met out of the three needed. It also shows the
+evolution timer and which Digimon the game would pick right now. The values update
+while you play, and they follow Expanded Roster and Evolution Unbound by
+themselves. It needs the OpenGL renderer and is not available on Digimon World 1.5,
+where the panel says so.
+
+**Four more fixes for bugs in the original game.** They are on by default under
+**Mods → Quality of Life**, and each one can be unticked:
+
+* **Jukebox Freeze Fix:** the jukebox menu could freeze on a song with a long title.
+* **Lost Techniques Fix:** forgetting a technique after losing all lives also erased
+  up to 16 other techniques.
+* **Sleep Healing Fix:** a long sleep could leave a partner with very high max HP or
+  MP on a negative value instead of full.
+* **Evolution Item Fix:** using an evolution item stopped every later evolution from
+  raising stats and lifespan until the game was reset. On Digimon World 1.5 this fix
+  is built into 1.5.
+
+Savestates made before this update belong to the old mod settings, so they appear
+only with these four fixes unticked. The jukebox fix was tested on the function the
+menu uses, not in the jukebox menu itself.
+
+**Expanded Roster: Tankmon starts on a move it can use.** A Tankmon you raise now
+starts on Red Inferno instead of Spit Fire, a move the game's effect data never lists
+for Tankmon, on Digimon World 1.5 too.
+
 **Widescreen: a recruit's "X joins the city!" no longer freezes the game.**
 A player reported "Agumon joins the city!" staying on screen for good: the world
 kept moving, but they could not get past it. After that box the game moves the
