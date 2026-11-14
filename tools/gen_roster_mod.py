@@ -139,22 +139,34 @@ DD_MOVES = 35          # offset of DIGIMON_DATA.moves[16] in a record
 MOVE_FIXES = {76: (0, 2, 1)}
 
 
+# (roster type, move) pairs the strict rule rejects only because Disc.efe_lists returns a junk extra list for the move.
+# In each the species is on the real list, which was checked by hand; the junk list is not a species list.
+SPURIOUS_LIST = {
+    (73, 51): "second list is animation data (ends in zeros)",
+    (73, 52): "second list is a copy of the first list's tail",
+    (77, 36): "first list is junk (a short list with a repeated id, which lacks the move's own users)",
+    (86, 36): "same junk first list as 77",
+    (91, 36): "same junk first list as 77",
+    (99, 36): "same junk first list as 77",
+    (111, 36): "same junk first list as 77",
+}
+
+
 def check_moves_usable(rd, bin_path=None):
     """Generator assert: every non-empty raw DIGIMON_DATA.moves slot of every species the
     roster makes raisable is usable by that species. `rd(va, n)` reads the stock EXE.
 
     Reads the raw field the EFE load uses (src/main/btl.c:469), after MOVE_FIXES. A move
-    is usable when getOriginalType(species) is in one of the species lists of its EFE
-    script (Disc.efe_lists). "One of", not "all": the list finder also returns the odd
-    spurious list (Charm Perfume's [12, 17, 19, 12] lacks Vegiemon, its own user), so
-    requiring every list would reject stock-valid moves. Slot 114 (Machinedramon) takes
-    115's record and original type, as the patches below make it. No allow-list: nothing
-    is excused."""
+    is usable when getOriginalType(species) is on EVERY species list Disc.efe_lists finds
+    for its EFE script. The finder also returns a few junk lists, so exactly the pairs in
+    SPURIOUS_LIST are excused (and only for being on at least one list); a pair there that
+    the strict rule no longer rejects fails too, so the list cannot rot. Slot 114
+    (Machinedramon) takes 115's record and original type, as the patches below make it."""
     sys.path.insert(0, HERE)
     from dw_tables import DEFAULT_BIN, Disc
     disc = Disc(bin_path or DEFAULT_BIN)
-    usable = {}
-    bad = []
+    lists = {}
+    bad, used = [], set()
     for t in [s["type"] for s in NEW_SPECIES] + [114]:
         src = 115 if t == 114 else t
         ot = 115 if t == 114 else disc.original_type(t)
@@ -166,12 +178,19 @@ def check_moves_usable(rd, bin_path=None):
         for slot, m in enumerate(moves):
             if m == 0xFF:
                 continue
-            if m not in usable:
-                usable[m] = [x for l in disc.efe_lists(m) for x in l]
-            if ot not in usable[m]:
-                bad.append("type %d slot %d: move %d is not usable by original type %d" % (t, slot, m, ot))
+            if m not in lists:
+                lists[m] = disc.efe_lists(m)
+            ls = lists[m]
+            if ls and all(ot in l for l in ls):
+                continue
+            if (t, m) in SPURIOUS_LIST and any(ot in l for l in ls):
+                used.add((t, m))
+                continue
+            bad.append("type %d slot %d: move %d is not usable by original type %d" % (t, slot, m, ot))
     assert not bad, "roster species with a move that only animates: " + "; ".join(bad)
-    print("moves: every slot of %d roster species is on its EFE list" % (len(NEW_SPECIES) + 1))
+    stale = sorted(set(SPURIOUS_LIST) - used)
+    assert not stale, "SPURIOUS_LIST entries no longer needed: %s" % stale
+    print("moves: every slot of %d roster species is on its EFE list (%d excused)" % (len(NEW_SPECIES) + 1, len(used)))
 EVO_PATHS_VA, EVO_PATHS_STRIDE = 0x8012B66C, 11
 EVO_REQ_VA, EVO_REQ_STRIDE = 0x8012ABEC, 28
 RAISE_VA, RAISE_STRIDE = 0x801225BC, 28
