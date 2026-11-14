@@ -177,6 +177,7 @@ PSX_MOD_CONSTRUCTOR(dw_newmaps_register) {
     for (uint32_t i = 0; i < sizeof DW_FILE_PLUGINS / sizeof *DW_FILE_PLUGINS; i++)
         psx_mod_register_function_filter_plugin(DW_FILE_PLUGINS[i], DW_LOOKUP_FILE_TABLE, dw_newmaps_lookup);
     psx_mod_register_function_filter_plugin("dw.newmaps.factory", DW_GET_SCRIPT, dw_newmaps_get_script);
+    psx_mod_register_function_filter_plugin("dw.newmaps", DW_GET_SCRIPT, dw_newmaps_get_script);   /* the glade's id 231 */
     psx_mod_register_function_entry_plugin(k_maps[0].plugin, DW_CHECKSUM, dw_newmaps_pre_checksum);
     psx_mod_register_function_entry_plugin(k_maps[1].plugin, DW_CHECKSUM, dw_newmaps_factory_pre_checksum);
 }

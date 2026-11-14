@@ -377,13 +377,14 @@ wrong row and can blank real tiles.
 
 **Delivery** needs no runtime change. Two file-backed `disc_user` `[[overlay]]`s
 lay our MAP and TFS across MGEN17's 247 adjacent sectors (MAP, then TFS, then
-zero padding), and a third lays the DG script over the start of slot 118. Two guarded `main_exe` patches move the files'
+zero padding), and a third lays the boss's script at MMM.DAT sector 1015 (script id 231, served by `getScript`). Two guarded `main_exe` patches move the files'
 `FILE_OFFSET_TABLE` entries (`0x8011FE1C`, 12 bytes each: sector, size, name
 pointer; `lookupFileTable` resolves names there) to match. Overlays need
 `disc_sha256` on the `[[target]]`. Past the end of the disc a `disc_user`
 overlay reads as zeros. The disc does hold free space: `MMM.DAT` (LBA 148668) is
-13,500 all-zero sectors that nothing reads. But that route has never been run in
-game (`docs/GAME.md` 2.3), so the glade stays on MGEN17's own sectors: a 30-tile
+13,500 all-zero sectors that nothing reads. That route has since run in game for the
+factory's maps and scripts and for the glade's boss script [run 2026-11-14: `verify_newmap.py reward --map glade`,
+`verify_factory.py walk`, `docs/GAME.md` 2.3], but the glade's own map stays on MGEN17's own sectors: a 30-tile
 TFS leaves 2 KB, and the 24-tile backdrop leaves room for 2 texture pages.
 The row, the MAPHEAD section and the entrance are small guarded patches. The DG
 script is a file because a patch must repeat the stock bytes it replaces, and those
@@ -391,11 +392,9 @@ are live script bytecode; `disc_sha256` and the generator's asserts guard it.
 
 **On 1.5** the glade runs its edition `glade-15` (§4.4, 1.5 editions), written by
 `tools/gen_newmap_dw15.py` below a marker in the manifest; `gen_newmap.py` keeps that
-block when it rewrites the part above. 1.5 leaves row 239, MGEN17's sectors, DG slot
-118 and MAYO03's warp slot 4 free but moves three things: its stub copies the file
-table to `0x801F1000` (MGEN17's entries at `0x801F268C`), DG.SCN grew and sits past
-the stock end at LBA 162388 (slot 118 is rewritten there as a guarded `[[patch]]`,
-since the runtime refuses an overlay on a delta sector), and 1.5's own new MAPHEAD
+block when it rewrites the part above. 1.5 leaves row 239, MGEN17's sectors
+and MAYO03's warp slot 4 free but moves two things: its stub copies the file
+table to `0x801F1000` (MGEN17's entries at `0x801F268C`), and 1.5's own new MAPHEAD
 sections fill the tail to `0x60DE`, so the glade's section goes at `0x60DE`. The
 other writes are the glade's own, their guards checked against 1.5. The edition sits
 in `dw.newmaps` and reaches `dw15` through a `[[requirement]]`, which the runtime
@@ -412,10 +411,10 @@ the player without walking, and autotalk 0 means only a confirm press next to it
 starts the fight, so no one walks into it by accident. Its hit radius is wide: the
 tamer stops about 400 units from its centre.
 
-DG script slot 118 has room for its script. Stock, the slot holds one bare END
-section, and the rest of its 2 KB is junk nothing reads. Row 122 (TUNN07_2) binds
-the same slot, but has no map Digimon and no script tiles, so it only ever runs
-the END. `boss_script()` keeps that END as the arrival section and adds section 5:
+The boss's script is script id 231, served from MMM.DAT sector 1015 by the `getScript`
+hook (the factory's mechanism; it began in DG slot 118, but on 1.5 that needed a
+`[[patch]]` whose 336 B guard repeated 1.5's own scripts, 124 B of it even before the reward, so it moved). Slot 118 and
+row 122 (TUNN07_2) stay stock. `boss_script()` keeps a bare END as the arrival section and adds section 5:
 pause, the boss's two lines, close the box, wait a frame, `START_BATTLE`. Fleeing
 stays allowed, which no stock press-to-fight battle does, but it shares the code
 path of any other fled battle.
@@ -518,7 +517,15 @@ Still to do:
 - NPCs and items. Anything the DG script sets persists on shared cards and must
   be inert with the mod off. Audit trigger ids with `tools/scan_trigger_ids.py`, but
   it sees only scripts, so it calls the bands C owns free (`docs/GAME.md` 4.8). Ids
-  627-639 and 641-649 are free of scripts, C and plugins
+  631-639 and 641-649 are free of scripts, C and plugins (627-630 are the new maps')
+
+**The boss's reward.** The glade's win path pays 3 Omni Disks once, with the factory's script ops: `gen_newmap.py`'s
+`boss_script` and `gen_factory.py`'s `boss_section` both end in `reward_tail` (`tools/newmap_engine.py`), which emits
+the IF on the flag, the gives, the paid box and the rollbacks, so the two cannot drift apart (the factory's package
+is byte-identical to before the move). The flag is trigger 630 (`REWARD_TRIGGER`; GAME.md 4.8, 6.2, 7.17). The
+text's item name is read from the disc's `ITEM_PARA` at generation; `gen_newmap_dw15.py`'s `glade_checks` asserts the
+1.5 image names the id the same, so `glade-15` uses the same `glade.dg` (copied as an overlay, as the factory's
+scripts are; no guard on 1.5's DG.SCN is needed). `verify_newmap.py reward` and `off --card reward` prove it.
 - foreground sprites for the rocks, stump and log (their collision comes from
   the painting, so a sprite would need the painted footprint)
 
@@ -535,7 +542,7 @@ New maps beyond the stock file table need no table rows and no overlay patches.
   that misses, `dw_ws_sliver.c` looks the name up in the same table and reads the TFS by sector (through a bounce buffer
   when the destination is smaller than the whole sectors).
 - **Scripts by id.** `dw_newmaps.c` also filters `getScript` (0x80106218, `src/main/script_interp.c:647`) for plans that
-  include `dw.newmaps.factory`. For an id listed in `dw_newmaps_scripts.inc` (`{id, lba, size}`, whole sectors) and not
+  include `dw.newmaps.factory` or the glade (`dw.newmaps`, id 231). For an id listed in `dw_newmaps_scripts.inc` (`{id, lba, size}`, whole sectors) and not
   already `ACTIVE_MAP_SCRIPT`, it reads the sectors with `psx_mod_read_disc_sectors`, copies them into the buffer
   `MAP_SCRIPT_PTR` names, sets `ACTIVE_MAP_SCRIPT` and returns the buffer; a cached id and any other id run the stock
   body. A failed read fails closed: the stock body would read DG.SCN's table past its end, so the hook writes an empty
@@ -606,7 +613,7 @@ place (below).
   arrival walking back, two rows in front of the doorway, and cell 112 leads on to the next screen's exit 0. AFAC4 has no
   slot 2. Arrivals stay two cells off their strips.
 - **Disc layout.** MMM.DAT from sector 0: AFAC1.MAP, AFAC1.TFS, ... AFAC4.TFS, then the DG scripts, one sector each at
-  sectors 1011-1014, served as ids 227-230 by the `getScript` hook (3.3).
+  sectors 1011-1014, served as ids 227-230 by the `getScript` hook (3.3); the glade's script is id 231 at sector 1015.
   Each script is a section table: the arrival section 0xFE (`1E 00 FA 00 FE 00`, see the fights below), one talk section
   per fighter, and on AFAC4 the boss's. The MAPHEAD sections (bind the script, pstat 0xF5 = 0, `5D 16` as FACT01, the
   screen's LOAD_DIGIMON and SET_DIGIMON ops, end; 150 B in all, of the 180 B budget) follow the glade's section at 0x6084,

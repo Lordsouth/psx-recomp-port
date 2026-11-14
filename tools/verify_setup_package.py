@@ -204,7 +204,7 @@ MOD_PAYLOADS = {
     "mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.map":
         "858369ce8d5e3def667db4306889673d0e40a48a1b31a7af1c0b51a302519b74",
     "mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.dg":
-        "19115e350ac326fe4426e67628e178719be00d505364114ab53d2a6dde0f8b0b",
+        "cb57a6ed214ba9cfdde7c2393ae85ef605485b0cd7d8af6becf254dec22fe531",
     "mods/preloaded/packages/dw.newmaps/1.0.0/assets/glade.tfs":
         "11a3c9fbf3743f9452f9808266dbe524477924b120ec23f4008bf15288a130d8",
     "mods/preloaded/packages/dw.newmaps.factory/1.0.0/assets/afac1.dg":

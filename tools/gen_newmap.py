@@ -18,7 +18,8 @@ them. The scene drives all outputs, so they cannot drift apart:
   * the 100x100 collision grid: floor where the scene says ground, blocked under
     props, the pond and anything outside the painted frame, and blocked wherever
     the painting shows something other than ground under a character's feet;
-  * the secret fight (BOSS, boss_script), in the entity block and DG script 118;
+  * the secret fight (BOSS, boss_script), in the entity block and script id 231 (MMM.DAT), which also pays the boss's one-time
+    reward (REWARD, trigger 630);
   * foreground sprites, cut from the art, so characters can walk behind foliage
     and trunks (backdrops always draw behind characters: anything without a
     sprite may not be walked behind);
@@ -44,6 +45,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import struct
 import sys
 
@@ -62,8 +64,11 @@ MAP_ENTRIES = 0x801292D4
 FILE_OFFSET_TABLE = 0x8011FE1C       # {sector, size, name*} per disc file: lookupFileTable resolves names here
 FLAGS = 0x80                         # sound bank 0 (Native Forest), time of day on, map-Digimon format
 LOADING_NAME = 0                     # "Native Forest" on the arrival card
-SCRIPT = 118                         # DG slot we rewrite (boss_script). Stock it is one bare END section, which stays:
-                                     # no arrival side effects, and row 122, the other map bound to it, plays on
+SCRIPT = 231                         # the glade's script id: getScript serves it from MMM.DAT (dw_newmaps.c), after the
+                                     # factory's 227-230, so no DG.SCN byte is written, stock or 1.5 (a guard on 1.5's
+                                     # slot would have to repeat that much of 1.5's own script text)
+MMM_LBA, MMM_SECTORS = 148668, 13500 # docs/GAME.md 2.3
+SCRIPT_SECTOR = 1015                 # in MMM.DAT, right after the factory's four (gen_factory.py asserts it fits)
 BGM, BGM_PSTAT = 0x01, 0             # the Native Forest theme, day/night variants as MAYO01/02
 MH_NEW, MH_BUFFER = 0x6070, 0x61A8   # MAPHEAD.SCN ends at 0x606E; MAPHEAD_SCRIPT_BUFFER size
 # The entrance: on Native Forest's north edge a lit lane runs on between the bushes, over a notch of floor.
@@ -91,6 +96,14 @@ BOSS = struct.pack("<45h", BOSS_SPECIES, 2, *BOSS_AT,  # type, followMode 2 (tur
                    1, 0, -1, -1, -1, -1, -1, -1, -1,   # one AI step, a wait, whose count is the next word
                    *BOSS_AT)
 BOSS_LINES = ("So you found my glade.", "Show me your strength!")   # at most 28 characters each
+# The boss's one-time reward (docs/GAME.md 6.2, shared with the factory through E.reward_tail): 3 Omni Disks, item 18 of
+# ITEM_PARA. REWARD_TRIGGER is set once they are in the bag (trigger 630, docs/GAME.md 4.8). The name in the text box is
+# read from the disc's item table (ITEM_PARA, 32 B records) at generation time; main asserts item 18 against dw_decomp's
+# ITEM_PARA_NAME, and gen_newmap_dw15.py checks the 1.5 image names it the same.
+REWARD_TRIGGER = 630
+REWARD = ((18, 3),)
+ITEM_PARA = 0x801269DC
+PAID_LINES = lambda name: ("The glade falls quiet.", "Got %s x%d!" % (name, REWARD[0][1]))
 
 PAINT = (6, 5)                       # the frame the art is painted in (768 x 640) ...
 GW, GH = 6, 4                        # ... and the backdrop, its centre crop: 768 x 512, 24 tiles. Six fewer
@@ -246,13 +259,14 @@ def shore_spot(grid):
     return best
 
 
-def boss_script():
+def boss_script(item_name):
     """The glade's DG script: section table, the bare END section map arrival runs, the boss's section.
     Text is fullwidth Shift-JIS. 1B 05 pauses the game (it must come first), 1A 00 shows the text and waits
-    for confirm, 27 00 closes the box, 67 00 01 00 waits a frame, 66 00 starts the battle, FE 00 ends."""
-    text = E.dialog_text(BOSS_LINES)
-    return (struct.pack("<6H", 12, 0xFE, 12, BOSS_DG_SECTION, 14, 0xFFFF) + b"\xfe\x00"
-            + bytes.fromhex("1b05 1a00") + text + bytes.fromhex("0d00 0000 2700 6700 0100 6600 fe00 ff00"))
+    for confirm, 27 00 closes the box, 67 00 01 00 waits a frame, 66 00 starts the battle. A flee or a loss never
+    comes back; a win runs E.reward_tail (the reward once, then FE 00 ends). item_name is item 18's, for the paid box."""
+    head = E.say(BOSS_DG_SECTION, BOSS_LINES) + bytes.fromhex("2700 6700 0100 6600")
+    table = struct.pack("<6H", 12, 0xFE, 12, BOSS_DG_SECTION, 14, 0xFFFF) + b"\xfe\x00"
+    return table + head + E.reward_tail(len(table) + len(head), REWARD_TRIGGER, REWARD, PAID_LINES(item_name))
 
 
 # ---- the glade as an engine Screen -----------------------------------------
@@ -411,11 +425,23 @@ def main():
         assert k < 1000, "MGEN17.MAP not found in FILE_OFFSET_TABLE"
     fte = FILE_OFFSET_TABLE + 12 * k
     assert struct.unpack_from("<2i", exe, ram(fte) + 12) == (slot + MAP_SECTORS, files[FILE + ".TFS"][1])
-    dg = rd("DG.SCN")
-    so = struct.unpack_from("<I", dg, 4 * SCRIPT)[0]
-    assert dg[so + 2:so + 8] == bytes.fromhex("fe000800ffff") and dg[so + 8:so + 10] == b"\xfe\x00"
-    dg_new = boss_script()
-    assert len(dg_new) <= struct.unpack_from("<I", dg, 4 * SCRIPT + 4)[0] - so, "the script must fit its DG slot"
+    assert files["MMM.DAT"] == (MMM_LBA, MMM_SECTORS * 2048)
+    assert struct.unpack_from("<I", rd("DG.SCN"), 222 * 4)[0] == files["DG.SCN"][1], "table[222] must be DG.SCN's size"
+    assert SCRIPT > 222, "the script id must be past DG.SCN's table"
+    cstr = lambda addr: exe[ram(addr):exe.index(b"\0", ram(addr))].decode("ascii")
+    item_name = cstr(ITEM_PARA + 32 * REWARD[0][0])
+    # the decomp sits beside the main checkout; a worktree under wt/ is one level deeper
+    item_c = next((c for c in (os.path.join(root, d, "dw_decomp", "src", "main", "item.c") for d in ("..", "../.."))
+                   if os.path.exists(c)), os.path.join(root, "..", "dw_decomp", "src", "main", "item.c"))
+    if os.path.exists(item_c):
+        para = re.findall(r"ITEM_PARA_NAME\((\w+)\)", open(item_c, encoding="utf-8").read().split("Item ITEM_PARA[128]")[1])
+        assert len(para) == 128 and para[REWARD[0][0]] == "STR_ITEM_NAME_OMNI_DISK", "REWARD is not the Omni Disk"
+    else:
+        print("no dw_decomp checkout at %s: the reward id is not checked against its ITEM_PARA_NAME" % item_c)
+
+    dg_new = boss_script(item_name)
+    assert len(dg_new) <= 0x4000 and sectors(dg_new) == 1, "the script must fit its one MMM.DAT sector (served as id %d)" % SCRIPT
+    assert not any(sector(f, MMM_LBA + SCRIPT_SECTOR)), "MMM.DAT sector %d is not zero" % SCRIPT_SECTOR
     mh = rd("MAPHEAD.SCN")
     p = 2
     while struct.unpack_from("<H", mh, p)[0] != ROW:
@@ -482,8 +508,9 @@ def main():
     # A file, not a [[patch]]: a patch must repeat the stock bytes it replaces, and these are live script bytecode.
     # The generator's asserts above and disc_sha256 guard the slot.
     assets["glade.dg"] = dg_new
-    out += ["# DG script %d: the arrival END, plus the boss's section" % SCRIPT, "[[overlay]]", 'feature = "glade"',
-            'target = "disc_user"', "offset = %d" % (files["DG.SCN"][0] * 2048 + so), 'file = "assets/glade.dg"',
+    out += ["# The boss's script, id %d, at MMM.DAT sector %d (LBA %d): dw_newmaps.c's getScript serves it "
+            "(dw_newmaps_scripts.inc)" % (SCRIPT, SCRIPT_SECTOR, MMM_LBA + SCRIPT_SECTOR), "[[overlay]]", 'feature = "glade"',
+            'target = "disc_user"', "offset = %d" % ((MMM_LBA + SCRIPT_SECTOR) * 2048), 'file = "assets/glade.dg"',
             'sha256 = "%s"' % hashlib.sha256(dg_new).hexdigest(), ""]
     patch = lambda target, where, old, new: ('target = "%s"\n%s = %s\nexpected = "%s"\nreplace = "%s"'
                                              % (target, "address" if target == "main_exe" else "offset",

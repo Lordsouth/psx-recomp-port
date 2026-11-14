@@ -44,13 +44,13 @@ offset = 81463296
 file = "assets/glade.tfs"
 sha256 = "11a3c9fbf3743f9452f9808266dbe524477924b120ec23f4008bf15288a130d8"
 
-# DG script 118: the arrival END, plus the boss's section
+# The boss's script, id 231, at MMM.DAT sector 1015 (LBA 149683): dw_newmaps.c's getScript serves it (dw_newmaps_scripts.inc)
 [[overlay]]
 feature = "glade"
 target = "disc_user"
-offset = 292370432
+offset = 306550784
 file = "assets/glade.dg"
-sha256 = "19115e350ac326fe4426e67628e178719be00d505364114ab53d2a6dde0f8b0b"
+sha256 = "cb57a6ed214ba9cfdde7c2393ae85ef605485b0cd7d8af6becf254dec22fe531"
 
 # MAP_ENTRIES[239] = MGEN17, 2 8bpp images
 [[patch]]
@@ -82,7 +82,7 @@ feature = "glade"
 target = "disc_user"
 offset = 292851824
 expected = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
-replace = "fb 00 76 00 ef 00 1e 00 f5 00 5d 01 46 3c 47 3c 00 00 fe 00"
+replace = "fb 00 e7 00 ef 00 1e 00 f5 00 5d 01 46 3c 47 3c 00 00 fe 00"
 
 # MAPHEAD section 239 -> 0x6070
 [[patch]]
@@ -193,13 +193,12 @@ offset = 81463296
 file = "assets/glade.tfs"
 sha256 = "11a3c9fbf3743f9452f9808266dbe524477924b120ec23f4008bf15288a130d8"
 
-# DG script 118 in 1.5's DG.SCN (LBA 162388): the arrival END, plus the boss's section
-[[patch]]
+[[overlay]]
 feature = "glade-15"
 target = "disc_user"
-offset = 332918784
-expected = "08 00 fe 00 08 00 ff ff fe 00 ff 00 08 00 fe 00 08 00 ff ff fe 00 ff 00 b8 00 07 00 fe 00 08 00 42 01 09 00 8a 01 0a 00 c2 01 0b 00 04 02 0c 00 2c 02 33 00 8c 02 34 00 c4 02 ff ff 24 00 6e 63 19 00 0b 00 6e 04 18 00 46 00 19 00 74 2c 23 00 13 00 24 00 6e 63 19 00 0b 00 6e 10 18 00 5c 00 19 00 74 2c 37 00 32 00 24 00 6e 63 19 00 0b 00 6e 06 18 00 72 00 19 00 74 2c 2f 00"
-replace = "0c 00 fe 00 0c 00 05 00 0e 00 ff ff fe 00 1b 05 1a 00 82 72 82 8f 81 40 82 99 82 8f 82 95 81 40 82 86 82 8f 82 95 82 8e 82 84 81 40 82 8d 82 99 81 40 82 87 82 8c 82 81 82 84 82 85 81 42 0d 00 82 72 82 88 82 8f 82 97 81 40 82 8d 82 85 81 40 82 99 82 8f 82 95 82 92 81 40 82 93 82 94 82 92 82 85 82 8e 82 87 82 94 82 88 81 49 0d 00 00 00 27 00 67 00 01 00 66 00 fe 00 ff 00"
+offset = 306550784
+file = "assets/glade.dg"
+sha256 = "cb57a6ed214ba9cfdde7c2393ae85ef605485b0cd7d8af6becf254dec22fe531"
 
 # copied
 [[patch]]
@@ -231,7 +230,7 @@ feature = "glade-15"
 target = "disc_user"
 offset = 292851934
 expected = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
-replace = "fb 00 76 00 ef 00 1e 00 f5 00 5d 01 46 3c 47 3c 00 00 fe 00"
+replace = "fb 00 e7 00 ef 00 1e 00 f5 00 5d 01 46 3c 47 3c 00 00 fe 00"
 
 # row 239's section pointer
 [[patch]]
