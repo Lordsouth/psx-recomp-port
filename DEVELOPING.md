@@ -83,7 +83,8 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file dw_ws_sliver.c --project-file dw_ws_world.c \
   --project-file dw_ws_weather.c --project-file dw_roster_flags.c \
   --project-file dw_roster.c --project-file dw_roster_data.inc \
-  --project-file dw_evolution.c \
+  --project-file dw_evolution.c --project-file dw_evolution.h \
+  --project-file dw_evoguide.c \
   --project-file dw_cheats.c --project-file dw_cheats_data.inc \
   --project-file dw_dw15.c --project-file dw_newmaps.c \
   --project-file dw_newmaps_files.c --project-file dw_newmaps_files.h \

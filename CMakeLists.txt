@@ -34,6 +34,8 @@ set(_dw_codegen_setup
     CODEGEN_SETUP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/dw_ws_backdrop.c"
                           "${CMAKE_CURRENT_SOURCE_DIR}/dw_roster.c"
                           "${CMAKE_CURRENT_SOURCE_DIR}/dw_evolution.c"
+                          "${CMAKE_CURRENT_SOURCE_DIR}/dw_evoguide.c"
+                          "${CMAKE_CURRENT_SOURCE_DIR}/dw_evoguide.c"
                           "${CMAKE_CURRENT_SOURCE_DIR}/dw_ws_camera.c"
                           "${CMAKE_CURRENT_SOURCE_DIR}/dw_ws_sliver.c"
                           "${CMAKE_CURRENT_SOURCE_DIR}/dw_ws_world.c"

@@ -1256,6 +1256,83 @@ file name inside a `dw15/` folder next to it). Activation runs after every
 launcher session and before the cards are opened, and the request is cleared
 once used, so a session with 1.5 off opens the stock cards.
 
+### 4.5 `dw.evoguide` — Evolution Guide
+
+**1 feature, no patches, no hooks, 1 plugin** (`dw.evoguide`, `dw_evoguide.c`),
+off by default. F2 or Select + L3 shows a panel with every evolution target of
+the partner, each requirement group the chooser scores (care mistakes, weight,
+stats, the one bonus condition) with the partner's value, the needed value and
+met or not, the groups met out of the three needed, the evolution timer against
+the level's threshold, and the target the chooser would return right now.
+
+**Reading.** The chooser lives in `dw_evolution.c` as `dw_evo_model()`
+(declared in `dw_evolution.h`): the dispatch thresholds 6/24/72/144
+(`partner_impl.c:2111-2122`), getInTraining/Rookie/Champion and
+`calculateRequirementScore` (`evolution.c:690-1036`), quirks included: the
+raised rule compares against the best so far, Rookie and Champion keep the
+stat total of a losing qualifier (GAME.md 12.2), the Rookie chooser falls back
+to Numemon at evoTimer 96, a qualifier with no stat requirement divides by zero
+(no `break` is emitted, so LO reads -1), and a Fresh partner gets
+`getFreshEvolutionTarget`'s mapping, which the native engine's replacement now
+shares (`dw_evo_fresh_target`). `hasDigimonRaised` is
+`dw_species_raised()` in `dw_roster_flags.c`, the one function both the roster's
+replacement and the model call, so the answer follows whichever bank is live.
+Nothing is written to guest memory. Closed, the plugin computes nothing.
+
+The four tables are found where the chooser finds them: each base is decoded
+from the `lui`/`addiu` pair the chooser itself executes, so the roster's arena
+copies (§4.1), Evolution Unbound's walls and any later rewrite are read without
+the guide knowing about them:
+
+| Table | Site (`lui`) | In |
+|---|---|---|
+| `EVO_REQ_DATA` | `0x800E26E4` | `calculateRequirementScore` |
+| `EVO_GAINS_DATA` (raised rule) | `0x800E2B18` | `calculateRequirementScore` |
+| `DIGIMON_DATA` (level, +0x1D; names) | `0x800E27A4` | `calculateRequirementScore` |
+| `EVO_PATHS_DATA` | `0x800E2F40` | `getChampionEvolutionTarget` |
+
+A site that is not a `lui` followed by an `addiu` or load off the same
+register, or a base outside RAM and the Expansion-1 arena, makes the panel say
+it is not available rather than guess.
+
+**Digimon World 1.5: unavailable.** 1.5 runs its own choosers (§4.4, seven
+targets per row, its own tables), which nobody here has transcribed. The gate
+is the item-drop roll's `lui` at `0x800ED2A0` (`0x8013` stock, `0x801F` on 1.5,
+the word the cheat engine already gates on); on 1.5 the panel shows one line,
+"Not available on Digimon World 1.5."
+
+**Drawing.** The framework's game HUD layer (`psx_host_set_hud_draw_cb`,
+OpenGL only; the overlay draw callback and the input sink belong to the
+in-game menu). The VBlank callback formats the model into text lines under a
+spin lock; the draw callback, on the GL thread, rasterises them with the
+public-domain font8x8 set that `host_osd.c` uses, uploads one texture and
+blends it at the largest integer scale that fits 92% of the window height and
+60% of its width, at the left edge, vertically centred. Its own GL objects are
+made on first draw and remade when the context changes; every piece of GL
+state it changes is read first and put back. No framework change.
+
+**Input, and no pause.** F2 comes from an SDL event watch (added once, from the
+pad transform, so SDL is up), which also sees the debug server's `host_key`.
+Select + L3 comes from a pad transform on player 1, so remaps and keyboard-as-
+pad count and the debug host pad layer reaches it; while both are held they
+read as released to the game, and otherwise the transform returns the stock
+pad. F9, the suggested key, is the framework's fast-forward toggle
+(`host_keymap.c`); F1-F5 are bound by nothing in the PSX runtime or recomp-ui,
+and Select + L3 by none of the framework's pad shortcuts (Select + R3 / R1 /
+L1). The game is not paused: the panel takes no input but its toggle, so
+nothing can leak, and the values move live. A pause would also need the toggle
+read inside the host pause loop, where neither the transform nor the VBlank
+runs. The transform's boot type is digital, as `game.toml` `[controller]
+default_mode`.
+
+**Tests.** Debug command `evoguide` (`mod_cmd`): `open`, `close`, `state`,
+`t <i>` (one target as JSON) and `lines` (the panel text).
+`tools/verify_evoguide.py` (phases `stock`, `roster`, `idle`, `dw15`) compares
+every target, value and met flag against its own Python transcription of the
+decomp reading guest memory, checks the panel's pick against the game's own
+`EVOLUTION_TARGET` after shaping the stats, and shoots the composed window at
+4:3, 16:9 and 21:9 with `present_shot`.
+
 ---
 
 ## 5. Widescreen
