@@ -40,6 +40,35 @@ def dialog_text(lines):
     return b"\x0d\x00".join(line.translate(wide).encode("shift_jis") for line in lines)
 
 
+FULL_LINES = ("Your bag is full.", "Make room and come back.")
+
+
+def jump_if_set(trigger, to):
+    """The IF of docs/GAME.md 4.3: jump to `to` (an offset from the script's start) when `trigger` is set."""
+    return b"\x19\x00\x01\x00" + struct.pack("<HHH", trigger, 0x18, to) + b"\x19\x00"
+
+
+def say(owner, lines):
+    """A box of `lines` from `owner` (docs/GAME.md 4.9, 4.10) that waits for a press."""
+    return bytes([0x1B, owner, 0x1A, 0]) + dialog_text(lines) + b"\x0d\x00\x00\x00"
+
+
+def reward_tail(at, trigger, items, paid_lines, full_lines=FULL_LINES):
+    """A boss's one-time reward, all or nothing (docs/GAME.md 6.2), for a section whose win path starts at offset `at`
+    (offsets are from the script's start). With `trigger` set it ends; otherwise each (item, amount) is given in turn
+    and a failed give jumps to the rollback for that position, which takes back what was given, says the bag is full
+    and ends with `trigger` still clear. Only when every give has worked does `trigger` get set and `paid_lines` show."""
+    paid = b"\x1c\x00" + struct.pack("<H", trigger) + say(0xFF, paid_lines) + b"\xfe\x00"
+    rollback = [b"".join(bytes([0x29, 0, item, n]) for item, n in items[:k]) + say(0xFF, full_lines) + b"\xfe\x00"
+                for k in range(len(items))]
+    give = lambda item, n, to: bytes([0x28, 0, item, n]) + jump_if_set(0, to)
+    end = at + len(jump_if_set(0, 0)) + len(give(0, 0, 0)) * len(items) + len(paid) - 2   # paid's FE 00
+    starts = [end + 2 + sum(map(len, rollback[:k])) for k in range(len(items))]
+    s = jump_if_set(trigger, end) + b"".join(give(item, n, to) for (item, n), to in zip(items, starts)) + paid
+    assert at + len(s) == end + 2 and s[end - at:] == b"\xfe\x00"
+    return s + b"".join(rollback)
+
+
 def _flat_albedo(x, z):
     col = np.zeros(np.shape(x) + (3,))
     col[:] = (104, 140, 60)

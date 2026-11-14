@@ -264,7 +264,7 @@ def paid_lines(reward_name):
     return ("The machines fall silent.", "Got %s and 6 chips!" % reward_name)
 
 
-FULL_LINES = ("Your bag is full.", "Make room and come back.")
+FULL_LINES = E.FULL_LINES
 ITEM_PARA = 0x801269DC               # 128 x 32 B, the name first (char[20], USA)
 
 
@@ -633,14 +633,7 @@ def talk_section(row, rec):
             + b"".join(bytes([0x1E, 0, 0xFB + k, v]) for k, v in enumerate(ids)) + b"\x66\x00" + win)
 
 
-def jump_if_set(trigger, to):
-    """The IF of docs/GAME.md 4.3: jump to `to` (an offset from the script's start) when `trigger` is set."""
-    return b"\x19\x00\x01\x00" + struct.pack("<HHH", trigger, 0x18, to) + b"\x19\x00"
-
-
-def say(owner, lines):
-    """A box of `lines` from `owner` (docs/GAME.md 4.9, 4.10) that waits for a press."""
-    return bytes([0x1B, owner, 0x1A, 0]) + E.dialog_text(lines) + b"\x0d\x00\x00\x00"
+jump_if_set, say = E.jump_if_set, E.say        # shared with gen_newmap.py's glade
 
 
 def boss_section(rec, at, reward_name=REWARD_NAMES[0][1]):
@@ -649,18 +642,10 @@ def boss_section(rec, at, reward_name=REWARD_NAMES[0][1]):
     music). A flee or a loss never comes back here. A win pays the reward once, all or nothing (docs/GAME.md 6.2): with
     trigger 629 set it ends; otherwise each item is given (GIVE_ITEM sets trigger 0 when the bag cannot take it, clears it
     when it can) and a failed give jumps to the rollback for that position, which takes back the items already given,
-    says the bag is full and ends with 629 still clear. Only when all seven are in does 629 get set. reward_name is
-    item 127's name in the paid line (1.5 renames the item)."""
+    says the bag is full and ends with 629 still clear. Only when all seven are in does 629 get set (E.reward_tail,
+    shared with the glade). reward_name is item 127's name in the paid line (1.5 renames the item)."""
     head = say(rec.script_id, [LINES[rec.species]]) + bytes.fromhex("2700 6700 0100 6600")
-    paid = b"\x1c\x00" + struct.pack("<H", REWARD_TRIGGER) + say(0xFF, paid_lines(reward_name)) + b"\xfe\x00"
-    rollback = [b"".join(bytes([0x29, 0, item, 1]) for item in REWARD[:k]) + say(0xFF, FULL_LINES) + b"\xfe\x00"
-                for k in range(len(REWARD))]
-    give = lambda item, to: bytes([0x28, 0, item, 1]) + jump_if_set(0, to)
-    end = at + len(head) + len(jump_if_set(0, 0)) + len(give(0, 0)) * len(REWARD) + len(paid) - 2   # paid's FE 00
-    starts = [end + 2 + sum(map(len, rollback[:k])) for k in range(len(REWARD))]
-    s = head + jump_if_set(REWARD_TRIGGER, end) + b"".join(give(item, to) for item, to in zip(REWARD, starts)) + paid
-    assert at + len(s) == end + 2 and s[end - at:] == b"\xfe\x00"
-    return s + b"".join(rollback)
+    return head + E.reward_tail(at + len(head), REWARD_TRIGGER, [(item, 1) for item in REWARD], paid_lines(reward_name))
 
 
 def dg_script(i, reward_name=REWARD_NAMES[0][1]):

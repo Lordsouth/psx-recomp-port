@@ -21,6 +21,11 @@
           HP is poked so the outcome is the one under test: the numbers are not
           judged here. --wide does it at 21:9 with the Expanded Roster on.
           --brains N checks Battle End Freeze Fix on the win (docs/GAME.md 12.1)
+    reward (glade) fresh sandbox card, HP poked as fight does: the boss's one-time reward (gen_newmap.py REWARD,
+          docs/GAME.md 6.2). A first win with a full bag takes nothing and leaves the flag clear; the next win
+          with room pays (bag read from guest memory, flag set, paid box in the script that ran); the one after
+          pays nothing. Saves on the glade and keeps that card: `off --card reward` loads it on the stock game
+          with the flag and the items still on it
     --dw15 runs a mode on Digimon World 1.5, where the glade runs its 1.5 edition
     --with-factory also ticks the Abandoned Factory (factory-15 on 1.5), so both new maps are on
     measure (glade) a real fight: the partner evolved and set to --stats, then nothing
@@ -33,6 +38,8 @@
     py -3.12 tools/verify_newmap.py off --map glade --card glade
     py -3.12 tools/verify_newmap.py off --map glade --card host
     py -3.12 tools/verify_newmap.py fight --map glade --seed <card dir> [--wide]
+    py -3.12 tools/verify_newmap.py reward --map glade --seed <card dir> [--dw15]
+    py -3.12 tools/verify_newmap.py off --map glade --card reward
 
 The seed is any card dir whose slot 1 holds a Digimon World file; a never-saved
 New Game file plays Jijimon's intro first, which this drives through. It writes
@@ -52,11 +59,15 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game  # noqa: E402
+import newmap_engine as E  # noqa: E402
+from gen_newmap import PAID_LINES, REWARD, REWARD_TRIGGER  # noqa: E402
 from field_drive import (  # noqa: E402
     Field, UP, TAMER, NPC0, CAMERA, IS_SCRIPT_PAUSED, PREVIOUS_SCREEN, CURRENT_EXIT, NPC_ON_MAP,
     NPC_STATS, PARTNER_STATS, HOUR, CURRENT_FRAME)
 
 
+MAP_SCRIPT_BUFFER = 0x801B9ED8                    # the screen's DG script, 0x4000 B (docs/GAME.md 4.1)
+ITEM_PARA = 0x801269DC                            # the item table, 32 B each, the name first
 ROW_122 = 122                                     # the other map bound to DG script 118 (TUNN07_2)
 HOST_EXIT = (1858, -1142)                         # Coela Point's east-exit spawn
 STATE = ('format_version = 2\n\n[[package]]\nid = "%s"\nversion = "1.0.0"\n\n'
@@ -87,7 +98,7 @@ ROWS = {"spike": 239, "glade": 239}
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=("run1", "run2", "off", "fight", "measure"))
+    ap.add_argument("mode", choices=("run1", "run2", "off", "fight", "measure", "reward"))
     ap.add_argument("--stats", default="5500,5000,600,600,450,450", help="measure: partner HP, MP, off, def, speed, brains")
     ap.add_argument("--heal", type=int, default=0, help="measure: stand-in for N recovery items, +5000 HP each below 2500")
     ap.add_argument("--brains", type=int, help="fight: the partner's Brains going in, so the win's gain crosses a threshold")
@@ -97,7 +108,7 @@ def main():
     ap.add_argument("--dw15", action="store_true",
                     help="on Digimon World 1.5: the map runs its 1.5 edition, glade-15; cards live in dw15/")
     ap.add_argument("--with-factory", action="store_true", help="the Abandoned Factory ticked too (factory-15 on 1.5)")
-    ap.add_argument("--card", choices=("glade", "host"), default="glade", help="off: which saved card to load")
+    ap.add_argument("--card", choices=("glade", "host", "reward"), default="glade", help="off: which saved card to load")
     ap.add_argument("--map", choices=sorted(MAPS), default="glade")
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
     ap.add_argument("--port", type=int, default=4430)
@@ -122,7 +133,7 @@ def main():
                 print("%s in %s is stale: rebuild to stage what gen_newmap.py wrote" % (name, pkg_dir), file=sys.stderr)
                 return 2
     out = os.path.join(a.build, "newmap_%s" % a.map)
-    cards = os.path.join(out, "cards_fight" if a.mode in ("fight", "measure") else "cards")    # run2 needs run1's
+    cards = os.path.join(out, "cards_fight" if a.mode in ("fight", "measure", "reward") else "cards")    # run2 needs run1's
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
         fh.write("format_version = 2\n" if a.mode == "off" else STATE % (mp["package"], mp["package"], mp["feature"])
@@ -132,7 +143,7 @@ def main():
     if a.mode == "off":                                # a copy of the card that save was left on
         shutil.rmtree(cards, ignore_errors=True)
         shutil.copytree(os.path.join(out, "cards_" + a.card), cards)
-    if a.mode in ("run1", "fight", "measure"):
+    if a.mode in ("run1", "fight", "measure", "reward"):
         shutil.rmtree(cards, ignore_errors=True)
         os.makedirs(card_dir)
         for name in ("card1.mcd", "card2.mcd"):
@@ -376,6 +387,63 @@ def main():
         check(screen() == ROW_122 and gstate() == 0 and g.d.frame() > f0 + 60, "map %d still plays" % ROW_122)
         shot("row122")
 
+    def reward():
+        item, n = REWARD[0]
+        name = g.d.read(ITEM_PARA + 32 * item, 20).split(b"\0")[0].decode("ascii")      # as the game names it
+        paid, full = E.dialog_text(PAID_LINES(name)), E.dialog_text(E.FULL_LINES)
+        counts = lambda b: {t: k for t, k in zip(b[:30], b[30:60]) if t != 0xFF}
+        ran = lambda text: text in g.d.read(MAP_SCRIPT_BUFFER, 0x4000)
+
+        def stop():
+            if fails:
+                raise SystemExit("RESULT newmap glade reward: FAIL %s" % fails)
+
+        def won(bag):
+            """The bag set to `bag` (None: as it is), the boss fought and beaten: the bag before and after."""
+            if bag is not None:
+                f.set_bag(bag)
+            before = f.bag()
+            talk(vec)
+            win()
+            stop()
+            return before, f.bag()
+
+        def again(bag):
+            walk_out()
+            wait_for(lambda: i32(IS_SCRIPT_PAUSED) == 1, 20)
+            g.advance(60)
+            walk_in()
+            boss_fresh("on the next visit")
+            stop()
+            return won(bag)
+
+        g.warp(mp["host_row"], spec["host"]["exit"])
+        walk_in()
+        boss_fresh("on arrival")
+        vec = calibrate()
+        size = f.bag()[90]
+        check(size >= 2 and not f.trigger(REWARD_TRIGGER) and item not in counts(f.bag()),
+              "a fresh card: bag size %d, no item %d, trigger %d clear" % (size, item, REWARD_TRIGGER))
+        stop()
+        fillers = [(t, 1) for t in range(128) if t != item][:size]
+        before, after = won(fillers)                   # a full bag
+        check(after == before and not f.trigger(REWARD_TRIGGER) and ran(full),
+              "first win, bag full: the bag is as it was (%s), trigger %d clear, the script that ran holds the full box"
+              % ("same" if after == before else counts(after), REWARD_TRIGGER))
+        stop()
+        before, after = again(fillers[:size - 1])      # one free slot
+        check(counts(after) == {**counts(before), item: n} and f.trigger(REWARD_TRIGGER) and ran(paid),
+              "next win, room: %d of item %d arrived (bag %s -> %s), trigger %d set, the paid box reads %r"
+              % (n, item, counts(before), counts(after), REWARD_TRIGGER, PAID_LINES(name)))
+        stop()
+        before, after = again(None)
+        check(after == before and f.trigger(REWARD_TRIGGER),
+              "second win: nothing more (%s), trigger %d still set" % ("bag the same" if after == before else counts(after),
+                                                                       REWARD_TRIGGER))
+        stop()
+        save_here()
+        keep_card("reward")
+
     def save_here(on_new_map=True, anywhere=False):
         def judge(s0, main_state, at):
             px, py, pz = at
@@ -409,6 +477,9 @@ def main():
             p = pos(TAMER)
             shot("off_" + a.card)
             check(g.map_record(239)["file"] == "", "the mod is off: row 239 is empty")
+            if a.card == "reward":                     # nothing on the card depends on the mod: flag and items are plain save data
+                check(f.trigger(REWARD_TRIGGER) and REWARD[0][0] in f.bag()[:30],
+                      "the card keeps trigger %d and item %d with the mod off" % (REWARD_TRIGGER, REWARD[0][0]))
             check(screen() == spec["host"]["row"], "Continue lands on the stock map %d" % spec["host"]["row"])
             check(p is not None and abs(p[0] - saved[0]) < 60 and abs(p[2] - saved[2]) < 60,
                   "at the saved position %s (now %s)" % (saved, p))
@@ -424,6 +495,8 @@ def main():
             measure_fight()
         elif a.mode == "fight":
             fight()
+        elif a.mode == "reward":
+            reward()
         elif a.mode == "run1":
             if a.map == "glade":
                 g.warp(mp["host_row"], spec["host"]["exit"])

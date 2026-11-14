@@ -76,13 +76,26 @@ def factory_checks(disc, exe):
     return problems
 
 
+def glade_checks(disc, exe):
+    """The boss's reward is the item the glade's paid line names: 1.5's table calls that id the same (the line is built
+    from the stock disc's name, and the glade's script is the same bytes on both editions)."""
+    import newmap_engine as E
+    from gen_newmap import ITEM_PARA, PAID_LINES, REWARD
+    name = bytes(exe.ram[ITEM_PARA - RAM_BASE + 32 * REWARD[0][0]:][:20]).split(b"\0")[0].decode("ascii", "replace")
+    script = open(os.path.join(PKGS, "dw.newmaps", "1.0.0", "assets", "glade.dg"), "rb").read()
+    if E.dialog_text(PAID_LINES(name)) not in script:
+        return ["item %d is %r on 1.5: the glade's paid line does not read it" % (REWARD[0][0], name)]
+    return []
+
+
 # Per package: its manifest, the feature and its edition, the edition's plugin, the asset swaps, the DG slot whose
 # overlay becomes a DG.SCN patch (glade), whose section the MAPHEAD tail follows (None: 1.5's own), how a moved
 # section is rebuilt (None: its bytes hold no offsets), and package-specific checks.
 SPECS = {
     "glade": dict(
         manifest=os.path.join(PKGS, "dw.newmaps", "1.0.0", "manifest.toml"), feature="glade", edition="glade-15",
-        name="Hidden Glade (1.5)", plugin="dw.newmaps", swaps={}, dg_slot=118, mh_after=None, sections=None, checks=None,
+        name="Hidden Glade (1.5)", plugin="dw.newmaps", swaps={}, dg_slot=118, mh_after=None, sections=None,
+        checks=glade_checks,
         description="Hidden Glade on Digimon World 1.5: the same map and fight, written where 1.5 keeps the files it "
                     "moved. It runs by itself in place of Hidden Glade while 1.5 is on."),
     "factory": dict(

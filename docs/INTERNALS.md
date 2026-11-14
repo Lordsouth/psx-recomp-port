@@ -517,7 +517,15 @@ Still to do:
 - NPCs and items. Anything the DG script sets persists on shared cards and must
   be inert with the mod off. Audit trigger ids with `tools/scan_trigger_ids.py`, but
   it sees only scripts, so it calls the bands C owns free (`docs/GAME.md` 4.8). Ids
-  627-639 and 641-649 are free of scripts, C and plugins
+  631-639 and 641-649 are free of scripts, C and plugins (627-630 are the new maps')
+
+**The boss's reward.** The glade's win path pays 3 Omni Disks once, with the factory's script ops: `gen_newmap.py`'s
+`boss_script` and `gen_factory.py`'s `boss_section` both end in `reward_tail` (`tools/newmap_engine.py`), which emits
+the IF on the flag, the gives, the paid box and the rollbacks, so the two cannot drift apart (the factory's package
+is byte-identical to before the move). The flag is trigger 630 (`REWARD_TRIGGER`; GAME.md 4.8, 6.2, 7.17). The
+text's item name is read from the disc's `ITEM_PARA` at generation; `gen_newmap_dw15.py`'s `glade_checks` asserts the
+1.5 image names the id the same, so `glade-15` uses the same `glade.dg` (rewritten into 1.5's DG.SCN slot as before;
+the script grew from 124 B to 336 B of the slot's 2048 B). `verify_newmap.py reward` and `off --card reward` prove it.
 - foreground sprites for the rocks, stump and log (their collision comes from
   the painting, so a sprite would need the painted footprint)
 

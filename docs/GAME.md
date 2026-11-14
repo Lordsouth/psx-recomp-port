@@ -553,7 +553,9 @@ so it calls the bands C owns free.
 | 640; 650..716 | Energy threshold met (`src/main/partner_impl.c:1546-1548`); chests opened. 716 is the top id any stock script names |
 | 717..799 | **The Expanded Roster's raised flags**, 0x2CD + species - 63 (`dw_roster_flags.c:33-38`). Cards are shared, so a flag here marks a species raised. Horizon's allocator calls 717..788 free: not in this port |
 
-For a new flag use **630..639 or 641..649** (627..629 are the factory's): no decoded script, C constant, computed path or plugin reaches them, so they stay
+| 630 | The Hidden Glade's reward paid (`REWARD_TRIGGER` in `tools/gen_newmap.py`): set in the glade boss's win path once the three Omni Disks are in the bag, tested at the start of that path so later wins pay bits only (6.2). The boss comes back on every visit. A card that has it set loads and plays on the stock game, which never reads the id [run: `verify_newmap.py reward`, then `off --card reward`, see 7.17] |
+
+For a new flag use **631..639 or 641..649** (627..630 are the new maps'): no decoded script, C constant, computed path or plugin reaches them, so they stay
 inert on a shared card with the mod off [not run]. `hasDigimonRaised` reaches them only for species 115 up, which stock never asks.
 
 ### 4.9 Text
@@ -710,7 +712,7 @@ FE 00  FF 00                              end of section; end of file
 `1C 00 tt tt` straight after `66 00`: a flee and a loss never return there (`src/main/script_interp.c:1919-1941`). To hide the NPC
 afterwards, wrap `46`, `47` in the row section with the IF in 4.3, 12 bytes of MAPHEAD's tail.
 - **Trap: flags that pollute cups.** Not 200..311: a flag there joins arena pools and raises cup unlock counts. The obvious 260 (200 +
-  60) also joins the Ultimate lists in cup scripts. Not 717..799: those mark roster species raised. Use 627..639 or 641..649 (4.8).
+  60) also joins the Ultimate lists in cup scripts. Not 717..799: those mark roster species raised. Use 631..639 or 641..649 (4.8; 627..630 are the new maps').
 
 **8. Generate and test.** Run `tools/gen_newmap.py`, update `MOD_PAYLOADS` in `tools/verify_setup_package.py`, rebuild to stage the package,
 then `tools/verify_newmap.py fight --map glade --seed <card dir> [--wide]`. `fight` proves that standing by the boss starts nothing, confirm
@@ -739,7 +741,7 @@ A fight of a group: each member's talk section is the same, `1B id`, one line, `
 ### 6.2 A reward paid once, all or nothing
 `GIVE_ITEM` (`28 00 item amount`) sets trigger 0 when `giveItem` fails and clears it when it succeeds, every time (`src/main/script_interp.c:1106-1113`), so nothing need clear trigger 0 before a give. `giveItem` stacks onto the item's slot if the bag has one, failing only when that stack is at 99; otherwise it takes the first free slot (type 0xFF) and the first unused name index, failing when none is free (`src/main/item.c:2562-2614`). So a bag with free slots can still fail a give, when the player already holds 99 of that item: the factory's "Your bag is full." is then the wrong cause, and the reward can't be taken until that stack is used [inferred from the code, not run]. `REMOVE_ITEM` (`29 00 item amount`, `src/main/script_interp.c:1115-1118`) takes the amount off that stack and frees the slot when it reaches 0, type and name back to 0xFF, amount 0 (`src/main/item.c:2616-2637`). So taking back what was given leaves the bag byte for byte as it was. The bag is `INVENTORY` 0x8013D474: types[30], amounts[30], names[30], then the size u8 (`include/dw/item.h:39-48`, `config/us/symbols.txt`); only slots below the size are used.
 
-Stock gives one item and, on a failure, says the bag is full, opens the discard menu (routine 0, `openDiscardItem`, `src/main/script_interp.c:423-425`) and gives again. For several items as one reward, Machinedramon's win path (`boss_section` in `tools/gen_factory.py`):
+Stock gives one item and, on a failure, says the bag is full, opens the discard menu (routine 0, `openDiscardItem`, `src/main/script_interp.c:423-425`) and gives again. For several items as one reward, Machinedramon's win path (`boss_section` in `tools/gen_factory.py`; the bytes come from `reward_tail` in `tools/newmap_engine.py`, which the glade boss uses too, 7.17):
 ```
 19 00 01 00 75 02 18 00 end 19 00       IF trigger 629 is set, jump to the end: paid already, a win pays bits only
 28 00 item 01  19 00 01 00 00 00 18 00 rb_k 19 00    per item k: give it; if trigger 0 is set, jump to rollback k
@@ -1038,6 +1040,7 @@ Records are re-read on every map load, so a record's `curHP` below HP applies ag
 - **Hit rolls, acc 80:** it hits a defender of Speed 450 at 65 % moving, 62 % standing, and of Speed 999 at 43 % and 36 %. A Speed 450 attacker hits it at 61 % and 58 %. After Dive or Bug its buffer is -155, so every hit lands for 52 ticks; it takes 86 ticks to reach 100.
 - **Its element sums:** Ice 50, Fire 45, Battle 35, Air 35, Nature 30, Mech 30, Filth 22. Off 600 with a 500-power Battle tech deals 482..589 to it. Poison on it is 88..264 per 100 ticks, about 35 HP/s.
 - **A win** against the default partner of `measure` (5500/5000/600/600/450/450) pays HP +2, MP +4, Off +2, Def +2, Speed +2, Brains +1 at 88 %, 5000 bits and item 0 at 10 %. Learning chances by special slot: Dive 16, 7, 0; Bug 12, 8, 0; Plague 24, 16, 13.
+- **The first win pays 3 Omni Disks, once** (`REWARD`, `reward_tail` in `tools/newmap_engine.py`, the factory's mechanism of 6.2 with one give). Item 18, `Omni Disk` on both the stock disc and 1.5, a Disk of the 0x0F..0x15 band that adds a flat 20 to Off, Def and Speed with no per-battle cap (`src/main/main.c:4354`, case 0x12; 999 still holds, 12.2). It is picked to be useful for the fight it rewards (the boss is tuned for a near-maxed partner) without being the factory's rarer prize (Metalbanana and six chips; the glade boss is 18.8 points easier than Machinedramon's 62.0 % in the sim). The DG script (slot 118, 336 B of its 2048 B) tests trigger 630 first and ends if it is set; else it gives item 18 x3, and a failed give (no free slot, or a full stack) says "Your bag is full." and leaves 630 clear for a later win; else it sets 630 and says "Got Omni Disk x3!". The name is read from the disc's item table at generation. [run: `verify_newmap.py reward`: with the bag full a first win left the bag byte for byte as it was and 630 clear; with one free slot the next win put 3 of item 18 in the bag and set 630; the one after changed nothing; the card saved after it loaded on the stock game with 630 and the items on it, `off --card reward`] Not run: a stack of item 18 already at 99 (read from `giveItem`, [inferred]).
 - **Flee point** (3400, 0, 1150) is only a bearing. From wherever the fight ended it heads east, or west if it stands east of x=3400, through whatever is in the way. [inferred]
 - **Repeats:** 5000 bits beats its item cost, as heals of 500, 1500, 5000, 9999 HP cost 100, 500, 1000, 2500 bits (`src/main/item.c:745-781,2064`), and a partner just below a Brains threshold can hit the end box freeze (12.1). [run]
 
