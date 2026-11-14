@@ -57,6 +57,9 @@ OFF_STD_ICONS = 0x5000
 # encode a positive lo16, so every offset must also stay below 0x8000.
 ARENA_SIZE = 0x8000
 assert OFF_STD_GLYPH + N_TYPES * 14 <= OFF_STD_ICONS
+# The evolution overlay's shard area (sdd/train, OFF_EVL_SHARDS) starts at 0x5100 and
+# runs to the arena's end: the icon table must stay below it.
+assert OFF_STD_ICONS + N_TYPES <= 0x5100, "STD icons overlap the EVL shard area at 0x5100"
 _ARENA_END = OFF_STD_ICONS + N_TYPES
 assert _ARENA_END <= ARENA_SIZE and _ARENA_END < 0x8000, _ARENA_END
 
@@ -1195,11 +1198,11 @@ def main():
     assert len(stock_train) == 136 and len(stock_trn2) == 136
     stock_glyph = ovl_stock("STD_NAME_GLYPHS")
     assert len(stock_glyph) == 112 * 14
-    icons = bytearray(ovl_stock("STD_PROJ_ICONS"))
-    assert len(icons) == 112
-    icons += bytes(N_TYPES - 112)
-    for t, donor in STD_ICON_DONORS.items():
-        icons[t] = icons[donor]
+    assert len(ovl_stock("STD_PROJ_ICONS")) == 112
+    # Not baked: the plugin copies STD's own table while STD is resident (the
+    # retarget only moves the four references, so the stock table stays in place).
+    icon_lui = min(lv for fn, n, lv, _lw, _lo, _low, _t in ovl_sites
+                   if n == "STD_PROJ_ICONS")
 
     # Battle-banner names for the two types that overran the table.
     #
@@ -1347,11 +1350,14 @@ def main():
         % ", ".join("0x%02X" % b for b in AUTHORED["glyph_113"]),
         "#define ROSTER_OFF_STD_GLYPH 0x%04Xu" % OFF_STD_GLYPH,
         "",
-        "/* Cup bracket projectile icons, all 180 types: the 112 stock bytes, then",
-        " * donor rows for 112-114 (STD_ICON_DONORS). Baked for the same reason. */",
-        "static const unsigned char k_std_icons[%d] = { %s };"
-        % (len(icons), ", ".join("0x%02X" % b for b in icons)),
+        "/* Cup bracket projectile icons. Copied at run time from STD's own",
+        " * 112-entry table while STD is resident (its first retargeted lui reads",
+        " * 0x9F00), then the donor rows {type, donor} for 112-114. */",
         "#define ROSTER_OFF_STD_ICONS 0x%04Xu" % OFF_STD_ICONS,
+        "#define ROSTER_STD_ICONS_SRC 0x%08Xu" % OVL_RELOC["STD_PROJ_ICONS"][2],
+        "#define ROSTER_STD_ICONS_LUI 0x%08Xu" % icon_lui,
+        "static const unsigned char k_std_icon_donors[%d][2] = { %s };"
+        % (len(STD_ICON_DONORS), ", ".join("{ %d, %d }" % kv for kv in sorted(STD_ICON_DONORS.items()))),
         "",
         "/* Newly raisable species. One row each; the plugin walks this table",
         " * so adding a species is a generator edit, not a plugin edit.",

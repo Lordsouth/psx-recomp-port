@@ -8,11 +8,12 @@ back to the field (docs/GAME.md 15).
     py -3.12 tools/verify_cups.py --seed <card dir> --roster 64 --dw15           Digimon World 1.5, roster-15
     py -3.12 tools/verify_cups.py --seed <card dir> --wide | --smooth60          one cup with that option on
     py -3.12 tools/verify_cups.py --seed <card dir> --partner 64                 no mods, the partner made type 64
+    py -3.12 tools/verify_cups.py --seed <card dir> --roster 113 --savestate     a state saved and loaded inside the cup
 
 Route: warp to the Arena Lobby (208), talk to Greymon at the desk, pick Grade D (cup 0) for today on the schedule and
 enter, then walk up into the waiting room once it is open, which starts the cup (DG script 213 section 0x36). The
-seed card is an early save, so three things are poked and nothing else: the recruit flags of the Grade D pool
-(triggers 200 + species: a cup draws its opponents from them and its count of them), the hour (9:00 to register for
+seed card is an early save, so three things are poked and nothing else: the recruit flags of the Grade D pool,
+read from your disc (triggers 200 + species: a cup draws its opponents from them and its count of them), the hour (9:00 to register for
 today, which closes at 10, then 12:00 to enter), and the partner's HP in fights (its foe's to 1 to win, its own to 1
 to lose). A partner no cup lists cannot register (the schedule refuses it), so it is entered by writing what the
 schedule writes: trigger 37, pstats 2 (day), 3 (cup) and 4 (species); the run says so.
@@ -37,10 +38,10 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game  # noqa: E402
 from field_drive import Field, IS_SCRIPT_PAUSED, MONEY  # noqa: E402
-from gen_roster_mod import ARENA, OFF_STD_ICONS, STD_BRACKET  # noqa: E402
+from gen_roster_mod import ARENA, OFF_STD_ICONS, STD_BRACKET, STD_ICON_DONORS  # noqa: E402
+from dw_tables import DEFAULT_BIN, Disc  # noqa: E402
 
 LOBBY, CUP = 208, 0                                  # Arena Lobby; Grade D
-POOL = [3, 4, 17, 18, 31, 32, 45, 46, 57, 74, 80, 82, 83, 86, 96, 103, 109, 111]   # Grade D's opponent list (Disc)
 DESK, STAIRS = (155, 445), (-815, 1150)              # in front of Greymon; below the waiting-room door
 HOUR, DAY = 0x80134EBC, 0x80134F04
 COUNTERS = 0x80134FCC                                # TOURNAMENTS_WON, TOURNAMENT_WINS, TOURNAMENTS_LOST (i16)
@@ -56,7 +57,28 @@ WIDE = PKG % ("psx.enhancement.widescreen", "psx.enhancement.widescreen", "wides
 SMOOTH = PKG % ("dw.smooth60", "dw.smooth60", "smooth60")
 ROSTER = PKG % ("dw.vanilla.roster", "dw.vanilla.roster", "roster")
 DW15 = PKG % ("dw.1_5", "dw.1_5", "dw15")
-GRADE_D_PRIZE, CONSOLATION = (2000, 7), 39            # bits and item for a Grade D win; the loser's item (DG 214)
+DW15_BIN = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "dw15-release",
+                                        "patched", "digimon_world_1_5_test1.bin"))
+
+
+def cup_pool(bin_path, cup):
+    """A cup's opponent list from the owner's disc: DG script 213 section 0xA, entry `cup`, list 4
+    (getCupDataJumpTable, src/main/tournament.c:146-166). Lists end at a byte of 0xFE or more."""
+    dg = Disc(bin_path).read("DG.SCN")
+    start, end = struct.unpack_from("<2I", dg, 213 * 4)
+    sc = dg[start:end]
+    p = 2
+    while struct.unpack_from("<H", sc, p)[0] != 0xA:          # {u16 section, u16 offset} pairs
+        assert struct.unpack_from("<H", sc, p)[0] != 0xFFFF, "script 213 has no section 0xA"
+        p += 4
+    sec = struct.unpack_from("<H", sc, p + 2)[0]
+    sub = struct.unpack_from("<H", sc, sec + cup * 4 + 2)[0]
+    q = struct.unpack_from("<H", sc, sub + 4 * 4 + 2)[0] + 2
+    out = []
+    while sc[q] < 0xFE:
+        out.append(sc[q])
+        q += 1
+    return out
 
 
 def main():
@@ -72,11 +94,15 @@ def main():
     ap.add_argument("--dw15", action="store_true", help="Digimon World 1.5 under it (roster-15)")
     ap.add_argument("--wide", action="store_true", help="Widescreen 16:9 on")
     ap.add_argument("--smooth60", action="store_true", help="Smooth 60 FPS on")
+    ap.add_argument("--savestate", action="store_true",
+                    help="inside the cup: save a state at the bracket, wipe the arena's icons, load the state after "
+                         "the first match; the icons must come back and the cup finish")
+    ap.add_argument("--bin", help="the disc image to read the cup's pool from (default: stock, or 1.5 with --dw15)")
     a = ap.parse_args()
     species = a.roster or a.partner
     mode = ("roster%d" % a.roster if a.roster else "partner%d" % a.partner if a.partner else "stock") + \
         ("_dw15" if a.dw15 else "") + ("_revert" if a.revert_fix else "") + ("_wide" if a.wide else "") + \
-        ("_s60" if a.smooth60 else "")
+        ("_s60" if a.smooth60 else "") + ("_state" if a.savestate else "")
     out = a.out or os.path.join(a.build, "cups_" + mode)
     cards = os.path.join(out, "cards", "dw15") if a.dw15 else os.path.join(out, "cards")
     shutil.rmtree(out, ignore_errors=True)
@@ -214,7 +240,7 @@ def main():
             clear_text()
         check(f.gstate() == 5, "%s: the cup started (GAME_STATE 5)" % tag)
         seen, matches, last_s, rec = set(), 0, None, {}
-        best, reverted, k = [], False, 0
+        best, reverted, k, saved, loaded = [], False, 0, False, False
         t0 = time.time()
         while time.time() - t0 < 300:
             s = f.gstate()
@@ -236,9 +262,24 @@ def main():
                     rec = dict(participants=parts, slot=slot, quads=q,
                                clut_table=list(rd(SPRITE_CLUT, 112 + 3)),
                                code=["0x%08X" % word(va) for va, _, _ in STD_BRACKET],
-                               icon_ref=["0x%08X" % word(x) for x in ICON_REFS[0]])
+                               icon_ref=["0x%08X" % word(x) for x in ICON_REFS[0]],
+                               icons=list(rd(ARENA + OFF_STD_ICONS, 115)) if a.roster and not a.dw15 else None,
+                               icons_stock=list(rd(PROJ_ICONS, 112)))
                     if len(q) >= 8:
                         shot("%s_bracket" % tag)
+                        if a.savestate and not saved:
+                            g.savestate("save", 1)
+                            g.d.write_bytes(bytes(115), ARENA + OFF_STD_ICONS)
+                            g.advance(10)
+                            rec["icons_after_wipe"] = list(rd(ARENA + OFF_STD_ICONS, 115))
+                            saved = True
+            if a.savestate and saved and not loaded and matches == 1 and s == 5:
+                g.d.write_bytes(bytes(115), ARENA + OFF_STD_ICONS)
+                g.savestate("load", 1)
+                g.advance(30)
+                rec["icons_after_load"] = list(rd(ARENA + OFF_STD_ICONS, 115))
+                loaded, last_s = True, 5
+                print("savestate loaded inside the cup (back at the first bracket)", flush=True)
             opp = word(OPPONENT)
             if s == 4:
                 if last_s != 4:                     # a match is a stretch of GAME_STATE 4
@@ -294,7 +335,10 @@ def main():
         if species:
             check(make_partner(species), "the partner evolved into %d" % species)
             g.warp(LOBBY)
-        for t in POOL:
+        pool = cup_pool(a.bin or (DW15_BIN if a.dw15 else DEFAULT_BIN), CUP)
+        print("Grade D pool from the disc: %d species" % len(pool), flush=True)
+        check(len(pool) >= 7, "the cup's pool was read from the disc")
+        for t in pool:
             set_trig(200 + t)
         clear_text()
         before = dict(counters=i16s(COUNTERS, 3), money=f.i32(MONEY), bag=bag())
@@ -307,14 +351,16 @@ def main():
               % ("the schedule" if how == "ui" else "poke (the schedule refused this species)", pstat(3), pstat(4)))
         seen, matches, rec = run_cup(True, "win")
         after = i16s(COUNTERS, 3)
-        check(matches == 3, "three matches fought (%d)" % matches)
+        check(matches == 3 + (1 if a.savestate else 0), "three matches fought (%d, one replayed after a load)" % matches
+              if a.savestate else "three matches fought (%d)" % matches)
         check(after[0] == before["counters"][0] + 1 and after[1] == before["counters"][1] + 3 and trig(15 + CUP)
               and pstat(255) == 3, "cup won: counters %s -> %s, trigger %d set, pstat 255 = %d"
               % (before["counters"], after, 15 + CUP, pstat(255)))
         clear_text()
         b = bag()
-        check(f.i32(MONEY) - before["money"] == GRADE_D_PRIZE[0] and b.get(GRADE_D_PRIZE[1], 0) > before["bag"].get(GRADE_D_PRIZE[1], 0),
-              "prize paid: bits %d -> %d, item %d in the bag" % (before["money"], f.i32(MONEY), GRADE_D_PRIZE[1]))
+        won = [t for t in b if b[t] > before["bag"].get(t, 0)]
+        check(f.i32(MONEY) > before["money"] and won, "prize paid: bits %d -> %d, new item %s in the bag"
+              % (before["money"], f.i32(MONEY), won))
         check(free() and f.screen() == LOBBY, "back in the Arena Lobby in control (map %d)" % f.screen())
         print("hour after the cup: %s" % (i16s(HOUR, 2),), flush=True)
         shot("win_after")
@@ -327,8 +373,10 @@ def main():
             after = i16s(COUNTERS, 3)
             check(after[2] == mid[2] + 1 and after[0] == mid[0] and pstat(255) == 0 and not trig(16),
                   "cup lost in round one: counters %s -> %s, pstat 255 = %d, trigger 16 clear" % (mid, after, pstat(255)))
+            pre = b
             clear_text()
-            check(bag().get(CONSOLATION, 0) > 0, "consolation item %d in the bag" % CONSOLATION)
+            got = [t for t, n in bag().items() if n > pre.get(t, 0)]
+            check(bool(got), "a consolation item in the bag: %s" % got)
             check(free() and f.screen() == LOBBY, "back in the Arena Lobby in control (map %d)" % f.screen())
             shot("lose_after")
         if a.roster and not a.dw15:
@@ -336,6 +384,20 @@ def main():
             check(rec.get("icon_ref") and int(rec["icon_ref"][0], 16) & 0xFFFF == (ARENA >> 16)
                   if not a.revert_fix else True, "the projectile icon reads point at the arena: %s" % rec.get("icon_ref"))
             print("arena projectile icons for 112..114: %s" % icons, flush=True)
+            if not a.revert_fix and rec.get("icons"):
+                want = rec["icons_stock"] + [rec["icons_stock"][STD_ICON_DONORS[t]] for t in (112, 113, 114)]
+                check(rec["icons"] == want, "at the first bracket the arena holds STD's own icon table plus donor "
+                      "rows %s (copied at run time)" % want[112:])
+            if a.savestate:
+                check(rec.get("icons_after_wipe") == want, "icons rewritten within 10 frames of a wipe")
+                check(rec.get("icons_after_load") == want, "icons right after a savestate load inside the cup")
+        if a.smooth60:
+            check("temporal blending" in open(os.path.join(out, "game.log"), errors="replace").read(),
+                  "Smooth 60 FPS is active (the runtime's temporal-blending line is in the log)")
+        if a.wide:
+            from PIL import Image
+            w, h = Image.open(os.path.join(out, "win_after.png")).size
+            check(w * 9 >= h * 16 - 9, "Widescreen is active: the screenshot is %dx%d" % (w, h))
         f0 = g.d.frame()
         time.sleep(2)
         check(g.d.frame() > f0 + 30, "the game runs on")

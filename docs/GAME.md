@@ -1622,12 +1622,13 @@ whole cup was played in the port, a win and a loss, on the stock disc with no mo
   partner is on its entry list) or 0x40 (on its penalty list) (`:484-495`). Picking writes trigger 37, triggers 38 and
   39 (the two reminders), pstat 2 = the day (`| 0x80` for tomorrow, cleared by the day rollover,
   `src/main/script_common.c:1432-1435`), pstat 3 = the cup and pstat 4 = the partner's species. A penalty-list partner
-  also sets trigger 40. Greymon cancels on request (unsets 37).
+  also sets trigger 40. Greymon cancels on request (unsets 37) (Disc: script 213 section 0x51) [not run].
 - **The day.** `updateTournamentRegistration` (`src/main/tournament.c:42-120`, every field tick) drops the entry if the
   partner's species is no longer pstat 4, shows MAPHEAD 0x4D9 ("You're entered in today's ... Tournament") once
   between 12:00 and 20:00 and once after, and MAPHEAD 0x4DA (missed) on a later day or after 23:00 [run: the 12:00
   reminder]. Walking through the door runs script 213 section 0x36: not registered, tomorrow's entry, or before 10:00
-  sends the tamer back; trigger 40 with Tamer level above 0 costs a level 30 % of the time; then `CALL_ROUTINE 6`
+  sends the tamer back; trigger 40 with Tamer level above 0 costs a level 30 % of the time (Disc: a roll of 0..99
+  at most 29) [not run]; then `CALL_ROUTINE 6`
   starts the cup. After it the clock moves on 360 minutes [run: 12:00 to 18:09] and the tamer is warped to 208 (223
   with trigger 50).
 
@@ -1660,7 +1661,7 @@ list, 4 the opponent pool. Lists end at a byte of 0xFE or more; a pool that star
   Min recruits 0 is always open; otherwise that many of the pool's flags (of the whole band 200..311 for an empty
   pool) must be set. Then kind 0 is open, 1 needs Grade A won (trigger 18), 2 needs min count of script 213 section
   0xB's species (the stock Ultimates) recruited, and any other kind needs min count recruited among the pool's leading
-  entries up to that species id. Disc: on stock only cup 0 needs nothing; most need 8 recruits, Grade B 24, the Mech
+  entries up to that species id. Disc: on stock only cup 0 and the yearly cup 22 need nothing (bytes 00 00 00); most need 8 recruits, Grade B 24, the Mech
   Cup 6 and three of a list, the Filthy Cup 3 and two, Grade A 8 and four Ultimates.
 - **Who may enter.** Disc: the entry lists hold only stock partners and the four unused 63-66 (Panjyamon, Gigadramon,
   MetalEtemon, Myotismon); no list holds a species above 66. So a roster partner of 67 or more is refused by every
@@ -1670,12 +1671,13 @@ list, 4 the opponent pool. Lists end at a byte of 0xFE or more; a pool that star
 ### 15.4 Rewards and medals
 
 - **Prizes** are paid by DG script 214 section 0x33 when the tamer is back in the lobby, keyed on pstat 255 and pstat
-  3: a win pays bits and an item per cup, reaching the final pays a smaller prize, a round-one loss pays a consolation
-  item; Grades B and A also roll for a Tamer level (10 % and 20 %), and Grade S picks one of three items. The section
-  also clears trigger 37. [run: Grade D won paid 2000 bits and item 7; a loss paid item 39.]
+  3: a win pays bits and an item per cup; a round-one loss pays a consolation item [run: Grade D won paid 2000 bits
+  and item 7; a loss paid item 39]. Reaching the final pays a smaller prize (pstat 255 = 2); Grades B and A also roll
+  for a Tamer level (10 % and 20 %), and Grade S picks one of three items (Disc: script 214 section 0x33) [not run].
+  The section also clears trigger 37 [run: trigger 37 clear after both cups].
 - **Medals** (`checkTournamentMedalConditions`, `src/main/tournament.c:168-240`, `CALL_ROUTINE 22` in scripts 126 and
   209): all six grade cups won, all five version cups, all seven element cups, all four type cups, 100 match wins, or
-  every card plus the game beaten; each once.
+  every card plus the game beaten; each once. Code; [not run].
 
 ### 15.5 The bracket portrait
 

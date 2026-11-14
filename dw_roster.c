@@ -8,7 +8,7 @@
  * declarative manifest cannot write outside the loaded image (the BSS
  * memfill would destroy it anyway). So:
  *
- *   1. This plugin reserves a 16 KB arena in the framework's Expansion-1
+ *   1. This plugin reserves a 32 KB arena in the framework's Expansion-1
  *      enhancement region at activation. The first allocation is
  *      deterministically 0x9F000000, which is why the generated manifest
  *      (tools/gen_roster_mod.py) can hard-code retargeted addresses.
@@ -144,9 +144,6 @@ static void roster_fill(void) {
             roster_arena + ROSTER_OFF_STD_GLYPH + 113u * 14u + i,
             k_std_glyph_113[i]);
     }
-    /* Cup bracket projectile icons: already 180 entries in the include. */
-    for (i = 0; i < sizeof(k_std_icons); i++)
-        psx_mod_write_byte(roster_arena + ROSTER_OFF_STD_ICONS + i, k_std_icons[i]);
 
     /* The two overlay tables come from baked constants, not guest RAM. */
     for (i = 0; i < sizeof(k_train_anim_stock); i++)
@@ -301,11 +298,31 @@ static void roster_clear_evoitem_flag(void) {
     psx_mod_write_byte(VA_HAS_USED_EVOITEM, 0);
 }
 
+/* Cup bracket projectile icons. STD_REL.BIN is resident only during a cup, and
+ * only its four references were retargeted, so its own table is intact then:
+ * copy it every VBlank while the patched lui is in RAM (STD shares its address
+ * window with BTL and VS, which never hold that word), then the donor rows.
+ * Copying every VBlank, not once, keeps the arena right after a savestate load
+ * or rewind into a cup: the arena is not part of the snapshot. */
+static void roster_copy_std_icons(void) {
+    uint32_t i;
+    if ((psx_mod_read_word(ROSTER_STD_ICONS_LUI) & 0xFFFFu) != 0x9F00u)
+        return;
+    for (i = 0; i < 112u; i++)
+        psx_mod_write_byte(roster_arena + ROSTER_OFF_STD_ICONS + i,
+                           psx_mod_read_byte(ROSTER_STD_ICONS_SRC + i));
+    for (i = 0; i < sizeof(k_std_icon_donors) / sizeof(k_std_icon_donors[0]); i++)
+        psx_mod_write_byte(roster_arena + ROSTER_OFF_STD_ICONS + k_std_icon_donors[i][0],
+                           psx_mod_read_byte(ROSTER_STD_ICONS_SRC + k_std_icon_donors[i][1]));
+}
+
 static void roster_vblank(void) {
     if (!roster_filled && psx_mod_game_started())
         roster_ensure_filled();
-    if (roster_live)
+    if (roster_live) {
         roster_clear_evoitem_flag();
+        roster_copy_std_icons();
+    }
 }
 
 /* Model + texture remap: slot 114 has no MMD file or ALLTIM slot of its own

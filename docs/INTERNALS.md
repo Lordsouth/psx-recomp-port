@@ -718,6 +718,9 @@ instruction pair that materialises one of those table addresses.
 | `TRAINING_ANIM_IDS` `0x8008F050` | 68 | 5 | `disc_user` (TRN) |
 | `TRN2_D_8008DA20` `0x8008DA20` | 68 | 3 | `disc_user` (TRN2) |
 
+Two STD tables are relocated the same way: the battle-intro name glyphs (`0x80079CBC`, 6 sites) and the
+cup bracket's projectile icons (`0x8007A50C`, 4 sites, "Cup bracket" below).
+
 All eight are grown to **180 entries**, the engine's hard ceiling (`loadMMD`
 rejects type ≥ `0xB4`). That is 91 `lui` + 91 `lo16` retargets. Site counts are
 asserted in the generator, because silently patching a different number of
@@ -937,9 +940,13 @@ roster species is on its EFE list, read from the disc (GAME.md 12.2); `tools/ver
 draws its own portrait (sheet 0 cell 63, the art's row 6), and the palette index is clamped to 111, so no type reads
 past the 112-entry table; 112 keeps its portrait and row 0, the byte the stock read happened to return. 113 and 114
 have no portrait in the art and draw sheet 1's effect-icon cells 48 and 49 instead; nothing new was drawn. The
-projectile icon table (`STD_PROJ_ICONS`, 112 entries) is relocated into the arena at `0x5000` like the name glyphs,
-180 entries with donor rows for 112-114 (`STD_ICON_DONORS`). The 1.5 edition writes the same nine words (the function is
-unchanged in 1.5) but has no arena, so on 1.5 the projectile icon of 112 and 113 still reads its table's two neighbours.
+projectile icon table (`STD_PROJ_ICONS`, 112 entries) has its four references retargeted into the arena at `0x5000`
+(180 entries; it must end below `0x5100`, where sdd/train's EVL shard area starts, and the generator asserts it). Nothing
+is baked: STD's own table stays in place, so `dw_roster.c` copies it into the arena on every VBlank while the patched
+`lui` is resident (only during a cup) and adds donor rows for 112-114 (`STD_ICON_DONORS`). Copying every VBlank keeps it
+right after a savestate load inside a cup, since the arena is not in the snapshot. The 1.5 edition writes the same nine
+words (the function is unchanged in 1.5) but has no arena, so on 1.5 the projectile icon of 112 reads the next table's
+first byte (a valid icon), and 113 its second, which then indexes the palette table at -1 (a junk 8x8 patch, no crash).
 Roster species above 66 are on no cup's entry list, so the schedule refuses them (GAME.md 15.3); that is not
 changed. `tools/verify_cups.py --roster N` checks the portrait from the GPU commands; `--revert-fix` is the control.
 
