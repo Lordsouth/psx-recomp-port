@@ -89,7 +89,7 @@ ROSTER = "dw.vanilla.roster/roster"
 HOOK_OWNER = {
     0x800E56EC: WS,      # dw_ws_backdrop.c  setPosDataPolyFT4
     0x800B8928: WS,      # dw_ws_backdrop.c  renderRectPolyFT4
-    0x80096F90: WS,      # dw_ws_backdrop.c  GsSortSprite
+    0x80096F90: (WS, "dw.smooth60/smooth60"),  # dw_ws_backdrop.c GsSortSprite; dw_smooth60.c (battle shout)
     0x800D78BC: WS,      # dw_ws_camera.c    handleTileUpdate (entry + exit)
     0x800D6A4C: WS,      # dw_ws_camera.c    second camera X clamp
     0x800D7F68: WS,      # dw_ws_camera.c    cameraIsAtEdge
@@ -126,6 +126,7 @@ HOOK_OWNER = {
     0x800C61D4: "dw.smooth60/smooth60",  # startSound (filter)
     0x800948A8: "dw.smooth60/smooth60",  # LoadImage (filter)
     0x80094818: "dw.smooth60/smooth60",  # ClearImage (filter)
+    0x800E3D14: "dw.smooth60/smooth60",  # drawLine3P (box zoom)
 }
 
 # Code and data the widescreen plugins read or write besides their hooks
@@ -145,9 +146,14 @@ EXTRA_EXE = [
     # dw_newmaps.c's getScript filter hard-codes the ACTIVE_MAP_SCRIPT and MAP_SCRIPT_PTR the stock body uses
     (0x80106218, 0x8010629C, ("dw.newmaps/glade", "dw.newmaps.factory/factory"),
      "getScript (the new maps' filter assumes its globals)"),
+    # dw_smooth60.c matches these by return address
+    (0x800EFB68, 0x800EFCB0, "dw.smooth60/smooth60", "gameLoop through its VSync call (pass point, RA match)"),
+    (0x800C366C, 0x800C3860, "dw.smooth60/smooth60", "renderUIBoxAnim (box zoom drawLine3P, RA match)"),
 ]
 EXTRA_FILE = [
     ("/BTL_REL.BIN", 0x80052AE0, 0x80073280, 16, WS, "BTL bar slide table"),
+    ("/BTL_REL.BIN", 0x80052AE0, 0x8005DEC4, 0x104, "dw.smooth60/smooth60", "BTL_battleTickFrame (VSync pass point, RA match)"),
+    ("/BTL_REL.BIN", 0x80052AE0, 0x80061258, 0x1D4, "dw.smooth60/smooth60", "BTL_renderCommandShout (GsSortSprite, RA match)"),
 ]
 
 # Test Build 1.3.1's entry stub (0x80135000) copies three blocks out of the
