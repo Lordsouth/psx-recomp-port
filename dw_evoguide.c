@@ -52,6 +52,7 @@
 #define GLYPH 8
 #define LINE_H 10
 #define PAD_PX 6
+#define MARGIN_PX 16
 
 /* inline colours */
 #define C_WHITE "\x01"
@@ -169,6 +170,7 @@ static DwEvoModel s_model;
 static char s_lines[MAX_LINES][LINE_BYTES];
 static int s_nlines;
 static unsigned s_seq, s_draws;
+static int s_geom[7];   /* last draw: window w, h, panel x, y, w, h, scale */
 
 static void lock(void) { while (atomic_flag_test_and_set(&s_lock)) {} }
 static void unlock(void) { atomic_flag_clear(&s_lock); }
@@ -555,12 +557,12 @@ static void guide_draw(int ww, int wh, void* ctx) {
     pw = LINE_CHARS * GLYPH + 2 * PAD_PX;
     ph = n * LINE_H + 2 * PAD_PX - (LINE_H - GLYPH);
     rasterise(px, pw, ph, lines, n);
-    /* Largest integer scale that keeps the panel inside 92% of the height
-     * and 60% of the width, at least 1. */
-    scale = (wh * 92 / 100) / ph;
-    if ((ww * 60 / 100) / pw < scale) scale = (ww * 60 / 100) / pw;
+    /* Largest integer scale at which the whole panel fits the window inside
+     * a MARGIN_PX border, at least 1. */
+    scale = (wh - 2 * MARGIN_PX) / ph;
+    if ((ww - 2 * MARGIN_PX) / pw < scale) scale = (ww - 2 * MARGIN_PX) / pw;
     if (scale < 1) scale = 1;
-    x0 = ww / 40;
+    x0 = MARGIN_PX;
     y0 = (wh - ph * scale) / 2;
     if (y0 < 0) y0 = 0;
     sx = pw * scale;
@@ -637,6 +639,8 @@ static void guide_draw(int ww, int wh, void* ctx) {
     G.ActiveTexture((GLenum)active);
     lock();
     s_draws++;
+    s_geom[0] = ww; s_geom[1] = wh; s_geom[2] = x0; s_geom[3] = y0;
+    s_geom[4] = sx; s_geom[5] = sy; s_geom[6] = scale;
     unlock();
 }
 
@@ -644,7 +648,7 @@ static void guide_draw(int ww, int wh, void* ctx) {
 static int guide_command(const char* args, char* reply, int cap) {
     static DwEvoModel m;
     unsigned seq, draws;
-    int i, k, at;
+    int i, k, at, geom[7];
     if (!strcmp(args, "open") || !strcmp(args, "close")) {
         atomic_store(&s_open, args[0] == 'o');
         snprintf(reply, (size_t)cap, "{\"open\":%d}", atomic_load(&s_open));
@@ -667,18 +671,21 @@ static int guide_command(const char* args, char* reply, int cap) {
     m = s_model;
     seq = s_seq;
     draws = s_draws;
+    memcpy(geom, s_geom, sizeof geom);
     unlock();
     if (!strcmp(args, "state")) {
         snprintf(reply, (size_t)cap,
                  "{\"enabled\":%d,\"open\":%d,\"seq\":%u,\"draws\":%u,\"ok\":%d,"
                  "\"partner\":%d,\"name\":\"%s\",\"lv\":%d,\"timer\":%d,\"thr\":%d,"
                  "\"pick\":%d,\"defined\":%d,\"n\":%d,\"stats\":[%d,%d,%d,%d,%d,%d],"
-                 "\"care\":%d,\"weight\":%d,\"disc\":%d,\"happy\":%d,\"battles\":%d,\"techs\":%d}",
+                 "\"care\":%d,\"weight\":%d,\"disc\":%d,\"happy\":%d,\"battles\":%d,\"techs\":%d,"
+                 "\"geom\":[%d,%d,%d,%d,%d,%d,%d]}",
                  atomic_load(&s_enabled), atomic_load(&s_open), seq, draws, m.ok,
                  (int)m.partner, m.name, m.level, m.timer, m.threshold, m.pick,
                  m.pick_defined, m.n, m.stats[0], m.stats[1], m.stats[2], m.stats[3],
                  m.stats[4], m.stats[5], m.care, m.weight, m.discipline, m.happiness,
-                 m.battles, m.techs);
+                 m.battles, m.techs, geom[0], geom[1], geom[2], geom[3], geom[4],
+                 geom[5], geom[6]);
         return 0;
     }
     if (args[0] == 't' && args[1] == ' ') {

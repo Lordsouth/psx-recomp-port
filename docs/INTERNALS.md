@@ -1306,8 +1306,9 @@ OpenGL only; the overlay draw callback and the input sink belong to the
 in-game menu). The VBlank callback formats the model into text lines under a
 spin lock; the draw callback, on the GL thread, rasterises them with the
 public-domain font8x8 set that `host_osd.c` uses, uploads one texture and
-blends it at the largest integer scale that fits 92% of the window height and
-60% of its width, at the left edge, vertically centred. Its own GL objects are
+blends it at the largest integer scale at which the whole panel fits the window
+inside a 16-pixel margin (1x only when 2x does not fit; 2x for a six-target
+panel at 1280x720), 16 pixels from the left edge, vertically centred. Its own GL objects are
 made on first draw and remade when the context changes; every piece of GL
 state it changes is read first and put back. No framework change.
 

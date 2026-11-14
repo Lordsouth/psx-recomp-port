@@ -215,6 +215,31 @@ def wait_fresh_model(g, n=2, timeout=10.0):
     return guide(g, "state")
 
 
+def text_diffs(lines, p, g):
+    """The drawn text (the `lines` buffer guide_draw rasterises, built in one
+    place, format_model) must state the values the memory model computes."""
+    out = []
+    want = ["Evolution timer %d / %d h" % (p["timer"], p["thr"]),
+            "Now: %s" % (Mem(g).name(p["pick"]) if p["pick"] > 0 else "none")]
+    for c in p["cands"]:
+        r = c["req"]
+        want.append("%s %-14s %d of 4 met, need 3" % (">" if c["t"] == p["pick"] else " ",
+                                                      c["name"], c["pts"]))
+        want.append("Care %d (%s %d)" % (p["care"], "max" if c["flags"] & 0x10 else "min", r[7]))
+        want.append("Weight %d (%d-%d)" % (p["weight"], r[8] - 5, r[8] + 5))
+        if c["lv"] != 3:
+            for i, nm in enumerate(("HP", "MP", "Off", "Def", "Spd", "Brn")):
+                if r[1 + i] != -1:
+                    want.append("%s %d/%d" % (nm, p["stats"][i], r[1 + i]))
+        if c["mean"] >= 0:
+            want.append("mean %d" % c["mean"])
+    flat = lines.replace("|    ", "")       # undo the panel's wrap indent
+    for w in want:
+        if w not in flat:
+            out.append("drawn text lacks %r" % w)
+    return out
+
+
 def compare(g, tag):
     """Panel model vs py_model, read while the host holds the guest still."""
     diffs = []
@@ -224,6 +249,7 @@ def compare(g, tag):
         try:
             s = guide(g, "state")
             cs = [guide(g, "t %d" % i) for i in range(s["n"])]
+            lines = guide(g, "lines")
             p = py_model(g)
         finally:
             g.d.cmd("host_pause", on=0)
@@ -239,6 +265,7 @@ def compare(g, tag):
                       "bp", "bh", "bonus", "pts", "score", "adj", "q", "mean"):
                 if c[k] != q[k]:
                     diffs.append("target %s %s panel=%s mem=%s" % (q["t"], k, c[k], q[k]))
+        diffs += text_diffs(lines, p, g)
         if not diffs:
             break
     print("  %s: partner %d %r lv%d timer %d/%d pick %d, %d targets" % (
@@ -369,6 +396,12 @@ def phase_stock(a):
             g.advance(60)
             path = os.path.join(out, "panel_%s.png" % nm)
             check(present_shot(g, path), "screenshot %s %dx%d -> %s" % (nm, w, h, path))
+            ww, wh, x0, y0, sx, sy, sc = guide(g, "state")["geom"]
+            check((ww, wh) == (w, h) and x0 >= 0 and y0 >= 0 and x0 + sx <= ww and y0 + sy <= wh,
+                  "%s: whole panel inside the window at %dx (%d,%d %dx%d in %dx%d)"
+                  % (nm, sc, x0, y0, sx, sy, ww, wh))
+            if nm == "16x9":
+                check(sc >= 2, "16x9: drawn at %dx (2x wanted)" % sc)
         check(guide(g, "state")["draws"] > 0, "the HUD layer drew the panel")
         g.d.cmd("window_size", w=960, h=720)
         for want in (0, 1):
