@@ -109,7 +109,7 @@ only room proven so far [run], or 28 pairs at 241 + 241; the windows in 2.4 stil
   name and the order of the two lookups cannot matter. `tools/gen_factory.py` owns `dw_newmaps_files.inc` and lays out
   MMM.DAT; its `--check` compares the .inc with the package.
 - A new script needs no table row either: `dw_newmaps.c`'s filter hook on `getScript` (0x80106218) answers for the ids in
-  `dw_newmaps_scripts.inc` (id, lba, size in whole sectors). For a listed id that is not `ACTIVE_MAP_SCRIPT` (0x80134FC2,
+  `dw_newmaps_scripts.inc` (id, lba, size in whole sectors; the factory's 227-230 and the glade's 231). For a listed id that is not `ACTIVE_MAP_SCRIPT` (0x80134FC2,
   u16) it reads the sectors into the buffer `MAP_SCRIPT_PTR` (0x80134FB4) names, sets `ACTIVE_MAP_SCRIPT` and returns
   the buffer; a cached id and every other id run the stock body. A failed read of a listed id runs no stock body (it
   would read the table past its end): the buffer gets an empty section table, `04 00 FF FF`, on which `getScriptSection`
@@ -434,7 +434,7 @@ script runs into `SCRIPT_STATE` [inferred].
 - 1..198 are all bound by MAPHEAD rows (stock decode). 199..221 are library scripts, reached only by file jumps (`14`, `17`).
 - table[222] = 0xC4800, the file's end, sets script 221's read size: never change it. table[223..511] is stale ASCII and zeros: a guard must expect it.
 - 223..226 are free on stock: no package writes the table. Digimon World 1.5 owns 222-225 (its `table[222..226]`, 0xC5800..0xCD000, the last its file's size).
-- 227..230 are the Abandoned Factory's screens, never in the table: `dw_newmaps.c`'s `getScript` hook serves them from MMM.DAT sectors 1011-1014 (`dw_newmaps_scripts.inc`, `tools/gen_factory.py`). 231 is the Hidden Glade's boss script, sector 1015 (`tools/gen_newmap.py`). Later maps start at 231. Each ran on arrival [run 2026-11-13: `verify_factory.py walk`, `fights`, `boss`].
+- 227..230 are the Abandoned Factory's screens, never in the table: `dw_newmaps.c`'s `getScript` hook serves them from MMM.DAT sectors 1011-1014 (`dw_newmaps_scripts.inc`, `tools/gen_factory.py`). 231 is the Hidden Glade's boss script, sector 1015 (`tools/gen_newmap.py`). Later maps start at 232. Each ran on arrival [run 2026-11-13: `verify_factory.py walk`, `fights`, `boss`].
 
 Both files share one layout: u16 first-body offset (0x468 in MAPHEAD), then {u16 section, u16 offset from the script
 start} pairs ended by 0xFFFF, then the bodies. Only `setMapHeadActive` reads the first word (`:671-689`, `:2181-2188`).

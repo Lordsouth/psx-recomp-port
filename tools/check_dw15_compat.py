@@ -111,8 +111,9 @@ HOOK_OWNER = {
                  "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  createSavegameChecksum (entry)
     # lookupFileTable: a filter hook serving the new map names in dw_newmaps_files.inc (gen_factory.py)
     0x800A31F8: ("dw.newmaps.factory/factory", "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  lookupFileTable (filter)
-    # getScript: a filter hook serving the factory's script ids in dw_newmaps_scripts.inc (gen_factory.py)
-    0x80106218: ("dw.newmaps.factory/factory", "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  getScript (filter)
+    # getScript: a filter hook serving the factory's and the glade's script ids in dw_newmaps_scripts.inc (gen_factory.py)
+    0x80106218: ("dw.newmaps/glade", "dw.newmaps/glade-15", "dw.newmaps.factory/factory",
+                 "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  getScript (filter)
     # Smooth 60 FPS (dw_smooth60.c): entry hooks and filters only
     0x80091CA8: "dw.smooth60/smooth60",  # VSync (pass point)
     0x800A315C: "dw.smooth60/smooth60",  # renderObjects (pre-render snapshot)
@@ -142,7 +143,8 @@ EXTRA_EXE = [
     (0x800DD2A4, 0x800DD5E0, WS, "renderGameClock (bracketed)"),
     (0x800A936C, 0x800A97E0, WS, "renderStatusBars (bracketed)"),
     # dw_newmaps.c's getScript filter hard-codes the ACTIVE_MAP_SCRIPT and MAP_SCRIPT_PTR the stock body uses
-    (0x80106218, 0x8010629C, "dw.newmaps.factory/factory", "getScript (the factory's filter assumes its globals)"),
+    (0x80106218, 0x8010629C, ("dw.newmaps/glade", "dw.newmaps.factory/factory"),
+     "getScript (the new maps' filter assumes its globals)"),
 ]
 EXTRA_FILE = [
     ("/BTL_REL.BIN", 0x80052AE0, 0x80073280, 16, WS, "BTL bar slide table"),
@@ -422,7 +424,8 @@ def main():
     for lo, hi, owner, label in EXTRA_EXE:
         hit = exe_changed(lo, hi)
         if hit is not None:
-            flag(owner, "%s changed at 0x%08X" % (label, hit))
+            for o in (owner,) if isinstance(owner, str) else owner:
+                flag(o, "%s changed at 0x%08X" % (label, hit))
     for name, base, vaddr, n, owner, label in EXTRA_FILE:
         v = van.file(name)[vaddr - base:vaddr - base + n]
         q = pat.file(name)[vaddr - base:vaddr - base + n]
