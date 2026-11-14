@@ -89,7 +89,7 @@ ROSTER = "dw.vanilla.roster/roster"
 HOOK_OWNER = {
     0x800E56EC: WS,      # dw_ws_backdrop.c  setPosDataPolyFT4
     0x800B8928: WS,      # dw_ws_backdrop.c  renderRectPolyFT4
-    0x80096F90: WS,      # dw_ws_backdrop.c  GsSortSprite
+    0x80096F90: (WS, "dw.smooth60/smooth60"),  # dw_ws_backdrop.c GsSortSprite; dw_smooth60.c (battle shout)
     0x800D78BC: WS,      # dw_ws_camera.c    handleTileUpdate (entry + exit)
     0x800D6A4C: WS,      # dw_ws_camera.c    second camera X clamp
     0x800D7F68: WS,      # dw_ws_camera.c    cameraIsAtEdge
@@ -125,6 +125,7 @@ HOOK_OWNER = {
     0x800C61D4: "dw.smooth60/smooth60",  # startSound (filter)
     0x800948A8: "dw.smooth60/smooth60",  # LoadImage (filter)
     0x80094818: "dw.smooth60/smooth60",  # ClearImage (filter)
+    0x800E3D14: "dw.smooth60/smooth60",  # drawLine3P (box zoom)
 }
 
 # Code and data the widescreen plugins read or write besides their hooks

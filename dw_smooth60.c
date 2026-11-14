@@ -51,11 +51,17 @@
 #define START_SOUND             0x800C61D4u      /* (vabId, prog, note) -> voice mask */
 #define LOAD_IMAGE              0x800948A8u      /* (RECT*, u_long*) */
 #define CLEAR_IMAGE             0x80094818u      /* (RECT*, r, g, b) */
+#define DRAW_LINE_3P            0x800E3D14u      /* (color, x0, y0, x1, y1, x2, y2, layer, blend) */
+#define GS_SORT_SPRITE          0x80096F90u      /* (GsSPRITE*, GsOT*, pri) */
+#define RENDER_UI_BOX_ANIM      0x800C366Cu      /* the box open/close zoom: two drawLine3P */
+#define RENDER_UI_BOX_ANIM_END  0x800C3860u      /* handleEvoItems follows it */
 #define GAME_LOOP               0x800EFB68u
 #define GAME_LOOP_END           0x800EFD30u      /* applyDrawOffset follows it */
 /* BTL_REL overlay (base 0x80052AE0, shared with STD/VS: GAME_STATE tells them apart) */
 #define BTL_TICK_FRAME          0x8005DEC4u      /* symbols_btl.txt */
 #define BTL_TICK_FRAME_END      0x8005DFC8u      /* BTL_addFinisherProgress */
+#define BTL_RENDER_SHOUT        0x80061258u      /* BTL_renderCommandShout: GsSortSprite x2 */
+#define BTL_RENDER_SHOUT_END    0x8006142Cu      /* BTL_initializeCommandMenu */
 
 #define ACTIVE_FRAMEBUFFER      0x80134ECCu
 #define ACTIVE_ORDERING_TABLE   0x80134ED0u
@@ -68,6 +74,8 @@
 #define CURRENT_SCREEN          0x80134DA8u
 #define CLOCK_OFFSET_X          0x80134E1Eu      /* i16 slide: -135 shown, -220 hidden */
 #define STATUS_UI_OFFSET_X      0x80134C50u      /* i16 slide: 75 shown, 240 hidden */
+#define BTL_COMMAND_MENU_X      0x80135084u      /* i16 slide (a y despite the name), 7 steps */
+#define BTL_COMMAND_MENU_Y      0x80135086u      /* i16 slide, 7 steps */
 #define GS_ORDERING_TABLE       0x8015DB68u      /* GsOT[2], 0x14 each */
 #define DR_OFFSETS              0x8015DB90u      /* DR_OFFSET[2], 12 each */
 #define GS_WORK_BASES           0x8015DBA8u      /* 2 x 0x14000 */
@@ -109,12 +117,17 @@ static uint8_t s_scratch[1024];
 static uint8_t* s_arena;
 static uint32_t s_arena_size, s_arena_cap;
 static int s_snap_ok;
-static int16_t s_hud[2][2];     /* [prev/cur][clock, status] at renderObjects entry */
+/* Tick-state slides the render reads, at renderObjects entry: [prev/cur][slide].
+ * The command menu's two are blended in battle only. */
+static const uint32_t k_slide[] = { CLOCK_OFFSET_X, STATUS_UI_OFFSET_X, BTL_COMMAND_MENU_X, BTL_COMMAND_MENU_Y };
+#define N_SLIDE (sizeof k_slide / sizeof k_slide[0])
+static int16_t s_hud[2][N_SLIDE];
 static int s_hud_n;
 
 /* 2D emitter calls of the last two stock frames. */
-enum { FN_SPRITE, FN_FXPRIM, FN_FLASH, FN_TEXT, FN_ICON, FN_FADE };
-typedef struct { uint8_t fn; uint32_t key; int32_t v[5]; } Rec;
+enum { FN_SPRITE, FN_FXPRIM, FN_FLASH, FN_TEXT, FN_ICON, FN_FADE, FN_LINE3, FN_GSSPRITE };
+#define MAX_V 6
+typedef struct { uint8_t fn; uint32_t key; int32_t v[MAX_V]; } Rec;
 static Rec s_rec[2][MAX_REC];
 static uint32_t s_nrec[2];
 static int s_cur;               /* index of the frame being recorded */
@@ -133,6 +146,14 @@ static int in_pass(void) {
 
 static int32_t rd32(uint32_t a) { return (int32_t)psx_mod_read_word(a); }
 static int16_t rd16(uint32_t a) { return (int16_t)psx_mod_read_half(a); }
+
+/* The battle loop's states: 1 fighting, 2 intro and ending (FIGHT!, the command
+ * menu sliding in and out, the result boxes). STD and VS share its overlay
+ * address range but use 0, 4 and 5. */
+static int battle_state(void) {
+    const int s = (int8_t)psx_mod_read_byte(GAME_STATE);
+    return s == 1 || s == 2;
+}
 
 /* Origin of the VRAM buffer OT[b] draws into. DR_OFFSETS[b] is the game's HUD
  * offset for that OT: the buffer origin plus the stock centre (160, 120). */
@@ -227,10 +248,12 @@ static void on_render_objects(struct CPUState* cpu, uint32_t address) {
     if (in_pass() || g_psx_render_pass_active) return;
     const int state = (int8_t)psx_mod_read_byte(GAME_STATE);
     s_recording = 0;
-    if (state != 0 && state != 1) { s_snap_ok = 0; return; }
+    if (state < 0 || state > 2) { s_snap_ok = 0; return; }
     snapshot();
-    s_hud[0][0] = s_hud[1][0]; s_hud[0][1] = s_hud[1][1];
-    s_hud[1][0] = rd16(CLOCK_OFFSET_X); s_hud[1][1] = rd16(STATUS_UI_OFFSET_X);
+    for (uint32_t i = 0; i < N_SLIDE; i++) {
+        s_hud[0][i] = s_hud[1][i];
+        s_hud[1][i] = rd16(k_slide[i]);
+    }
     if (s_hud_n < 2) s_hud_n++;
     s_cur ^= 1;
     s_nrec[s_cur] = 0;
@@ -273,6 +296,19 @@ static int emitter_read(struct CPUState* cpu, int fn, uint32_t* key, int32_t* v)
         *key = ra;
         v[0] = (int32_t)(a[0] & 0xFFu);
         return 1;
+    case FN_LINE3:    /* the box zoom only: x0, y0, x1, y1, x2, y2; keyed by call site and layer */
+        if (ra < RENDER_UI_BOX_ANIM || ra >= RENDER_UI_BOX_ANIM_END) return 0;
+        *key = ra ^ (psx_mod_read_word(sp + 28) << 24);
+        v[0] = (int32_t)a[1]; v[1] = (int32_t)a[2]; v[2] = (int32_t)a[3];
+        v[3] = rd32(sp + 16); v[4] = rd32(sp + 20); v[5] = rd32(sp + 24);
+        return 6;
+    case FN_GSSPRITE: /* the battle command shout only: x, y, scalex, scaley */
+        if (ra < BTL_RENDER_SHOUT || ra >= BTL_RENDER_SHOUT_END ||
+            !battle_state()) return 0;
+        *key = ra;
+        v[0] = rd16(a[0] + 4); v[1] = rd16(a[0] + 6);
+        v[2] = rd32(a[0] + 28); v[3] = rd32(a[0] + 32);
+        return 4;
     }
     return 0;
 }
@@ -303,6 +339,15 @@ static void emitter_write(struct CPUState* cpu, int fn, const int32_t* v) {
     case FN_FADE:
         a[0] = (uint32_t)v[0];
         break;
+    case FN_LINE3:
+        a[1] = (uint32_t)v[0]; a[2] = (uint32_t)v[1]; a[3] = (uint32_t)v[2];
+        psx_mod_write_word(sp + 16, (uint32_t)v[3]); psx_mod_write_word(sp + 20, (uint32_t)v[4]);
+        psx_mod_write_word(sp + 24, (uint32_t)v[5]);
+        break;
+    case FN_GSSPRITE:
+        psx_mod_write_half(a[0] + 4, (uint16_t)v[0]); psx_mod_write_half(a[0] + 6, (uint16_t)v[1]);
+        psx_mod_write_word(a[0] + 28, (uint32_t)v[2]); psx_mod_write_word(a[0] + 32, (uint32_t)v[3]);
+        break;
     }
 }
 
@@ -318,10 +363,13 @@ static const Rec* find_rec(int frame, int fn, uint32_t key, uint32_t ordinal) {
  * than this between the two frames, it is a different sprite (respawned, reordered)
  * and is drawn as the newer frame has it. */
 #define MAX_STEP_PX 96
+/* A box zoom is one box per call site and layer, and a big menu box opening from
+ * the tamer moves a corner up to ~40 px a tick, so it may cross the screen. */
+#define MAX_STEP_BOX_PX 320
 
 static void emitter(struct CPUState* cpu, int fn) {
     uint32_t key;
-    int32_t v[5];
+    int32_t v[MAX_V];
     const int n = emitter_read(cpu, fn, &key, v);
     if (!n) return;
     if (!in_pass()) {
@@ -339,14 +387,16 @@ static void emitter(struct CPUState* cpu, int fn) {
     const Rec* p = find_rec(s_cur ^ 1, fn, key, ordinal);
     const Rec* c = find_rec(s_cur, fn, key, ordinal);
     if (!p || !c) { psx_mod_counter_add("dw.smooth60.2d_unmatched", 1); return; }
-    if (fn != FN_FADE && (abs(c->v[0] - p->v[0]) > MAX_STEP_PX || abs(c->v[1] - p->v[1]) > MAX_STEP_PX)) {
+    const int lim = fn == FN_LINE3 ? MAX_STEP_BOX_PX : MAX_STEP_PX;
+    if (fn != FN_FADE && (abs(c->v[0] - p->v[0]) > lim || abs(c->v[1] - p->v[1]) > lim)) {
         psx_mod_counter_add("dw.smooth60.2d_snapped", 1);
         return;
     }
     for (int i = 0; i < n; i++)
         v[i] = p->v[i] + (int32_t)((double)(c->v[i] - p->v[i]) * s_alpha + (c->v[i] >= p->v[i] ? 0.5 : -0.5));
     emitter_write(cpu, fn, v);
-    psx_mod_counter_add("dw.smooth60.2d_blended", 1);
+    psx_mod_counter_add(fn == FN_LINE3 ? "dw.smooth60.box_blended" :
+                        fn == FN_GSSPRITE ? "dw.smooth60.shout_blended" : "dw.smooth60.2d_blended", 1);
 }
 
 static void on_sprite(struct CPUState* cpu, uint32_t a) { (void)a; emitter(cpu, FN_SPRITE); }
@@ -355,6 +405,8 @@ static void on_flash(struct CPUState* cpu, uint32_t a)  { (void)a; emitter(cpu, 
 static void on_text(struct CPUState* cpu, uint32_t a)   { (void)a; emitter(cpu, FN_TEXT); }
 static void on_icon(struct CPUState* cpu, uint32_t a)   { (void)a; emitter(cpu, FN_ICON); }
 static void on_fade(struct CPUState* cpu, uint32_t a)   { (void)a; emitter(cpu, FN_FADE); }
+static void on_line3(struct CPUState* cpu, uint32_t a)  { (void)a; emitter(cpu, FN_LINE3); }
+static void on_gssprite(struct CPUState* cpu, uint32_t a) { (void)a; emitter(cpu, FN_GSSPRITE); }
 
 /* ---- the pass ------------------------------------------------------------- */
 
@@ -374,8 +426,9 @@ static int pass(struct CPUState* cpu, void* user, uint32_t alpha_q16) {
     psx_motion_apply(s_set, s_alpha);
     for (uint32_t i = 0; i < s_nflg; i++) psx_mod_write_word(s_flg[i], 0);   /* GsGetLws recomputes */
     if (s_hud_n == 2) {
-        psx_mod_write_half(CLOCK_OFFSET_X, (uint16_t)lerp16(s_hud[0][0], s_hud[1][0], s_alpha, 200));
-        psx_mod_write_half(STATUS_UI_OFFSET_X, (uint16_t)lerp16(s_hud[0][1], s_hud[1][1], s_alpha, 200));
+        const uint32_t n = s_mode == MODE_BATTLE ? N_SLIDE : 2;
+        for (uint32_t i = 0; i < n; i++)
+            psx_mod_write_half(k_slide[i], (uint16_t)lerp16(s_hud[0][i], s_hud[1][i], s_alpha, 200));
     }
     psx_mod_write_word(ACTIVE_FRAMEBUFFER, b);
     psx_mod_write_word(ACTIVE_ORDERING_TABLE, ot);
@@ -434,7 +487,7 @@ static void on_vsync(struct CPUState* cpu, uint32_t address) {
     const int state = (int8_t)psx_mod_read_byte(GAME_STATE);
     int mode = MODE_NONE;
     if (ra >= GAME_LOOP && ra < GAME_LOOP_END && state == 0) mode = MODE_FIELD;
-    else if (ra >= BTL_TICK_FRAME && ra < BTL_TICK_FRAME_END && state == 1) mode = MODE_BATTLE;
+    else if (ra >= BTL_TICK_FRAME && ra < BTL_TICK_FRAME_END && battle_state()) mode = MODE_BATTLE;
     if (mode == MODE_NONE) return;                    /* other VSync callers (timing, other loops) */
     const int recorded = s_recording;
     s_recording = 0;
@@ -527,6 +580,8 @@ PSX_MOD_CONSTRUCTOR(dw_smooth60_register) {
     psx_mod_register_function_entry_plugin(PLUGIN_ID, DRAW_ENTITY_TEXT, on_text);
     psx_mod_register_function_entry_plugin(PLUGIN_ID, DRAW_ENTITY_TEXT_ICON, on_icon);
     psx_mod_register_function_entry_plugin(PLUGIN_ID, RENDER_FADE, on_fade);
+    psx_mod_register_function_entry_plugin(PLUGIN_ID, DRAW_LINE_3P, on_line3);
+    psx_mod_register_function_entry_plugin(PLUGIN_ID, GS_SORT_SPRITE, on_gssprite);
     psx_mod_register_function_filter_plugin(PLUGIN_ID, TICK_CAMERA_FOLLOW, on_camera_follow);
     psx_mod_register_function_filter_plugin(PLUGIN_ID, START_SOUND, on_start_sound);
     psx_mod_register_function_filter_plugin(PLUGIN_ID, LOAD_IMAGE, on_vram_upload);
