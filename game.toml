@@ -37,7 +37,7 @@ known_sha1 = [
 # Deep widescreen: emit a plugin entry hook in setPosDataPolyFT4 (the shared
 # FT4 positioner). dw_ws_backdrop.c filters by return address to the two
 # world-anchored callers and squashes backdrop X like the GTE squashes 3D.
-mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC", "0x80096F90", "0x800D5608", "0x800D6F64", "0x800D6308", "0x80098808", "0x80112D34", "0x800A31F8", "0x80106218"]
+mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC", "0x80096F90", "0x800D5608", "0x800D6F64", "0x800D6308", "0x80098808", "0x80112D34", "0x800A31F8", "0x80106218", "0x80091CA8", "0x800A315C", "0x800DA36C", "0x800DA3FC", "0x800AF030", "0x800E5724", "0x800E60E0", "0x800ACF74", "0x800C61D4", "0x800948A8", "0x80094818"]
 # Native function replacement (dw_evolution.c). A listed function opens with
 #   if (psx_mod_function_replace(cpu, ADDR)) return;
 # so a plugin can compute the result, write $v0, publish $ra into cpu->pc and
@@ -149,6 +149,24 @@ mod_function_replace_funcs = ["0x800E2544", "0x800D7F68", "0x800FF7F8", "0x800FF
 # 0x80106218 = getScript: a map's DG script by id. dw_newmaps.c serves the ids in
 # dw_newmaps_scripts.inc from the unused MMM.DAT area, so no DG.SCN table row is
 # written, and returns 0 (the stock body runs) for every other id. A filter hook, as above.
+# Smooth 60 FPS (dw_smooth60.c):
+# 0x80091CA8 = VSync: the pass point. gameLoop and the battle loop call VSync(3)
+# after their tick is drawn into the OT and before the swap, so the previous tick's
+# frame is drawn and waiting (PENDING): passes add no delay.
+# 0x800A315C = renderObjects: a stock frame's render starts here; the plugin keeps the
+# RAM as it is at this point, because some render callbacks advance state (fades,
+# damage numbers), and a pass must draw from where the stock render started.
+# 0x800DA36C = renderSprite, 0x800DA3FC = addFXPrim, 0x800AF030 = renderParticleFlash,
+# 0x800E5724 = drawEntityText, 0x800E60E0 = drawEntityTextIcon, 0x800ACF74 = renderFade:
+# the 2D emitters effects, damage numbers and fades go through. Inside a pass their
+# screen arguments are blended between the last two stock frames' calls.
+# 0x800C61D4 = startSound: render callbacks start sound effects (the field menu
+# opening). A pass draws from the pre-render RAM, so it would start them again, and
+# getNextFreeChannel's SPU status read aborts the pass. A filter returns mask 0 there.
+# 0x800948A8 = LoadImage, 0x80094818 = ClearImage: a pass replays the stock render from
+# the same RAM, so its uploads outside the drawn rect (glyphs, map tiles, CLUT fades)
+# rewrite what the stock frame already left in VRAM and are then rolled back. A filter
+# skips them inside a pass; in battle the command name alone cost 1.5 ms per pass.
 seeds ="seeds/ghidra_funcs.txt"
 out_dir = "generated"
 strict = true

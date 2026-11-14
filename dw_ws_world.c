@@ -43,6 +43,8 @@
 #define DW_RENDER_MAP 0x800D57ECu
 #define DW_ACTIVE_FRAMEBUFFER 0x80134ECCu /* 0/1, written at the top of each frame */
 
+extern int g_psx_render_pass_active;   /* psx_cycle_freeze.h (runtime) */
+
 static int dw_drew[2];   /* frame in buffer N has run renderMap */
 static int dw_last;      /* the last completed frame drew the map */
 static int dw_fb = -1;   /* buffer of the frame in flight, as last seen */
@@ -60,7 +62,10 @@ static int dw_world_predicate(void) {
 static void dw_world_render_map_exit(struct CPUState* cpu, uint32_t address) {
     (void)cpu;
     (void)address;
-    if (psx_mod_widescreen_x_margin() <= 0)
+    /* A render pass (dw_smooth60.c) redraws the frame already shown, with
+     * ACTIVE_FRAMEBUFFER pointing at that buffer: marking it here would leave a
+     * stale 1 for the next frame drawn into it. */
+    if (psx_mod_widescreen_x_margin() <= 0 || g_psx_render_pass_active)
         return;
     dw_drew[psx_mod_read_byte(DW_ACTIVE_FRAMEBUFFER) & 1] = 1;
 }

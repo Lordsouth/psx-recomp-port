@@ -114,7 +114,7 @@ did, and the only symptom was a table in guest RAM still reading its stock
 value in a live battle. If a callback appears not to exist, check the manifest
 before the code.
 
-Eleven plugins live here:
+Twelve plugins live here:
 
 | File | What it does |
 |---|---|
@@ -129,6 +129,7 @@ Eleven plugins live here:
 | `dw_cheats.c` | the cheat list as launcher toggles; the codes stay in `cheats.txt` (§6) |
 | `dw_dw15.c` | moves the memory cards to `saves/dw15/` while Digimon World 1.5 is on (§4.4) |
 | `dw_newmaps.c` | keeps a new map out of a memory card's screen bytes: a save made there names its host map (§3.2) |
+| `dw_smooth60.c` | Smooth 60 FPS: redraws the field and battles between the 20 Hz ticks with render passes, from `VSync` entry (PENDING, no added delay). Passes restore the RAM kept at `renderObjects` entry, blend camera, bones and the 2D emitters' arguments, and skip `startSound` and off-rect `LoadImage`/`ClearImage`. Its 11 `game.toml` hooks are owned in `check_dw15_compat.py` (`docs/investigations/2026-11-13-60fps.md` §6d) |
 
 `codegen_setup.c` is glue for the launcher build, not a plugin.
 
@@ -1391,6 +1392,10 @@ that measured the "before".
   0 (the 128-frame static reload run stays wide). Evolution: 55 -> 0. The
   title stays 4:3 (2686 of 2686 menu frames) and FMV is still vetoed after the
   predicate.
+  Its renderMap exit ignores render passes (`g_psx_render_pass_active`):
+  Smooth 60 FPS redraws the frame already shown with ACTIVE_FRAMEBUFFER
+  pointing at that buffer, so marking it would leave a stale 1 for the next
+  frame drawn there [2026-11-14].
 * **Characters and boxes stay drawn in the reveal** (`dw_ws_camera.c`,
   `dw.ws.cull`). isOffScreen's width argument is widened by the cull envelope
   for its two callers only (entityIsOffScreen, isBoxOffScreen, matched by

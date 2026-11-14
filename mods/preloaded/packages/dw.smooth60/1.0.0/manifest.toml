@@ -1,0 +1,48 @@
+# Digimon World - Smooth 60 FPS. Plugin: dw_smooth60.c.
+#
+# The game runs one logic tick and draws one frame every 3 VBlanks (20 FPS) in
+# the field and in battle. The plugin keeps that tick and redraws the two
+# VBlanks in between with the game's own draw code (VSync entry hook ->
+# psx_mod_render_pass_frame, PENDING flip mode: no added delay), blending
+# camera, model bones and the 2D drawing calls between the last two ticks.
+# Screens it does not recognise draw stock.
+format_version = 11
+id = "dw.smooth60"
+version = "1.0.0"
+name = "Smooth 60 FPS"
+author = "DigimonWorldRecomp"
+description = "Draws the field and battles at 60 frames per second. The game itself still runs at its original speed; only the picture is smoother. Off by default."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-01032"
+
+[[feature]]
+id = "smooth60"
+name = "Smooth 60 FPS"
+description = "Draws two extra frames between each of the game's own frames, in the field and in battle, so the camera, Digimon and the scenery move smoothly. Effects, damage numbers, fades and the HUD sliding in are smoothed too. The game logic is unchanged: timers, battles and inputs run exactly as before, with no added delay. Menus, text boxes and cutscenes still move at the original rate."
+group = "Video"
+default_enabled = false
+vsync = "off"
+
+[[plugin]]
+feature = "smooth60"
+id = "dw.smooth60"
+
+[[option]]
+feature = "smooth60"
+id = "rate"
+label = "Frame rate"
+description = "60 draws at 60 frames per second. Display follows your monitor's refresh rate instead."
+group = "Video"
+type = "choice"
+default = "60"
+
+[[option.choice]]
+value = "60"
+label = "60"
+
+[[option.choice]]
+value = "display"
+label = "Match display"

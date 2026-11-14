@@ -11,6 +11,17 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ## Unreleased
 
+**New: Smooth 60 FPS.** Tick it under **Mods → Video**. The game runs and draws
+at 20 frames per second, in towns and in battle, and every timer in it counts
+those frames. That stepping is the "flicker" some players see, and Run Speed
+makes each step bigger. With Smooth 60 FPS on, the game still runs at its own
+speed, but two extra frames are drawn between each of its own, so the camera,
+the Digimon, the scenery, effects, damage numbers and fades move smoothly. It
+adds no input delay. Choose **60** or **Match display** for the frame rate. It
+works with widescreen, Run Speed, HD texture packs and Digimon World 1.5. Menus,
+text boxes and cutscenes still move at the original rate. It needs the OpenGL
+renderer; it is off by default.
+
 **Widescreen: a recruit's "X joins the city!" no longer freezes the game.**
 A player reported "Agumon joins the city!" staying on screen for good: the world
 kept moving, but they could not get past it. After that box the game moves the

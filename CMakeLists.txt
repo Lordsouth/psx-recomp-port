@@ -42,7 +42,8 @@ set(_dw_codegen_setup
                           "${CMAKE_CURRENT_SOURCE_DIR}/dw_cheats.c"
                           "${CMAKE_CURRENT_SOURCE_DIR}/dw_dw15.c"
                           "${CMAKE_CURRENT_SOURCE_DIR}/dw_newmaps.c"
-                          "${CMAKE_CURRENT_SOURCE_DIR}/dw_newmaps_files.c")
+                          "${CMAKE_CURRENT_SOURCE_DIR}/dw_newmaps_files.c"
+                          "${CMAKE_CURRENT_SOURCE_DIR}/dw_smooth60.c")
 if(PSX_RECOMP_UI)
     list(APPEND _dw_codegen_setup "${CMAKE_CURRENT_SOURCE_DIR}/codegen_setup.c")
 endif()

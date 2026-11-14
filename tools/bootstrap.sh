@@ -17,7 +17,7 @@ cd "$(dirname "$0")/.."
 PSXRECOMP_URL="https://github.com/Lordsouth/psxrecomp.git"
 PSXRECOMP_REF="feat/dw15-mod"
 # The exact framework commit this tree is tested against (on PSXRECOMP_REF).
-PSXRECOMP_COMMIT="078b2e22"
+PSXRECOMP_COMMIT="36f4ad56"
 # Fork of mstan/recomp-ui: the Mods page shows what a toggle turned off.
 RECOMP_UI_URL="https://github.com/Lordsouth/recomp-ui.git"
 RECOMP_UI_REF="feat/dw15-mod"

@@ -113,6 +113,18 @@ HOOK_OWNER = {
     0x800A31F8: ("dw.newmaps.factory/factory", "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  lookupFileTable (filter)
     # getScript: a filter hook serving the factory's script ids in dw_newmaps_scripts.inc (gen_factory.py)
     0x80106218: ("dw.newmaps.factory/factory", "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  getScript (filter)
+    # Smooth 60 FPS (dw_smooth60.c): entry hooks and filters only
+    0x80091CA8: "dw.smooth60/smooth60",  # VSync (pass point)
+    0x800A315C: "dw.smooth60/smooth60",  # renderObjects (pre-render snapshot)
+    0x800DA36C: "dw.smooth60/smooth60",  # renderSprite
+    0x800DA3FC: "dw.smooth60/smooth60",  # addFXPrim
+    0x800AF030: "dw.smooth60/smooth60",  # renderParticleFlash
+    0x800E5724: "dw.smooth60/smooth60",  # drawEntityText
+    0x800E60E0: "dw.smooth60/smooth60",  # drawEntityTextIcon
+    0x800ACF74: "dw.smooth60/smooth60",  # renderFade
+    0x800C61D4: "dw.smooth60/smooth60",  # startSound (filter)
+    0x800948A8: "dw.smooth60/smooth60",  # LoadImage (filter)
+    0x80094818: "dw.smooth60/smooth60",  # ClearImage (filter)
 }
 
 # Code and data the widescreen plugins read or write besides their hooks
