@@ -434,6 +434,13 @@ class Field:
                 print("MEASURE end box, %d rows: %r" % (rows, box), flush=True)
             self.sample_box()
             g.route("3:cross,21:none")           # one game tick (3 frames) sees it: a longer hold can also dismiss the next box
+        if not (hit and gstate() == 0 and g.tamer_state == 0 and self.screen() == row):
+            h = lambda a: struct.unpack("<h", g.d.read(a, 2))[0]      # where it stopped, for a timeout nobody can explain afterwards
+            print("STATE win timed out after %ds: hit %s, game state %d, tamer state %d, script idle %s, boss HP %d, partner HP %d, "
+                  "end box lines %d rows %d, boxes seen %s"
+                  % (time.time() - t0, hit, gstate(), g.tamer_state, self.i32(IS_SCRIPT_PAUSED) == 1, h(NPC_STATS + 0x14),
+                     h(PARTNER_MAX_HP + 4), h(END_LINES), h(END_LINES + 2), [hex(o) for o in self.boxes]), flush=True)
+            self.shot("win_timeout")
         check(hit and gstate() == 0 and g.tamer_state == 0 and self.screen() == row,
               "won: the run-off ended, player in control, still on map %d" % row)
         if end_fix and brains and brains + 1 in MP_BONUS:

@@ -111,6 +111,7 @@ def main():
     ap.add_argument("--card", choices=("glade", "host", "reward"), default="glade", help="off: which saved card to load")
     ap.add_argument("--map", choices=sorted(MAPS), default="glade")
     ap.add_argument("--build", default=os.path.join(root, "build-debug"))
+    ap.add_argument("--out", help="the folder for this run's cards, log and screenshots (default: <build>/newmap_<map>), so runs side by side keep theirs")
     ap.add_argument("--port", type=int, default=4430)
     ap.add_argument("--seed", default=os.path.join(root, "saves"))
     a = ap.parse_args()
@@ -132,7 +133,7 @@ def main():
             if open(os.path.join(src, "..", name), "rb").read() != open(os.path.join(pkg_dir, name), "rb").read():
                 print("%s in %s is stale: rebuild to stage what gen_newmap.py wrote" % (name, pkg_dir), file=sys.stderr)
                 return 2
-    out = os.path.join(a.build, "newmap_%s" % a.map)
+    out = a.out or os.path.join(a.build, "newmap_%s" % a.map)
     cards = os.path.join(out, "cards_fight" if a.mode in ("fight", "measure", "reward") else "cards")    # run2 needs run1's
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
