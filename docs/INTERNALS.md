@@ -1002,8 +1002,24 @@ and the stock 115) to the sheet's Machinedramon cell, every other roster species
 portrait. The name beside it is the fighter's own. 13 words per site; the type-115 special case is skipped, since cell
 63 drawn as 66 is the same quad with an in-table palette. On 1.5 (no arena; both sites are byte-identical to stock
 there) the same 13 words clamp every type of 66 and up to 66, the Machinedramon cell, so 1.5's own Veemon (114)
-shows Machinedramon's portrait there (before, a garbage cell). Not run in the game: versus mode needs two memory cards'
-registrations, which the harness does not drive.
+shows Machinedramon's portrait there (before, a garbage cell).
+
+**Versus** (run 2026-11-15, `tools/verify_versus.py`: both pads, two cards, the Save Machine's registration, GAME.md
+15.6). Three things the earlier work could not see, because the harness drove one pad and the port had one:
+- *Two controllers.* `game.toml` `players = 1` and CMake `MAX_PLAYERS 1` built `PSX_MAX_PLAYERS` 1, so pad 2 did not
+  exist and Battle Mode stopped at player 2's card prompt. Now 2 (the framework's default for two-player titles).
+- *Machinedramon as player 2.* The `loadMMD` hook makes 114 load as 115; an NPC model slot is keyed by the type it was
+  loaded with, so the slot said 115 while the fighter (type 114, `NPC_ENTITIES[0]`) looked for 114 and the match never
+  started (black screen; as player 1, the partner slot, it played). `roster_npc_slot_hook` gives the slot's two other
+  type-keyed doors the same rewrite for modelType 0 only: `getEntityModelComponent` (`0x800A254C`) and `unloadModel`
+  (`0x800A23F4`), two `game.toml` entry hooks. The field never loads a 114 NPC, so nothing there changes.
+- *Registrations with the roster off.* The saves only turned 114 into 115; a roster card's 63-113 registrations stayed
+  raw and stock Versus mode drew them from palette bytes past its 68-entry tables (and read their move slots against
+  another species' list). They are now written as stand-ins too ("Memory cards").
+Proven: portraits are judged from the GPU commands (cell and palette row against the table in RAM and the remap): with
+the roster, 114 drew cell 63 row 0 (Machinedramon), 105 Garurumon's cell, 112 Seadramon's, 68 and 113 Frigimon's, on
+the fighter screen and the name plates, every remap value at most 66; matches 114 v 114, 114 v 68, 105 v 114, 105 v 68,
+112 v 113 played to a result with the fighters loaded as their own types, back to the title, cards unchanged.
 
 **Memory cards** (`dw_roster_saves.c`). A card names its partner by type, and with the roster off a type 63-114
 indexes past every stock partner-line table. Control, before this [run 2026-11-15, `verify_roster_saves.py save` then
@@ -1018,7 +1034,8 @@ address, as `dw_newmaps.c`) the plugin writes the true values into the payload's
 stock partner of the same level from `k_save_stand_in` (`dw_roster_saves.inc`, written by `gen_roster_mod.py`'s
 `save_stand_ins`, ids only); pstat 5 (the form Sukamon's cure evolves into, whatever the partner is now) and pstat 4 (a
 tournament entry's species, when it is the partner's) become the stand-in of what they name; and a Battle Mode
-registration of 114 becomes 115 (stock has no model for 114). Stand-in rules, in order: the raise donor when it is
+registration of a roster species becomes its stand-in (114 becomes 115 on the stock edition, stock has no model
+for 114; its move slots are translated like the partner's). Stand-in rules, in order: the raise donor when it is
 also a stock sibling (a stock target of a stock source the roster wires the species from); else the raise donor (same
 level, body plan and care row, asserted); else the sibling, then any stock partner of the level, sharing the most move
 ids (114 -> MetalGreymon, 63 -> Leomon, 64 -> Megadramon, 65 -> Etemon, 73 and 87 -> Greymon, 100 -> Garurumon).
@@ -1032,8 +1049,14 @@ set given the move a fresh evolution would, the finisher the stand-in's own if i
 scripts store a species in no other saved pstat (op 0x22 `STORE_DIGIMON_TYPE` targets only pstats 5, 103 and 200, by
 `scan_trigger_ids.py`'s decoder over DG.SCN and MAPHEAD.SCN; 103 and 200 are not saved).
 
-Registrations live only in `SAVE_FILE` (`writeSavegame` never writes them), so 115 is in RAM only for the card write:
-an exit hook on `MemCardSync`, filtered to the sync after each save's `MemCardWriteFile`, puts 114 back in both copies.
+Registrations live only in `SAVE_FILE` (`writeSavegame` never writes them), so a stand-in is in RAM only for the card
+write: an exit hook on `MemCardSync`, filtered to the sync after each save's `MemCardWriteFile`, puts the true ids
+back in both copies. Each remapped record carries its own proof in its unused tail (`RegisteredDigimon.unk20`, never
+read: +0x20 `RV`, the true id, its three slots, an FNV-1a of the record's first 0x20 bytes as written); it is restored
+at the sync, at `loadSavegame` and in Versus mode's buffer whenever that hash still matches, independent of the payload
+block, so a card saved again on the stock game keeps the registrations it did not touch, and one made again on the
+stock game (new stats and name) stays as made. The 40-bit mask of 114s is still written and read, for cards from the
+build before this.
 At `loadSavegame` (`0x80112D84`), after the caller has checked the sum, the block is applied to both copies (the save
 machine later copies `saves[1]` over `saves[0]`) only if each hashes to the stored value: the card is then byte for
 byte what the roster save wrote, so nothing newer can be overwritten. Versus mode reads registrations from the card
@@ -1056,7 +1079,7 @@ roster-15 type marks a chest as taken, and Tankmon's move fix is gone. 1.5 keeps
 site: `gen_roster_dw15.py` asserts that `createSavegameChecksum`, the save, sync and Continue call sites are stock
 bytes on 1.5, that `loadSavegame` and `writeSavegame` differ only in `DIGIMON_DATA`'s address, that techniques 0-0x39
 of `MOVE_DATA` are stock at 1.5's `0x8012ABEC`, and that every stand-in is a stock partner of the same level on 1.5.
-The 1.5 edition reads `DIGIMON_DATA` at `0x801F4300`, leaves 114 alone (Veemon) and does not touch registrations.
+The 1.5 edition reads `DIGIMON_DATA` at `0x801F4300`, leaves 114 alone (Veemon, partner and registrations) and writes registrations of 63-113 as stand-ins like the stock edition (its sync and Versus hooks are registered for `dw.roster15` too; `gen_roster_dw15.py` checks `countRegisteredDigimon` and `MemCardSync` are stock bytes on 1.5).
 
 Proven [run 2026-11-15, `tools/verify_roster_saves.py`, every verdict from guest memory or the card]. Controls first,
 on builds without the change: a Machinedramon card loaded on the stock game locks the player out (above); the review's
