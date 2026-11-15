@@ -37,7 +37,7 @@ known_sha1 = [
 # Deep widescreen: emit a plugin entry hook in setPosDataPolyFT4 (the shared
 # FT4 positioner). dw_ws_backdrop.c filters by return address to the two
 # world-anchored callers and squashes backdrop X like the GTE squashes 3D.
-mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC", "0x80096F90", "0x800D5608", "0x800D6F64", "0x800D6308", "0x80098808", "0x80112D34", "0x80112D84", "0x800A31F8", "0x80106218", "0x80091CA8", "0x800A315C", "0x800DA36C", "0x800DA3FC", "0x800AF030", "0x800E5724", "0x800E60E0", "0x800ACF74", "0x800C61D4", "0x800948A8", "0x80094818", "0x800E3D14"]
+mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A2810", "0x800B8928", "0x800D78BC", "0x80096F90", "0x800D5608", "0x800D6F64", "0x800D6308", "0x80098808", "0x80112D34", "0x80112D84", "0x8011341C", "0x800A31F8", "0x80106218", "0x80091CA8", "0x800A315C", "0x800DA36C", "0x800DA3FC", "0x800AF030", "0x800E5724", "0x800E60E0", "0x800ACF74", "0x800C61D4", "0x800948A8", "0x80094818", "0x800E3D14"]
 # Native function replacement (dw_evolution.c). A listed function opens with
 #   if (psx_mod_function_replace(cpu, ADDR)) return;
 # so a plugin can compute the result, write $v0, publish $ra into cpu->pc and
@@ -79,7 +79,7 @@ mod_function_entry_funcs = ["0x800E56EC", "0x800EEBDC", "0x800A1F68", "0x800A281
 # the opposite reveal. 0x800B4780 = renderMist: its exit copies each mist quad
 # one 640-px period over wherever the two-quad union stops short of the wide
 # frame.
-mod_function_exit_funcs = ["0x800D78BC", "0x800D6A4C", "0x800D57EC", "0x800B4CF4", "0x800B4780"]
+mod_function_exit_funcs = ["0x800D78BC", "0x800EB980", "0x800D6A4C", "0x800D57EC", "0x800B4CF4", "0x800B4780"]
 # 0x800FF7F8 = setDigimonRaised and 0x800FF824 = hasDigimonRaised. The roster
 # used to widen one immediate here (sltiu 0x3F -> 0xB4) so the new species got
 # a raised-flag. The id it lands on is species + 0x200, and the space above the

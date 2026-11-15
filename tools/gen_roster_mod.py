@@ -259,6 +259,7 @@ def check_moves_usable(rd, bin_path=None):
     assert not stale, "SPURIOUS_LIST entries no longer needed: %s" % stale
     print("moves: every slot of %d roster species is on its EFE list (%d excused)" % (len(NEW_SPECIES) + 1, len(used)))
 SAVES_INC = os.path.join(ROOT, "dw_roster_saves.inc")
+SPECIAL_FORMS = {0x0B, 0x27, 0x35, 6}   # never a save stand-in (save_stand_ins)
 
 
 def save_stand_ins(rd):
@@ -275,7 +276,10 @@ def save_stand_ins(rd):
          and draws a similar body;
       3. else (114 has no donor; 63-65 use their own padding rows) the stock sibling sharing the most move ids;
       4. else the stock partner of its level sharing the most move ids.
-    A stand-in must be a stock partner: type 1..61 with a real RAISE row. Its moves need no table: the plugin keeps the
+    A stand-in must be a stock partner: type 1..61 with a real RAISE row, and never a special form (SPECIAL_FORMS:
+    Numemon, Sukamon, Nanimon, Devimon, the targets EVL treats apart, src/evl/evl.c:1357): the stock code reads more
+    state for those (a Sukamon's cure evolves into pstat 5, partner.c:1153-1157), which a card cannot vouch for. It must
+    also have a move for a fresh evolution to start on (fresh_move below), which the plugin falls back to. Its moves need no table: the plugin keeps the
     equipped moves the stand-in's own list holds (by move id) and gives the rest what a fresh evolution would, so every
     equipped move is on the stand-in's own list (and so on its EFE lists, as the game's own data)."""
     rec = lambda t: 115 if t == 114 else t      # 114 is a stub in the EXE; the patch gives it 115's record
@@ -283,8 +287,14 @@ def save_stand_ins(rd):
     level = lambda t: rd(DIGIMON_DATA_VA + rec(t) * DIGIMON_STRIDE + 29, 1)[0]
     moves = lambda t: set(rd(DIGIMON_DATA_VA + rec(t) * DIGIMON_STRIDE + DD_MOVES, 16)) - {0xFF}
     to = lambda s: [v for v in struct.unpack("<6b", rd(EVO_PATHS_VA + (s - 1) * EVO_PATHS_STRIDE + 5, 6)) if v > 0]
-    real = lambda t: 1 <= t < N_EVO_PATHS_STOCK and any(rd(RAISE_VA + t * RAISE_STRIDE, 8)) \
-        and rd(RAISE_VA + t * RAISE_STRIDE + 8, 1)[0] > 0
+    real = lambda t: 1 <= t < N_EVO_PATHS_STOCK and t not in SPECIAL_FORMS \
+        and any(rd(RAISE_VA + t * RAISE_STRIDE, 8)) and rd(RAISE_VA + t * RAISE_STRIDE + 8, 1)[0] > 0
+
+    def fresh_move(t):
+        """EVL_applyEvolution's starting move (src/evl/evl.c:1418-1449): a move of the first special's group."""
+        special = rd(DIGIMON_DATA_VA + rec(t) * DIGIMON_STRIDE + 30, 1)[0]
+        lo = {0: 0, 1: 40, 2: 8, 3: 32, 4: 16, 5: 24, 6: 49}.get(special, 0)
+        return [m for m in moves(t) if lo <= m <= lo + 8]
     most = lambda t, pool: max(pool, key=lambda c: (len(moves(c) & moves(t)), -c))
     specs = [(s["type"], s["src"], s["raise_donor"]) for s in NEW_SPECIES] + [(114, MACHINEDRAMON_SRC, None)]
     table, why = {}, {}
@@ -301,6 +311,7 @@ def save_stand_ins(rd):
             why[t] = "stock partner of its level with the most shared moves"
         st = table[t]
         assert real(st) and level(st) == level(t), "stand-in %d for %d is not a stock partner of level %d" % (st, t, level(t))
+        assert fresh_move(st), "stand-in %d has no move a fresh evolution would start on" % st
     for t in sorted(table):
         print("save stand-in: %3d %-15s -> %2d %-13s (%s; %d moves shared)"
               % (t, name(t), table[t], name(table[t]), why[t], len(moves(t) & moves(table[t]))))

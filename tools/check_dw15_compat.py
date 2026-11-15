@@ -82,6 +82,7 @@ ALWAYS_EXCLUSIVE = {"dw.vanilla.roster"}
 NOT_SHIPPED = {"dw.vanilla.vice"}
 WS = "psx.enhancement.widescreen/widescreen"
 ROSTER = "dw.vanilla.roster/roster"
+ROSTER15 = "dw.vanilla.roster/roster-15"
 
 # Who owns each game.toml hook: a feature, or a tuple of them when several
 # features' plugins use it. A hook missing here is an error, so a new hook
@@ -109,8 +110,10 @@ HOOK_OWNER = {
     # createSavegameChecksum: an entry hook per map package, for the save remap (dw_newmaps.c k_maps), and the
     # roster's (dw_roster_saves.c: a roster partner is saved as its stock stand-in)
     0x80112D34: ("dw.newmaps/glade", "dw.newmaps/glade-15", "dw.newmaps.factory/factory",
-                 "dw.newmaps.factory/factory-15", ROSTER),  # createSavegameChecksum (entry)
-    0x80112D84: ROSTER,  # dw_roster_saves.c loadSavegame: the true roster partner back from the card
+                 "dw.newmaps.factory/factory-15", ROSTER, ROSTER15),  # createSavegameChecksum (entry)
+    0x80112D84: (ROSTER, ROSTER15),  # dw_roster_saves.c loadSavegame: the true roster partner back from the card
+    0x800EB980: ROSTER,  # dw_roster_saves.c MemCardSync (exit): 114 registrations back after the card write
+    0x8011341C: ROSTER,  # dw_roster_saves.c countRegisteredDigimon: 114 registrations back in Versus mode
     # lookupFileTable: a filter hook serving the new map names in dw_newmaps_files.inc (gen_factory.py)
     0x800A31F8: ("dw.newmaps.factory/factory", "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  lookupFileTable (filter)
     # getScript: a filter hook serving the factory's and the glade's script ids in dw_newmaps_scripts.inc (gen_factory.py)
@@ -245,6 +248,23 @@ def load_manifests():
         with open(mf, "rb") as f:
             m = tomllib.load(f)
         out[m["id"]] = m
+    return out
+
+
+def generated_hooks():
+    """{(call, address)} for every mod hook call the generated C emits, or None without a generated/ (a setup-host
+    checkout: players generate it)."""
+    import glob
+    import re
+    files = glob.glob(os.path.join(ROOT, "generated", "SLUS_010.32_full_*.c"))
+    if not files:
+        print("note: no generated/ here, so the hooks it emits are not checked")
+        return None
+    pat = re.compile(r"(psx_mod_function_(?:entry|exit|replace))\(cpu, 0x([0-9A-Fa-f]{8})u\)")
+    out = set()
+    for fn in files:
+        with open(fn, encoding="utf-8", errors="replace") as f:
+            out.update((m.group(1), int(m.group(2), 16)) for m in pat.finditer(f.read()))
     return out
 
 
@@ -412,6 +432,17 @@ def main():
         for s in rec.get(key, []):
             if int(s, 16) not in HOOK_OWNER:
                 print("error: game.toml hook %s (%s) has no owner in HOOK_OWNER; add it" % (s, key))
+                return 2
+    # A stale generated/ lacks a newly listed hook and the build then silently never calls it.
+    emitted = generated_hooks()
+    if emitted is not None:
+        for key, call in (("mod_function_entry_funcs", "psx_mod_function_entry"),
+                          ("mod_function_exit_funcs", "psx_mod_function_exit"),
+                          ("mod_function_replace_funcs", "psx_mod_function_replace")):
+            missing = [s for s in rec.get(key, []) if (call, int(s, 16)) not in emitted]
+            if missing:
+                print("error: generated/ has no %s for %s (game.toml %s): it is stale; run `psxrecomp_cli.py "
+                      "generate` (DEVELOPING.md section 2) and rebuild" % (call, ", ".join(missing), key))
                 return 2
     # Only the kinds that die when the function runs interpreted are checked: generated code
     # fires exit and replace hooks, but dirty_ram_interp.c fires only psx_mod_function_entry
