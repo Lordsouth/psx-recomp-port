@@ -262,6 +262,51 @@ def check_mod_payloads(package, root, present):
     return bad
 
 
+def check_project_sources(package, root, present):
+    """-> problems with the game-side sources the staged CMakeLists.txt names.
+
+    Every dw_*.c / codegen_setup.c it lists, plus every project file those
+    include with quotes (recursively), must be in the package AND in
+    DEVELOPING.md's --project-file list, so the documented command cannot
+    drift from the build. Includes that are not project files at the root are
+    framework headers (checked by check_headers) and are skipped.
+    """
+    def read(rel):
+        if os.path.isdir(package):
+            with open(os.path.join(package, rel), "rb") as f:
+                return f.read().decode("utf-8", "replace")
+        with zipfile.ZipFile(package) as z:
+            return z.read(rel).decode("utf-8", "replace")
+
+    if "CMakeLists.txt" not in present:
+        return ["CMakeLists.txt is not in the package"]
+    cmake = read("CMakeLists.txt")
+    need, todo = set(), ["codegen_setup.c"]
+    todo += re.findall(r'CMAKE_CURRENT_SOURCE_DIR\}/([\w.]+\.c)"', cmake)
+    bad = []
+    while todo:
+        rel = todo.pop()
+        if rel in need:
+            continue
+        need.add(rel)
+        if rel not in present:
+            bad.append("project source not in the package  %s" % rel)
+            continue
+        for inc in INCLUDE_RE.findall(read(rel)):
+            if "/" not in inc and os.path.basename(inc) == inc and inc.endswith((".h", ".inc")):
+                if inc in present:
+                    todo.append(inc)
+                elif not re.match(r"^(psx|mod_|cpu_|host_|pgxp|recomp_|interrupts|render_)", inc):
+                    bad.append("project include not in the package  %s  <- %s" % (inc, rel))
+    if "DEVELOPING.md" not in present:
+        bad.append("DEVELOPING.md is not in the package")
+    else:
+        listed = set(re.findall(r"--project-file\s+(\S+)", read("DEVELOPING.md")))
+        for rel in sorted(need - listed):
+            bad.append("not in DEVELOPING.md's --project-file list  %s" % rel)
+    return bad
+
+
 def check_build(root):
     """Configure and build the recompiler from the staged tree."""
     src = os.path.join(root, "psxrecomp", "recompiler")
@@ -329,7 +374,16 @@ def main():
             print("OK: only manifests, plus the allowed Digimon World 1.5 BPS and font licences and the "
                   "new maps' files (Hidden Glade, Abandoned Factory).")
 
-        rc = 1 if (gone or missing or payloads) else 0
+        srcs = check_project_sources(args.package, root, present)
+        print("\nchecked the game-side sources named by CMakeLists.txt")
+        if srcs:
+            print("FAIL: the package or its documented file list is incomplete")
+            for b in srcs:
+                print("   " + b)
+        else:
+            print("OK: every game-side source and project header is in the package and in DEVELOPING.md's list.")
+
+        rc = 1 if (gone or missing or payloads or srcs) else 0
 
         if args.build:
             print("\nbuilding the recompiler from the staged tree ...")

@@ -318,6 +318,18 @@ def main():
             return (f.gstate() == 0 and g.tamer_state == 0 and f.screen() == row, row, i32(0x80134EB8) - money)
         return (False, None, 0)
 
+    def set_menu(want):
+        """Open (want) or close the field menu, whatever state it is in. Triangle toggles it, and a press right after a battle
+        can be lost, so one blind press per step leaves the menu the wrong way round for the steps after it: press until
+        TRI_STATE (-1 while the menu is open) shows the wanted state."""
+        for _ in range(6):
+            if (i32(TRI_STATE) == -1) == want:
+                return True
+            g.route("6:triangle,40:none")
+            if f.wait_for(lambda: (i32(TRI_STATE) == -1) == want, 2):
+                return True
+        return False
+
     def stock_save():
         """The stock game's only save: sleep. The partner is made sleepy (HOUR at its sleepy hour), Sleep is
         chosen from the field menu, and "Save and go to sleep" writes the card (menu 0x2B)."""
@@ -327,16 +339,35 @@ def main():
         if not check(g.para_condition & 1, "partner sleepy at hour %d, so Sleep is offered" % sleepy_h):
             return None
         before = open(os.path.join(card_dir, "card1.mcd"), "rb").read()
-        g.route("6:triangle,40:none")
-        check(f.wait_for(lambda: i32(TRI_STATE) == -1, 10), "field menu open")
-        g.route("6:left,20:none")
-        check(struct.unpack("<h", g.d.read(MENU_CURSOR, 2))[0] == 6, "cursor on Sleep")
+
+        def changed_card():
+            return open(os.path.join(card_dir, "card1.mcd"), "rb").read() != before
+        check(set_menu(True), "field menu open")
+        cursor = lambda: struct.unpack("<h", g.d.read(MENU_CURSOR, 2))[0]
+        c = None
+        while c != cursor():        # the menu is still setting its cursor up when TRI_STATE flips: let it settle
+            c = cursor()
+            time.sleep(0.5)
+        for _ in range(10):         # Left moves the cursor round to Sleep; a press the menu was not ready for is repeated
+            c = cursor()
+            if c == 6:
+                break
+            g.route("6:left,20:none")
+            f.wait_for(lambda: cursor() != c, 1.5)
+        check(cursor() == 6, "cursor on Sleep")
         g.route("6:cross,30:none")
-        end = time.time() + 120
+        start = time.time()
+        end = start + 120
         seen = set()
         while time.time() < end:
             m = i32(CURRENT_MENU)
             seen.add(m)
+            if m == -1 and time.time() < start + 20 and not changed_card():
+                # No menu yet (the partner is lying down). A blind confirm now can land on the save box the moment it opens,
+                # on its first option, "sleep without saving", and the card is never written. Wait for the box instead; only
+                # after 20 s of nothing is a confirm pressed anyway.
+                time.sleep(0.1)
+                continue
             if m == 0x28 and g.d.read(YES_NO, 1)[0] != 1:
                 g.route("6:down,20:none")       # "Save and go to sleep" is the second option
             if open(os.path.join(card_dir, "card1.mcd"), "rb").read() != before and idle(g):
@@ -440,9 +471,8 @@ def main():
             check(f.pos() != p and alive() is None, "walks: %s -> %s" % (p, f.pos()))
             won, row, bits = won_battle()
             check(won and alive() is None, "a won battle in room %s (bits +%d)" % (row, bits))
-            g.route("6:triangle,40:none")
-            check(f.wait_for(lambda: i32(TRI_STATE) == -1, 10), "the field menu opens")
-            g.route("6:triangle,40:none")
+            check(set_menu(True), "the field menu opens")
+            set_menu(False)
             f.wait_for(lambda: idle(g), 10)
             if pstat(5):
                 before = triggers()

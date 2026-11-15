@@ -64,7 +64,15 @@ This is what players install: a host exe **without** the generated game C, so it
 carries no game code, plus the framework and tools. The player's own disc
 produces the game on their machine.
 
+Run it from Git Bash with the pinned toolchain on PATH and a **real** `python3`.
+The stage step calls `python3`; on Windows that name is usually the Microsoft
+Store stub, which fails with "Python was not found". Put a `python3` wrapper or a
+real install first on PATH.
+
 ```
+TOOLCHAIN="$(cygpath "$LOCALAPPDATA")/retcomm/toolchains/cmake-clang-v1/v1.0.14"
+export PATH="$TOOLCHAIN/bin:$PATH"   # plus a directory holding a working python3
+
 cmake -S . -B build-setup -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DPSX_RECOMP_UI=ON -DRECOMP_UI_ENABLE_MODS=ON \
   -DPSXRECOMP_FORCE_SETUP_HOST=ON -DPSX_SETUP_WIZARD=ON
@@ -76,7 +84,7 @@ psxrecomp/tools/package_setup_host.sh \
   --exe-name Digimon_World_Recompiled \
   --display-name "Digimon World Recompiled" \
   --recompiler-build psxrecomp/recompiler/build \
-  --runtime-bin /c/msys64/mingw64/bin \
+  --runtime-bin "$TOOLCHAIN/x86_64-w64-mingw32/bin" \
   --project-file CMakeLists.txt --project-file game.toml --project-file VERSION \
   --project-file codegen_setup.c --project-file codegen_setup.h \
   --project-file dw_ws_backdrop.c --project-file dw_ws_camera.c \
@@ -85,7 +93,7 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file dw_roster.c --project-file dw_roster_data.inc \
   --project-file dw_roster_saves.c --project-file dw_roster_saves.inc \
   --project-file dw_evolution.c --project-file dw_evolution.h \
-  --project-file dw_evoguide.c \
+  --project-file dw_evoguide.c --project-file dw_smooth60.c \
   --project-file dw_cheats.c --project-file dw_cheats_data.inc \
   --project-file dw_dw15.c --project-file dw_newmaps.c \
   --project-file dw_newmaps_files.c --project-file dw_newmaps_files.h \
@@ -95,6 +103,13 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file CHANGELOG.md \
   --project-dir seeds --project-dir mods --project-dir tools --project-dir docs
 ```
+
+`--runtime-bin` is only a search directory for MinGW runtime DLLs. The host exe and
+the emitters import system DLLs only (checked with `llvm-objdump -p`, on this tree
+and on the 0.6.0 release), so nothing is staged from it and the 0.6.0 zip has no DLL
+beside the exe; any existing directory works. `mods/`, including the build's
+`mods/bundled`, is staged by default. The packager rewrites `VERSION` in the
+worktree (line endings only): `git checkout VERSION` afterwards.
 
 `PSXRECOMP_FORCE_SETUP_HOST` is what keeps game code out: the host links without
 the generated C (~17 MB, against ~29 MB for the full product).
@@ -112,7 +127,10 @@ redistributed. The framework working tree can also carry stray `.mcd` memory
 cards holding real saves. Both were present the first time this was packaged.
 
 Before archiving, confirm the staged tree has no game executable, no disc image,
-no `generated/*.c` and no BIOS dump. The only `.bin` should be
+no `generated/*.c` and no BIOS dump. The four `.mcd` files under
+`psxrecomp/runtime/tests` are the framework's test fixtures and ship (they did in
+0.6.0; the packager only purges `.mcd` at the psxrecomp root); any other `.mcd` is
+a defect. The only `.bin` should be
 `psxrecomp/bios/openbios.bin`, which is open source. Delete `tools/__pycache__`
 first, or the packager carries your local bytecode along.
 

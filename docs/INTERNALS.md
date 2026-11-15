@@ -2368,6 +2368,7 @@ sandbox memory card seeded from `saves/`; none of them touches your own saves.
 | `extract_disc_file.py` | pull a file off the disc image by its ISO path, so a probe comes from the same disc as the build |
 | `verify_newmap.py` | does a map on row 239 work like a real map? `--map spike` or `glade`; `run1` walks in, runs the map's checks, saves and walks out; `run2` relaunches and continues (the glade: just outside it, then walks in and out and saves next door); `off --map glade --card glade\|host` loads those cards with the mod off; `fight --map glade [--wide] [--brains N] [--no-end-fix] [--drops]` wins, flees and loses the secret fight, and `--brains` crosses a stock end-box threshold, which freezes only with `--no-end-fix` (`GAME.md` 12.1); `measure --map glade --stats ... [--heal N]` plays a real fight, with nothing poked but `--heal`'s stand-in for recovery items, and only prints; `--dw15` runs a mode on Digimon World 1.5, through `glade-15` (§3.1, §3.2, `GAME.md` 7.18) |
 | `verify_endfix15.py` | Battle End Freeze Fix on 1.5: `N` (699, 799, 899 or 998) wins a fight on DGHA01 with Brains at N, and checks the end box finishes on its MP bonus message and control comes back (`GAME.md` 12.1) |
+| `verify_warp_award.py` | a medal's award box open when `Game.warp` runs: earns medal 7 (`--trigger stats`) or 13 (`money`) just before the warp, wins a wild fight on DGHA01 by a real kill, and checks no UI box world object outlives its box and control comes back; `--raw` forces the warp the old way, the control (§9) |
 | `verify_bugfixes.py` | the four stock bug fixes in `dw.vanilla.qol`: `evoitem`, `sleep`, `techwipe [--set word\|pairs\|late]` and `jukebox` each set the bug up and let the game's code run it; `--off` unticks that fix, the control where the stock bug must show; `--dw15` runs on Digimon World 1.5, `--roster` ticks Expanded Roster too; every run first reads each `main_exe` fix's word back from guest memory, and `evoitem` reads the EVL one while the overlay is resident (`GAME.md` 12.2) |
 | `dis_script.py` | disassembles a DG script or a MAPHEAD section from your disc; prints only (`GAME.md` 4) |
 | `dw_tables.py` | writes the map records, species and moves as CSV under `build/tables/`. Derived game data, so it refuses a tracked folder |
@@ -2475,19 +2476,54 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
 
 ## 9. Known issues and open work
 
-* **A battle can halt at its result box after a one-off write of the partner's whole
-  stat and HP/MP blocks. OPEN, cause unknown, older than 2026-11-14.** Seen in the
-  2026-11-14 integration run, with no mods ticked and on a build from before that
-  day's work alike: writing Offense, Defense, Speed and Brains to 999 and max HP,
-  max MP, HP and MP to 9999 once before a wild fight, then winning by an ordinary
-  kill, ends in `FAIL-FAST unknown dispatch addr=0x8006306C ra=0x800EDD1C`
-  (`renderBitBox` calling `BTL_renderBattleEndText` while the bytes there are not
-  code) [run: 5 of 5 on the merged build, 3 of 3 on the older one]. Every smaller
-  subset of those writes passed, one run each, and so did the port's max-stats
-  cheat, which writes the same values every frame (5 runs). Not shown reachable in
-  play; the mechanism was not investigated. `tools/field_drive.py`'s `Field.partner`
-  writes the same bytes during a fight and `Field.win` ends it by a run-off, which
-  is why the repo's own tests never met it.
+* ~~A battle can halt at its result box after a one-off write of the partner's whole
+  stat and HP/MP blocks.~~ **CLOSED 2026-11-15: a test-harness fault, not the port and
+  not reachable in play.** The 2026-11-14 integration run wrote Offense, Defense, Speed
+  and Brains 999 and max HP, max MP, HP and MP 9999 once in the field, warped to
+  DGHA01 with `Game.warp` and won a wild fight; it ended in `FAIL-FAST unknown dispatch
+  addr=0x8006306C ra=0x800EDD1C`, with no mods and on older builds alike. The chain:
+  1. Those six values at their caps are medal 7's condition (`checkMedalConditions`,
+     `src/main/tamer.c:738-746`). The next free-control tick sets tamer state 20, and
+     `tamerTickAwardSomething` opens UI box 1 at its substate 4 (`:1798-1812`). Only
+     the full set qualifies, so every smaller subset passed.
+  2. `Game.warp` then forced tamer state 5 over the open award. The box stayed open
+     (state 1) and `MEDAL_AWARD_PENDING` stayed 1, so the award ran again on DGHA01.
+     `isUIBoxAvailable(1)` returns yes for an open box (`src/main/game_menu.c:1847-1858`),
+     so `createAnimatedUIBox` added a second world object (0x1A4, 1)
+     (`src/main/ui.c:216-232`). Write trace on `UI_BOX_DATA[1]` [run]: created at frame
+     10506 and again at 10856 with state 1, render `renderAwardSomethingTextbox`.
+  3. Each close removes one object (`removeObject`, `src/main/world_object.c:51-79`).
+     One survives, with the box's state at 0, so `renderUIBoxAnimated` sends it to
+     `renderUIBoxStatic`, which calls the box's render callback every frame
+     (`src/main/ui.c:120-137,234-256`). At the halt `WORLD_OBJECTS` slot 15 still held
+     (0x1A4, 1) and all six boxes were state 0 [run].
+  4. The win's `createBitsBox` set box 1's callback to `renderBitBox`
+     (`src/main/battle_ui.c:289`). After the win the field reloads its map data over
+     `BTL_REL.BIN` (base 0x80052AE0). A write trace on 0x80063068-0x80063074 showed
+     three CD DMA (channel 3) writes to `BTL_renderBattleEndText`: map data at frame
+     10707, the battle overlay at 12380, the same map data again at 18189. The leaked
+     `renderBitBox` then called `BTL_renderBattleEndText` (`:461-465`; the text buffer
+     at 0x80073EA0 is map data by then, so it is not 0) and ran into bytes
+     `bf81bc59...` [run].
+  The overlay loader's `invalidations 2, stale_blocked 2` were correct: a compiled
+  candidate whose live code CRC no longer matches is marked invalid and refused
+  (`psxrecomp/runtime/src/overlay_loader.c` `range_candidate_matches`, about line
+  3802). RAM really held map data there; a console would have run the same bytes.
+  The per-frame max-stats cheat never halted because its medal box opens during
+  boot, and `Field.enter` presses cross until the player is in control, which
+  closes it before any warp. No stock path that leaves tamer state 20 without the
+  award's own close was found: the award stops game time and parks the partner, and
+  doors, talk and wild contact are all checked only in free control [inferred]. A
+  player who maxes a partner sees the medal box and closes it.
+  **Fix:** `Game.warp` (`tools/dwgame.py`) presses cross while the tamer is in a state
+  that holds box 1 open (7 pickup, 14 chest, 20 award or sickness) before it forces
+  state 5. `tools/verify_warp_award.py` writes the stats (or 999999 bits for medal 13
+  with `--trigger money`) just before the warp, wins by a real kill, and checks that no
+  box object outlives its box and that control comes back; `--raw` is the old
+  warp. Before the fix 4 of 4 halted (two runs of the old `Game.warp`, two `--raw`),
+  and `--raw --trigger money` left the same orphan. After it, 5 of 5 passed with no
+  orphan and control back [run]. `verify_smooth60.py --fade` still
+  flips state 5 itself, with no write that awards a medal first.
 * **W2 UI counter-squash does not work** (§5.2). Dormant.
 * ~~Widescreen's entry hooks never ran.~~ **CLOSED (0.4.0)**: the framework
   update made entry hooks plan-selected (§2.2), and the widescreen manifest
