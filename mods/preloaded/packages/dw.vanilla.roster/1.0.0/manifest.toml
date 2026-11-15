@@ -2158,6 +2158,8 @@ package = "dw.1_5"
 requires_feature = "dw15"
 
 # The cup lists are rebuilt in guest RAM by dw_roster.c's getScript filter (its 1.5 callback).
+# Memory cards (dw_roster_saves.c, the 1.5 edition): a roster-15 partner is saved as its stock stand-in,
+# so plain 1.5 never evolves back into a species its setDigimonRaised banks on treasure-chest triggers.
 [[plugin]]
 feature = "roster-15"
 id = "dw.roster15"

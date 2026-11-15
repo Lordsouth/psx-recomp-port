@@ -46,6 +46,7 @@ gen_roster_mod.py keeps it when it rewrites the part above.
 """
 import argparse
 import os
+import re
 import struct
 import sys
 import tomllib
@@ -54,8 +55,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 from check_dw15_compat import RAM_BASE, RELOCATED, Disc, Exe, sha256  # noqa: E402
-from gen_roster_mod import (DD_MOVES, MOVE_FIXES, NEW_SPECIES, STD_BRACKET_LBA,  # noqa: E402  the same species, requirements,
-                            std_bracket_patches)                               # donors, move fixes, cup bracket
+from gen_roster_mod import (DD_MOVES, EXE, MOVE_FIXES, NEW_SPECIES, SAVES_INC, SPECIAL_FORMS,  # noqa: E402  the same
+                            STD_BRACKET_LBA, std_bracket_patches)   # species, donors, move fixes, cup bracket, stand-ins
 
 MANIFEST = os.path.join(ROOT, "mods", "preloaded", "packages", "dw.vanilla.roster", "1.0.0", "manifest.toml")
 DW15_MANIFEST = os.path.join(ROOT, "mods", "preloaded", "packages", "dw.1_5", "1.0.0", "manifest.toml")
@@ -65,6 +66,7 @@ DIGIMON_DATA, DD_STRIDE = 0x801F4300, 0x34
 MODTBL, MODTBL_LBA, MODTBL_SIZE, MODTBL_STAGED = 0x80089000, 168481, 30720, 0x80142000
 EVO_REQ, EVO_GAINS, EVO_PATHS = 0x80089020, 0x8008BA20, 0x8008CF20
 RAISE, ITEM_TAKE, TRN_ANIM, TRN2_ANIM = 0x801FA01C, 0x801FCA40, 0x8012ED14, 0x8012F014
+SAVE_MOVE_DATA_15 = 0x8012ABEC                     # dw_roster_saves.c k_dw15.move_data: 1.5 moved MOVE_DATA here
 SET_RAISED, HAS_RAISED = 0x801F0D40, 0x801F9B80
 EVL_BOUND_HOOK, EVL_BOUND_CODE, EVL_SHARD_LIMIT = 0x80061DE0, 0x801F9160, 0x800677B0   # 1.5's own shard bound
 ROSTER_BANK = 0x296                       # trigger = 0x296 + species: 63..113 -> 0x2D5..0x307
@@ -116,6 +118,35 @@ def _disc_patch(offset, old, new, note, feature):
             'expected = "%s"' % hexs(old), 'replace = "%s"' % hexs(new), ""]
 
 
+def save_checks(ram, name, level):
+    """dw_roster_saves.c's 1.5 edition hooks the same addresses and reads 1.5's own tables: hold 1.5 to that."""
+    problems = []
+    stock = open(EXE, "rb").read()
+    srd = lambda a, n: stock[a - 0x80090800 + 0x800:a - 0x80090800 + 0x800 + n]
+    for what, addr, n in (("createSavegameChecksum", 0x80112D34, 0x50),
+                          ("the 0x2B save and sync calls", 0x80111480, 0xB0),
+                          ("the 0x41 save and sync calls", 0x80112040, 0xB0),
+                          ("the Continue checksum calls", 0x80110D70, 0x60)):
+        if ram(addr, n) != srd(addr, n):
+            problems.append("1.5 differs from stock in %s (0x%08X), which dw_roster_saves.c hooks or filters on"
+                            % (what, addr))
+    for a, n in ((0x80112D84, 0x344), (0x801130C8, 0x300)):    # load/writeSavegame: only DIGIMON_DATA's lui/addiu
+        diff = [o for o in range(0, n, 4) if ram(a + o, 4) != srd(a + o, 4)]
+        if len(diff) != 2 or {ram(a + o, 2) for o in diff} != {bytes([0x1F, 0x80]), bytes([0x00, 0x43])}:
+            problems.append("1.5's save payload code at 0x%08X differs beyond DIGIMON_DATA's address: %s"
+                            % (a, ["0x%08X" % (a + o) for o in diff]))
+    # fresh_move reads the powers of techniques 0..0x39; 1.5 moved MOVE_DATA and edits only three enemy moves
+    if ram(SAVE_MOVE_DATA_15, 0x3A * 16) != srd(0x8012623C, 0x3A * 16):
+        problems.append("1.5's MOVE_DATA (techniques 0..0x39) is not the stock table at 0x%08X" % SAVE_MOVE_DATA_15)
+    text = open(SAVES_INC, encoding="utf-8").read()
+    for t, st in ((int(x), int(y)) for x, y in re.findall(r"\{\s*(\d+)\s*,\s*(\d+)\s*\}", text)):
+        if t == 114:                                            # Veemon on 1.5: never remapped there
+            continue
+        if level(st) != level(t) or st in SPECIAL_FORMS or not ram(RAISE + st * 28 + 8, 1)[0]:
+            problems.append("save stand-in %s for %s is not a stock partner of its level on 1.5" % (name(st), name(t)))
+    return problems
+
+
 def build(disc, exe):
     problems, out = [], []
     ram = lambda a, n: bytes(exe.ram[a - RAM_BASE:a - RAM_BASE + n])
@@ -158,7 +189,10 @@ def build(disc, exe):
             "# Only with 1.5 beneath it: its MODTBL writes go on sectors the 1.5 delta owns.",
             "[[requirement]]", 'feature = "roster-15"', 'package = "dw.1_5"', 'requires_feature = "dw15"', "",
             "# The cup lists are rebuilt in guest RAM by dw_roster.c's getScript filter (its 1.5 callback).",
+            "# Memory cards (dw_roster_saves.c, the 1.5 edition): a roster-15 partner is saved as its stock stand-in,",
+            "# so plain 1.5 never evolves back into a species its setDigimonRaised banks on treasure-chest triggers.",
             "[[plugin]]", 'feature = "roster-15"', 'id = "dw.roster15"', ""]
+    problems += save_checks(ram, name, level)
 
     # The evolution shatter: on stock, EVL_buildShardSet writes past its 5,436-byte scratch for big models and
     # the stock roster moves that scratch to its arena (gen_roster_mod.py, EVL_SHARD_*). 1.5 already bounds it:

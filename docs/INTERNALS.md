@@ -119,8 +119,7 @@ Thirteen plugins live here:
 | File | What it does |
 |---|---|
 | `dw_roster.c` | the Expansion-1 arena and the grown tables (§4.1) |
-| `dw_roster_flags.c` | re-banks the new species' raised flags off the game's story flags (§4.1) |
-| `dw_evolution.c` | proof of the replacement primitive (ships disabled), and the read-only C copy of the game's evolution chooser that the Evolution Guide uses |
+| `dw_roster_flags.c` | re-banks the new species' raised flags off the game's story flags (§4.1) || `dw_evolution.c` | proof of the replacement primitive (ships disabled), and the read-only C copy of the game's evolution chooser that the Evolution Guide uses |
 | `dw_evoguide.c` | Evolution Guide: the F2 / Select + L3 panel of the partner's evolutions, read from the live tables and drawn on the host overlay |
 | `dw_ws_backdrop.c` | fade plate, parked HUD, the clock and field gauges as single widgets, the battle bars' slide table (§5) |
 | `dw_ws_camera.c` | both camera clamps, the tile-ladder shift, the load-time nudge (§5) |
@@ -1005,6 +1004,82 @@ portrait. The name beside it is the fighter's own. 13 words per site; the type-1
 there) the same 13 words clamp every type of 66 and up to 66, the Machinedramon cell, so 1.5's own Veemon (114)
 shows Machinedramon's portrait there (before, a garbage cell). Not run in the game: versus mode needs two memory cards'
 registrations, which the harness does not drive.
+
+**Memory cards** (`dw_roster_saves.c`). A card names its partner by type, and with the roster off a type 63-114
+indexes past every stock partner-line table. Control, before this [run 2026-11-15, `verify_roster_saves.py save` then
+`off` on a build without it]: a card saved with Machinedramon (114) loaded with no mods with an invisible, nameless
+partner whose `RAISE_DATA` row read past the table (`9af70000...`), and about 20 s after Continue it went into the
+wild-poop state (7) with the tamer locked (state 6) and never left it (50 s and counting): play was over. A card
+with Gotsumon (68) walked for a minute but still read its raise, evolution and gains rows from past the stock tables.
+
+So a card never names a roster species. At the two save calls of `createSavegameChecksum` (filtered by return
+address, as `dw_newmaps.c`) the plugin writes the true values into the payload's spare bytes (`unknown4E1`, GAME.md
+9.1), with a hash, and rewrites what the stock game would read as a species: the partner becomes its **stand-in**, a
+stock partner of the same level from `k_save_stand_in` (`dw_roster_saves.inc`, written by `gen_roster_mod.py`'s
+`save_stand_ins`, ids only); pstat 5 (the form Sukamon's cure evolves into, whatever the partner is now) and pstat 4 (a
+tournament entry's species, when it is the partner's) become the stand-in of what they name; and a Battle Mode
+registration of 114 becomes 115 (stock has no model for 114). Stand-in rules, in order: the raise donor when it is
+also a stock sibling (a stock target of a stock source the roster wires the species from); else the raise donor (same
+level, body plan and care row, asserted); else the sibling, then any stock partner of the level, sharing the most move
+ids (114 -> MetalGreymon, 63 -> Leomon, 64 -> Megadramon, 65 -> Etemon, 73 and 87 -> Greymon, 100 -> Garurumon).
+Never a special form (Numemon, Sukamon, Nanimon, Devimon, the targets EVL treats apart, `evl.c:1357`): their stock
+code reads more state, and a Sukamon stand-in let the stock cure evolve into a stale roster type left in pstat 5. Each
+stand-in must have a move a fresh evolution starts on (asserted). No stock species of the same level is wired directly
+to or from a roster one, and the card does not know what the partner evolved from, so the brief's first two
+preferences cannot apply as written; the generator prints every pick and its reason. Equipped moves are translated by
+move id into the stand-in's own list (a slot means a different move under another type), the rest dropped, an empty
+set given the move a fresh evolution would, the finisher the stand-in's own if it lacks the roster one. The disc
+scripts store a species in no other saved pstat (op 0x22 `STORE_DIGIMON_TYPE` targets only pstats 5, 103 and 200, by
+`scan_trigger_ids.py`'s decoder over DG.SCN and MAPHEAD.SCN; 103 and 200 are not saved).
+
+Registrations live only in `SAVE_FILE` (`writeSavegame` never writes them), so 115 is in RAM only for the card write:
+an exit hook on `MemCardSync`, filtered to the sync after each save's `MemCardWriteFile`, puts 114 back in both copies.
+At `loadSavegame` (`0x80112D84`), after the caller has checked the sum, the block is applied to both copies (the save
+machine later copies `saves[1]` over `saves[0]`) only if each hashes to the stored value: the card is then byte for
+byte what the roster save wrote, so nothing newer can be overwritten. Versus mode reads registrations from the card
+without `loadSavegame`; an entry hook on `countRegisteredDigimon`, called right after they are copied to the VS buffer,
+restores the 114s there when the buffer matches a validated copy. A stock save rewrites the payload from the live game
+(playtime, clock, the partner) and carries the block over untouched, so the hash fails and what the player then had
+stays. The hash leaves out the spare block, the checksum and what `dw_newmaps.c` rewrites at the same call
+(positions, poop piles, screens, waypoint tail), so the hooks may run in either order; any new rewrite of the save
+buffer at that call must stay inside those excluded ranges or update `covered()`. A stock partner saved with the roster
+on is written exactly as stock writes it, except that a stale block from an earlier roster save is cleared (27 bytes
+that stock would have carried over). Cards written by a roster build before this change (raw 63-114, no block) still
+break the stock game until saved once with this build. The card title (`DIGIMON_NAME(partnerType)`, written before the
+checksum call) still names the roster species; it is display only.
+
+**Digimon World 1.5** gets the same, under plugin `dw.roster15` (a `[[plugin]]` line under `roster-15`, from
+`gen_roster_dw15.py`). Plain 1.5 does hold rows for every roster-15 species (Agumon's raise and training rows as
+placeholders, no evolution paths), but its own `setDigimonRaised` banks species 63-107 at `0x262 + species`, on
+treasure-chest triggers, and every evolution calls it (`evl.c:1489`); with roster-15 off, Sukamon's cure into a
+roster-15 type marks a chest as taken, and Tankmon's move fix is gone. 1.5 keeps the payload layout and every hooked
+site: `gen_roster_dw15.py` asserts that `createSavegameChecksum`, the save, sync and Continue call sites are stock
+bytes on 1.5, that `loadSavegame` and `writeSavegame` differ only in `DIGIMON_DATA`'s address, that techniques 0-0x39
+of `MOVE_DATA` are stock at 1.5's `0x8012ABEC`, and that every stand-in is a stock partner of the same level on 1.5.
+The 1.5 edition reads `DIGIMON_DATA` at `0x801F4300`, leaves 114 alone (Veemon) and does not touch registrations.
+
+Proven [run 2026-11-15, `tools/verify_roster_saves.py`, every verdict from guest memory or the card]. Controls first,
+on builds without the change: a Machinedramon card loaded on the stock game locks the player out (above); the review's
+case, Gotsumon (68) cured of the virus and later evolved into PlatinumSukamon (73) with pstat 5 still 68, saved as a
+Sukamon stand-in with pstat 5 = 68, and the stock cure turned it into type 8984 (the gains row read past the table)
+without giving control back; on plain 1.5, a roster-15 Sukamon caught from Gotsumon, and a Tankmon saved later in that
+game with pstat 5 still 68, both cured into Gotsumon and set trigger 0x2A6, a treasure chest.
+With the change: `save --register` with 114, 68, 105, a Sukamon caught from 68 and the review's 73v68 wrote cards
+naming 12, 17, 22, Sukamon and Greymon (5), pstat 5 = 17 where it was 68, and the 114 registration as 115 while
+`SAVE_FILE` kept 114 in both copies after the write. `off` (no mods) Continued each as that stock partner, every
+equipped move on its own list, no saved pstat naming a roster species, the registration reading 115; each walked, won a
+battle, opened the field menu, and where pstat 5 was set, the cure (routine 2's two writes) evolved it into Gabumon
+(17) with only the stock raised flag 0x211 set; each saved again through Sleep. `on --card T` restored type, `Stats`,
+learned moves, name, lives, triggers and pstats exactly (`PartnerPara` but for the field's ticking timers) and the
+registration as 114 in both copies; `on --card T_off` found the stale block on the card, the load hook counted it
+stale, and the stock partner stayed. A tournament entry (pstat 4 = 105) was saved as 22 and came back as 105. Versus
+mode (title, Battle Mode, player 1's card) loaded the registration as 114 with the roster and 115 without; the harness
+drives pad 1 only, so player 2's card and the fighter selection screen were not reached. `mkstock` + `stock`: a card
+the stock game wrote loads unchanged with the roster on, and a stock partner saved with it is written as the game holds
+it, the spare bytes untouched. On 1.5 (`--dw15`): a roster-15 Sukamon caught from Gotsumon and a Tankmon saved with
+pstat 5 = 68 were written as Sukamon/Ogremon with pstat 5 = 17; plain 1.5 cured both into Gabumon setting only 0x211,
+played and saved; roster-15 back restored both exactly, and kept the stock partner on the re-saved cards. Not run:
+savestates and Rewind across a card save (no state is held [inferred]), the roster and the new maps together.
 
 Regenerate: `py -3.12 tools/gen_roster_mod.py` (`--check` verifies only).
 
@@ -2410,11 +2485,11 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
   Worth knowing for anyone testing this by hand: **Agumon cannot reach any
   roster species.** Its `to[]` is entirely stock. The twelve stock sources that
   can are types 2, 5, 6, 7, 8, 10, 11, 16, 30, 39, 44 and 50.
-* **`save_compatibility` does not reach memory cards.** `isolated` scopes
-  savestate slots only (§3.2), so a card
-  save made with the roster enabled and loaded with it disabled reads a stale
-  table set. Documented in `cheats.txt`; a framework-level fix is the real
-  answer.
+* ~~**`save_compatibility` does not reach memory cards.**~~ **FIXED 2026-11-15**
+  for the roster by `dw_roster_saves.c` (§4.1 "Memory cards"): a card names a
+  roster partner's stock stand-in and keeps the true one in spare bytes, so it
+  loads on the stock game and Continue with the roster on restores it. Still
+  true for savestates: `isolated` scopes their slots to the plan (§3.2).
 * ~~The widened raised-flag guard's trigger ids were never audited against the
   disc scripts.~~ **AUDITED 2026-09-04, and it was a real collision. Fixed.**
 
