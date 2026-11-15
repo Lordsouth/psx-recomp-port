@@ -97,7 +97,9 @@ def additions(cups, info, roster):
             if ok:
                 new.append(t)
         add[(cup, 3)] = new
-        add[(cup, 2)] = [t for t in new if cup in PENALTY_CUPS and info(t)[0] == 5]
+        pen = set(members(cups[cup][2]))      # every roster Ultimate that may enter, stock-listed ones too
+        add[(cup, 2)] = [t for t in roster if cup in PENALTY_CUPS and info(t)[0] == 5
+                         and (t in entry or t in new) and t not in pen]
     return add
 
 
@@ -192,6 +194,44 @@ def patches(dg, lba, info, roster, feature, disc_bytes_patch, stock_types=range(
     return out, report
 
 
+# ---- run time: the lists are rebuilt in guest RAM, not patched on disc ------------------------------------
+# dw_roster.c (roster_cup_filter) rebuilds a script's list area the moment the game asks for script 213 or 102
+# again after loading it (every list read goes through getScript), with the same algorithm as relayout() above:
+# lists in (cup, list) order, additions before the terminator, identical lists once, packed from the area's
+# start, u16s rewritten. The include carries only ids, offsets and hashes, never the stock lists.
+def fnv1a(b):
+    h = 0x811C9DC5
+    for x in b:
+        h = ((h ^ x) * 0x01000193) & 0xFFFFFFFF
+    return h
+
+
+def runtime_data(dg, info, roster, roster15):
+    """-> one record per cup script: id, slot size, probe position and its stock/rebuilt values (stock and 1.5
+    editions), whole-slot hashes, and the additions as bytes [cup, list, n, ids...]."""
+    out = []
+    for sn in CUP_SCRIPTS:
+        lo, hi = struct.unpack_from("<2I", dg, sn * 4)
+        sc = dg[lo:hi]
+        refs, cups = decode(sc)
+        check(cups, info, range(1, 63))
+        add = additions(cups, info, roster)
+        add15 = additions(cups, info, roster15)
+        assert all([t for t in add[key] if t in roster15] == add15[key] for key in add), (
+            "the 1.5 additions are not the stock ones without the stock-only species")
+        new, _ = relayout(sc, add)
+        new15, _ = relayout(sc, add15)
+        pos = refs[(0, 3)][0]
+        probe = lambda b: struct.unpack_from("<H", b, pos)[0]
+        assert len({probe(sc), probe(new), probe(new15)}) == (3 if roster != roster15 else 2), (
+            "the probe word does not tell the layouts apart")
+        blob = b"".join(bytes([cup, k, len(add[(cup, k)])]) + bytes(add[(cup, k)])
+                        for cup in range(N_CUPS) for k in (2, 3) if add[(cup, k)])
+        out.append(dict(id=sn, size=len(sc), probe_pos=pos, probe=(probe(sc), probe(new), probe(new15)),
+                        hash=(fnv1a(sc), fnv1a(new), fnv1a(new15)), adds=blob + bytes([0xFF])))
+    return out
+
+
 # ---- versus mode (a roster partner registered on the save screen reaches it) -------------------------
 # The versus portraits sheet (\STDDAT\16TAISEN.TIM) holds types 3..65 in cells 0..62 and Machinedramon in
 # cell 63, drawn as type 66 or by the stock type-115 special case. Both renderers take the cell from type-3
@@ -227,6 +267,17 @@ def vs_words(site, arena_off):
     st = VS_STOCK[site]
     tail = [st[9], 0x10000004 if site == "select" else 0x10000001, 0]   # sh v0,14(..); b past the 115 case; nop
     return [lui_at, addu_at, lbu_r] + st[0:2] + [(st[2] & ~(31 << 16)) | (r << 16)] + st[3:7] + tail
+
+
+def vs_clamp_words(site):
+    """1.5 (no arena): the 13 words clamp the type to 66 when it is 66 or more, then the stock palette read."""
+    r = {"select": 17, "plate": 18}[site]
+    st = VS_STOCK[site]
+    sltiu = (0x0B << 26) | (r << 21) | (1 << 16) | 66          # sltiu at, rN, 66
+    bne = 0x14200002                                            # bne at, zero, +2 (past the clamp)
+    clamp = (0x09 << 26) | (r << 16) | 66                      # addiu rN, zero, 66
+    tail = [st[9], 0x10000004 if site == "select" else 0x10000001, 0]
+    return [sltiu, bne, st[0], clamp] + st[1:7] + tail
 
 
 # ---- 1.5: the projectile icon of 112/113 (no arena on 1.5) --------------------------------------------

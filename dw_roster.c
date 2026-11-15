@@ -359,11 +359,190 @@ static void roster_activate(void) {
     }
 }
 
+/* ---- cup lists (tools/roster_cups.py) ------------------------------------
+ * Roster species join the arena cups' entry and penalty lists in DG scripts
+ * 213 and 102. The lists are rebuilt in the script buffer, never patched on
+ * disc: every list read goes through getScript(ACTIVE_MAP_SCRIPT), whose
+ * cached path returns the buffer, so this filter rebuilds the lists on the
+ * load (served here, cup_load) or, failing that, on the first cached call
+ * after the stock body loaded it. A probe word tells
+ * stock, rebuilt and other layouts apart in O(1); the stock layout must also
+ * match the generator's whole-slot hash, so a different disc is left untouched
+ * (counter roster.cups.unknown) and its cups simply keep the stock lists.
+ * A savestate restores whatever the buffer held: rebuilt stays rebuilt (probe),
+ * stock is rebuilt on the next call. Ids are disjoint from dw_newmaps.c's own
+ * getScript filter, which declines these. */
+#define CUP_GET_SCRIPT 0x80106218u
+#define CUP_ACTIVE_MAP_SCRIPT 0x80134FC2u   /* u16 */
+#define CUP_MAP_SCRIPT_PTR 0x80134FB4u      /* u8* */
+#define CUP_SCRIPT_OFFSET_PTR 0x80134FB0u  /* u32* DG.SCN offset table */
+#define CUP_LOAD_STARTPOS 0x80134FA8u      /* DG.SCN start sector, cached after the first read */
+#define CUP_N 23
+
+static uint32_t cup_u16(uint32_t a) { return psx_mod_read_half(a); }
+
+static uint32_t cup_hash(uint32_t base, uint32_t size) {
+    uint32_t h = 0x811C9DC5u, i, w;
+    for (i = 0; i < size; i += 4) {
+        w = psx_mod_read_word(base + i);
+        h = (h ^ (w & 0xFF)) * 0x01000193u;
+        h = (h ^ ((w >> 8) & 0xFF)) * 0x01000193u;
+        h = (h ^ ((w >> 16) & 0xFF)) * 0x01000193u;
+        h = (h ^ (w >> 24)) * 0x01000193u;
+    }
+    return h;
+}
+
+/* The relayout of roster_cups.relayout(): lists in (cup, list 1..4) order, the
+ * additions before the terminator, identical lists stored once, packed from
+ * the lowest list offset, every u16 rewritten. `skip` drops an id the edition
+ * cannot raise (114 on 1.5). Returns 0 if the script does not parse. */
+static int cup_rebuild(uint32_t base, uint32_t size, const unsigned char* adds, unsigned skip) {
+    static unsigned char lists[CUP_N * 4][256];
+    static unsigned short len[CUP_N * 4], posv[CUP_N * 4];
+    static unsigned char out[0x4000];
+    unsigned short placed[CUP_N * 4];
+    uint32_t a = 0, p, start = 0xFFFFFFFFu, at, i, j, k, n;
+    for (p = 2; p + 4 <= size; p += 4) {          /* {u16 section, u16 offset}, 0xFFFF ends */
+        uint32_t sec = cup_u16(base + p);
+        if (sec == 0xFFFF)
+            break;
+        if (sec == 0xA) {
+            a = cup_u16(base + p + 2);
+            break;
+        }
+    }
+    if (!a)
+        return 0;
+    for (i = 0; i < CUP_N; i++) {
+        uint32_t sub = cup_u16(base + a + i * 4 + 2);
+        for (k = 1; k <= 4; k++) {
+            uint32_t slot = i * 4 + (k - 1), pos = sub + k * 4 + 2, off = cup_u16(base + pos) + 2, m = 0;
+            posv[slot] = (unsigned short)pos;
+            if (off < start)
+                start = off;
+            if (k == 1) {
+                for (m = 0; m < 3; m++)
+                    lists[slot][m] = psx_mod_read_byte(base + off + m);
+            } else {
+                do {
+                    if (m >= 200 || off + m >= size)
+                        return 0;
+                    lists[slot][m] = psx_mod_read_byte(base + off + m);
+                } while (lists[slot][m++] < 0xFE);
+            }
+            len[slot] = (unsigned short)m;
+        }
+    }
+    for (p = 0; adds[p] != 0xFF; p += 3 + adds[p + 2]) {      /* [cup, list, n, ids...] */
+        uint32_t slot = adds[p] * 4 + (adds[p + 1] - 1u), term;
+        if (adds[p] >= CUP_N || adds[p + 1] < 2)
+            return 0;
+        term = lists[slot][len[slot] - 1];
+        n = len[slot] - 1;
+        for (j = 0; j < adds[p + 2]; j++)
+            if (adds[p + 3 + j] != skip && n < 254)
+                lists[slot][n++] = adds[p + 3 + j];
+        lists[slot][n++] = (unsigned char)term;
+        len[slot] = (unsigned short)n;
+    }
+    at = start;
+    for (i = 0; i < CUP_N * 4; i++) {
+        placed[i] = 0;
+        for (j = 0; j < i; j++)
+            if (len[j] == len[i] && !memcmp(lists[j], lists[i], len[i])) {
+                placed[i] = placed[j];
+                break;
+            }
+        if (j < i)
+            continue;
+        if (at + len[i] > size)
+            return 0;
+        placed[i] = (unsigned short)at;
+        memcpy(out + at, lists[i], len[i]);
+        at += len[i];
+    }
+    for (i = start; i < at; i++)
+        psx_mod_write_byte(base + i, out[i]);
+    for (i = 0; i < CUP_N * 4; i++)
+        psx_mod_write_half(base + posv[i], (uint16_t)(placed[i] - 2));
+    return 1;
+}
+
+static uint32_t cup_warned = 0xFFFFFFFFu;
+
+/* A load of 213/102 is served here, as the stock body would read it (the
+ * offset table's row, whole sectors from DG.SCN's cached start), so the lists
+ * are rebuilt before anything reads them. If the read fails or the bytes are
+ * not the stock ones, decline: the stock body loads the script and the cached
+ * path below decides. */
+static int cup_load(const RosterCupScript* s, uint32_t id, int edition, struct CPUState* cpu) {
+    static unsigned char buf[0x4000];
+    uint32_t table = psx_mod_read_word(CUP_SCRIPT_OFFSET_PTR), start = psx_mod_read_word(CUP_LOAD_STARTPOS);
+    uint32_t off = psx_mod_read_word(table + id * 4), size = psx_mod_read_word(table + id * 4 + 4) - off;
+    uint32_t h = 0x811C9DC5u, i, dst;
+    if (!start || size != s->size || (off & 0x7FF) || !psx_mod_read_disc_sectors(start + (off >> 11), size >> 11, buf))
+        return 0;
+    for (i = 0; i < size; i++)
+        h = (h ^ buf[i]) * 0x01000193u;
+    if (h != s->hash[0])
+        return 0;
+    dst = psx_mod_read_word(CUP_MAP_SCRIPT_PTR);
+    for (i = 0; i < size; i += 4)
+        psx_mod_write_word(dst + i, (uint32_t)buf[i] | buf[i + 1] << 8 | buf[i + 2] << 16 | (uint32_t)buf[i + 3] << 24);
+    psx_mod_write_half(CUP_ACTIVE_MAP_SCRIPT, (uint16_t)id);
+    if (cup_rebuild(dst, size, s->adds, edition ? 114u : 0x100u) && cup_hash(dst, size) == s->hash[edition ? 2 : 1])
+        psx_mod_counter_add("roster.cups.rebuilt", 1);
+    cpu->gpr[2] = dst;
+    return 1;
+}
+
+static int cup_filter(struct CPUState* cpu, int edition) {
+    uint32_t i, id = cpu->gpr[4] & 0xFFFF, base, probe;
+    for (i = 0; i < sizeof(k_cup_scripts) / sizeof(k_cup_scripts[0]); i++) {
+        const RosterCupScript* s = &k_cup_scripts[i];
+        if (s->id != id)
+            continue;
+        if (id != psx_mod_read_half(CUP_ACTIVE_MAP_SCRIPT))
+            return cup_load(s, id, edition, cpu);
+        base = psx_mod_read_word(CUP_MAP_SCRIPT_PTR);
+        probe = cup_u16(base + s->probe_pos);
+        if (probe == s->probe[edition ? 2 : 1])
+            return 0;                             /* already rebuilt */
+        if (probe == s->probe[0] && cup_hash(base, s->size) == s->hash[0]
+                && cup_rebuild(base, s->size, s->adds, edition ? 114u : 0x100u)
+                && cup_hash(base, s->size) == s->hash[edition ? 2 : 1]) {
+            psx_mod_counter_add("roster.cups.rebuilt", 1);
+            return 0;
+        }
+        if ((id << 16 | probe) != cup_warned) {   /* once per layout, not per call */
+            cup_warned = id << 16 | probe;
+            psx_mod_counter_add("roster.cups.unknown", 1);
+            printf("dw_roster: script %u's cup lists are not the stock ones; left as they are\n", (unsigned)id);
+            fflush(stdout);
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static int roster_cup_filter(struct CPUState* cpu, uint32_t address) {
+    (void)address;
+    return cup_filter(cpu, 0);
+}
+
+static int roster15_cup_filter(struct CPUState* cpu, uint32_t address) {
+    (void)address;
+    return cup_filter(cpu, 1);
+}
+
 PSX_MOD_CONSTRUCTOR(dw_roster_register) {
     psx_mod_register_activation_plugin("dw.roster", roster_activate);
     psx_mod_register_function_entry_plugin("dw.roster", ROSTER_HOOK_VADDR,
                                            roster_hook);
     psx_mod_register_vblank_plugin("dw.roster", roster_vblank);
+    psx_mod_register_function_filter_plugin("dw.roster", CUP_GET_SCRIPT, roster_cup_filter);
+    psx_mod_register_function_filter_plugin("dw.roster15", CUP_GET_SCRIPT, roster15_cup_filter);
     psx_mod_register_function_entry_plugin("dw.roster", ROSTER_LOADMMD_VADDR,
                                            roster_remap_hook);
     psx_mod_register_function_entry_plugin("dw.roster",

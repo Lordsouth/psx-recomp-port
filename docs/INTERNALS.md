@@ -961,18 +961,31 @@ Machinedramon's battle-intro banner row (114) is now composed like 112 and 113: 
 Geremon's, ン from the "MON" suffix and ドラモン from Megadramon's, each asserted in the generator.
 `tools/verify_cups.py --roster N` checks the portrait from the GPU commands; `--revert-fix` is the control.
 
-**Cup eligibility.** Every roster species can register for cups (`tools/roster_cups.py`, called by both generators). The
-lists are in DG.SCN scripts 213 (File City's arena) and 102 (the yearly cup on map 106), reached through u16 offsets
-from the script's start, packed with no room after them. So the generator rebuilds the whole list area of each script:
-stock lists byte-identical, roster lists with the additions, identical lists stored once (the six grade cups share
-one entry list), packed from the area's start, every offset rewritten. Script 213's lists then end at 0x2F06 of its
-0x3000 slot and 102's at 0x2D16; the rest of each slot is stock bytes nothing references. The rules are the stock ones
+**Cup eligibility.** Every roster species can register for cups (`tools/roster_cups.py`, data from both generators,
+the work in `dw_roster.c`). The lists are in DG.SCN scripts 213 (File City's arena) and 102 (the yearly cup on map
+106), reached through u16 offsets from the script's start, packed with no room after them. Nothing is patched on disc
+and no stock list is in the package: a filter hook on `getScript` (0x80106218, beside `dw_newmaps.c`'s, whose ids are
+disjoint) serves a load of 213 or 102 itself, as the stock body would (the offset table row, whole sectors from
+DG.SCN's cached start sector, read through the disc view so sector mods and 1.5's delta apply), checks the slot's
+FNV-1a hash against the generator's, writes it to the buffer and rebuilds the list area there: stock lists
+byte-identical, roster lists with the additions before the terminator, identical lists stored once (the six grade
+cups share one entry list), packed from the area's start, every offset rewritten. The include carries ids, two
+offsets and three hashes per script, nothing else. Every list read goes through `getScript(ACTIVE_MAP_SCRIPT)`, so the
+cached path checks too: a probe word (cup 0's entry offset) tells stock, rebuilt and anything else apart in O(1); a
+stock buffer (the stock body loaded it, or a state from before the roster) is rebuilt there, a rebuilt one is left
+alone, so a savestate or rewind never double-applies. A slot that is not the stock one (another disc, another mod) is
+left as it is and counted (`roster.cups.unknown`): its cups keep the stock lists. The 1.5 edition registers the same
+filter under its own plugin id (`dw.roster15`, the 1.5 callback skips 114); `gen_roster_dw15.py` checks that 1.5's
+scripts 213/102 hash like stock and that 1.5's own species data gives the same additions. Script 213's lists then end
+at 0x2F06 of its 0x3000 slot (0x2EFE on 1.5) and 102's at 0x2D16. The rules are the stock ones
 of GAME.md 15.3, asserted against the stock partners on every run: grade cups and cup 10 by level and id, the element
-cups by `special[0]`, the penalty lists of cups 0 and 1 by Ultimate. The hand-picked cups 18-22 take each species by
+cups by `special[0]`, the penalty lists of cups 0 and 1 by Ultimate (every roster Ultimate that may enter,
+so Gigadramon and MetalEtemon, stock-listed in Grade C without one, take the Grade C penalty too). The hand-picked cups 18-22 take each species by
 the stock look-alike in `CUP_ANALOGUE` (by body shape: Tankmon like Giromon, WaruSeadramon like Seadramon,
 Machinedramon like Megadramon, and so on), not by the raise donors, which are gameplay donors. A species already on a
-cup's stock list (63-66) keeps its stock place. Pools and unlocks are untouched. `py -3.12 tools/roster_cups.py` prints
-the before/after diff of all 23 cups; every stock entry is unchanged and only roster ids are added.
+cup's stock list (63-66) keeps its stock place. Pools and unlocks are untouched. `py -3.12 tools/roster_cups.py [--dw15]` prints
+the before/after diff of all 23 cups; `tools/verify_cups.py` decodes the lists from guest RAM after the load and checks
+the same: every stock entry unchanged, only roster ids added.
 
 **Versus portraits.** A roster partner registered on the save screen reaches versus mode, whose two portrait
 renderers (`VS__renderSelectDigimonPlayer` in the EXE at 0x800F9124, `VS_renderFighterNamePlate` in `VS_REL.BIN` at
@@ -980,7 +993,8 @@ renderers (`VS__renderSelectDigimonPlayer` in the EXE at 0x800F9124, `VS_renderF
 through a 180-byte table in the arena at `0x32C0` (ids only, `vs_remap`): types up to 65 unchanged, Machinedramon (114
 and the stock 115) to the sheet's Machinedramon cell, every other roster species to its `CUP_ANALOGUE` look-alike's
 portrait. The name beside it is the fighter's own. 13 words per site; the type-115 special case is skipped, since cell
-63 drawn as 66 is the same quad with an in-table palette. Not run in the game: versus mode needs two memory cards'
+63 drawn as 66 is the same quad with an in-table palette. On 1.5 (no arena; both sites are byte-identical to stock
+there) the same 13 words clamp every type of 66 and up to 66, the Machinedramon cell. Not run in the game: versus mode needs two memory cards'
 registrations, which the harness does not drive.
 
 Regenerate: `py -3.12 tools/gen_roster_mod.py` (`--check` verifies only).
@@ -1295,8 +1309,8 @@ test and the Prosperity bound are the stock roster's patches, unchanged on 1.5.
 
 Not carried over: Machinedramon (slot 114 is Veemon); the battle-intro name glyphs, which
 1.5 still reads from the stock 112-row table, so WaruSeadramon and Meteormon show garbage
-on the arena banner, as they do without the roster; the arena tables in general; the versus portrait remap; and the
-chart cursor fix. Carried over: the bracket's code fix and the cup eligibility (4.1), from 1.5's own DG.SCN and species
+on the arena banner, as they do without the roster; the arena tables in general; the versus portrait remap (a
+clamp to the Machinedramon cell instead, 4.1 "Versus portraits"); and the chart cursor fix. Carried over: the bracket's code fix and the cup eligibility (4.1), from 1.5's own DG.SCN and species
 data. The projectile icon of 112/113, which needs the arena on the stock edition, is clamped on 1.5 by a six-word helper
 in the zero padding right after roster-15's `setDigimonRaised` rewrite (0x801F0D84), called from the four icon reads in
 `STD_renderBracketProjectile`: types 112 and up read icon 111 from the stock table. The generator checks the padding

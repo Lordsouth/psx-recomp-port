@@ -111,9 +111,11 @@ HOOK_OWNER = {
                  "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  createSavegameChecksum (entry)
     # lookupFileTable: a filter hook serving the new map names in dw_newmaps_files.inc (gen_factory.py)
     0x800A31F8: ("dw.newmaps.factory/factory", "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  lookupFileTable (filter)
-    # getScript: a filter hook serving the factory's and the glade's script ids in dw_newmaps_scripts.inc (gen_factory.py)
+    # getScript: a filter hook serving the factory's and the glade's script ids in dw_newmaps_scripts.inc (gen_factory.py),
+    # and the roster's filter rebuilding the cup lists of scripts 213/102 in the buffer (dw_roster.c, roster_cups.py)
     0x80106218: ("dw.newmaps/glade", "dw.newmaps/glade-15", "dw.newmaps.factory/factory",
-                 "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  getScript (filter)
+                 "dw.newmaps.factory/factory-15", "dw.vanilla.roster/roster",
+                 "dw.vanilla.roster/roster-15"),  # dw_newmaps.c, dw_roster.c  getScript (filter)
     # Smooth 60 FPS (dw_smooth60.c): entry hooks and filters only
     0x80091CA8: "dw.smooth60/smooth60",  # VSync (pass point)
     0x800A315C: "dw.smooth60/smooth60",  # renderObjects (pre-render snapshot)
@@ -144,8 +146,8 @@ EXTRA_EXE = [
     (0x800DD2A4, 0x800DD5E0, WS, "renderGameClock (bracketed)"),
     (0x800A936C, 0x800A97E0, WS, "renderStatusBars (bracketed)"),
     # dw_newmaps.c's getScript filter hard-codes the ACTIVE_MAP_SCRIPT and MAP_SCRIPT_PTR the stock body uses
-    (0x80106218, 0x8010629C, ("dw.newmaps/glade", "dw.newmaps.factory/factory"),
-     "getScript (the new maps' filter assumes its globals)"),
+    (0x80106218, 0x8010629C, ("dw.newmaps/glade", "dw.newmaps.factory/factory", "dw.vanilla.roster/roster"),
+     "getScript (the new maps' and the roster's filters assume its globals)"),
     # dw_smooth60.c matches these by return address
     (0x800EFB68, 0x800EFCB0, "dw.smooth60/smooth60", "gameLoop through its VSync call (pass point, RA match)"),
     (0x800C366C, 0x800C3860, "dw.smooth60/smooth60", "renderUIBoxAnim (box zoom drawLine3P, RA match)"),

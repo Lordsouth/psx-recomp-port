@@ -156,7 +156,9 @@ def build(disc, exe):
             'group = "Roster"', "default_enabled = false", "hidden = true",
             'edition_of = "dw.vanilla.roster/roster"', "",
             "# Only with 1.5 beneath it: its MODTBL writes go on sectors the 1.5 delta owns.",
-            "[[requirement]]", 'feature = "roster-15"', 'package = "dw.1_5"', 'requires_feature = "dw15"', ""]
+            "[[requirement]]", 'feature = "roster-15"', 'package = "dw.1_5"', 'requires_feature = "dw15"', "",
+            "# The cup lists are rebuilt in guest RAM by dw_roster.c's getScript filter (its 1.5 callback).",
+            "[[plugin]]", 'feature = "roster-15"', 'id = "dw.roster15"', ""]
 
     # The evolution shatter: on stock, EVL_buildShardSet writes past its 5,436-byte scratch for big models and
     # the stock roster moves that scratch to its arena (gen_roster_mod.py, EVL_SHARD_*). 1.5 already bounds it:
@@ -251,13 +253,36 @@ def build(disc, exe):
             out.extend(_disc_patch(STD_BRACKET_LBA * 2048 + off, std[off:off + 16],
                                    words(roster_cups.DW15_ICON_SITE_NEW), "cup bracket icon read 0x%08X -> clamp" % va,
                                    "roster-15"))
-    # Cup entry and penalty lists (tools/roster_cups.py) in 1.5's own DG.SCN, from 1.5's species data.
+    # Versus portraits: 1.5 left both renderers stock (same bytes as the stock EXE and VS_REL) and has no arena,
+    # so types 66 and up are clamped to 66 (the Machinedramon cell, an in-table palette) in the same 13 words.
+    for site, va in roster_cups.VS_SITES.items():
+        new = roster_cups.vs_clamp_words(site)
+        if site == "select":
+            if ram(va, 52) != words(roster_cups.VS_STOCK[site]):
+                problems.append("1.5's versus select renderer differs at 0x%08X" % va)
+            else:
+                exe_patch("versus select portrait: types 66+ draw cell 63 (in-table palette)", va, words(new))
+        else:
+            lba = disc.files["/VS_REL.BIN"][0]
+            off = lba * 2048 + va - 0x80052AE0
+            if disc.user(off, 52) != words(roster_cups.VS_STOCK[site]):
+                problems.append("1.5's versus name plate renderer differs at 0x%08X" % va)
+            else:
+                out.extend(_disc_patch(off, disc.user(off, 52), words(new),
+                                       "versus name plate portrait 0x%08X: types 66+ draw cell 63" % va, "roster-15"))
+    # Cup lists: dw_roster.c rebuilds them in guest RAM (plugin dw.roster15) from the stock include, which is
+    # valid on 1.5 only if 1.5's scripts 213/102 are the stock ones and 1.5's own species data gives the same
+    # additions (the include's 1.5 hash): check both.
+    import gen_roster_mod
+    stock = gen_roster_mod.cup_runtime_data(open(gen_roster_mod.EXE, "rb").read())
     dg_lba, dg_size = disc.files["/DG.SCN"] if "/DG.SCN" in disc.files else disc.files["/SCN/DG.SCN"]
     try:
-        cup_out, _rep = roster_cups.patches(
-            disc.user(dg_lba * 2048, dg_size), dg_lba, lambda t: tuple(ram(DIGIMON_DATA + t * DD_STRIDE + 29, 2)),
-            sorted(sp["type"] for sp in NEW_SPECIES), "roster-15", _disc_patch)
-        out.extend(cup_out)
+        r15 = sorted(sp["type"] for sp in NEW_SPECIES)
+        mine = roster_cups.runtime_data(disc.user(dg_lba * 2048, dg_size),
+                                        lambda t: tuple(ram(DIGIMON_DATA + t * DD_STRIDE + 29, 2)), r15, r15)
+        for a, b in zip(stock, mine):
+            if a["hash"][0] != b["hash"][0] or a["hash"][2] != b["hash"][2]:
+                problems.append("cup lists: 1.5's script %d or its additions differ from the stock include" % a["id"])
     except AssertionError as e:
         problems.append("cup lists: %s" % e)
     return problems, "\n".join(out) + "\n"

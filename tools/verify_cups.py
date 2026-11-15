@@ -100,12 +100,16 @@ def main():
                          "the first match; the icons must come back and the cup finish")
     ap.add_argument("--cup", type=int, default=0, help="the cup to enter (default 0, Grade D); must be on day 0")
     ap.add_argument("--refuse", action="store_true", help="the schedule must refuse this partner for --cup")
+    ap.add_argument("--desk-state", action="store_true",
+                    help="save a state at the desk right after registering, load it, then enter the cup")
+    ap.add_argument("--script102", action="store_true", help="also decode script 102's lists on map 106 at the end")
     ap.add_argument("--bin", help="the disc image to read the cup's pool from (default: stock, or 1.5 with --dw15)")
     a = ap.parse_args()
     species = a.roster or a.partner
     mode = ("roster%d" % a.roster if a.roster else "partner%d" % a.partner if a.partner else "stock") + \
         ("_dw15" if a.dw15 else "") + ("_revert" if a.revert_fix else "") + ("_wide" if a.wide else "") + \
-        ("_s60" if a.smooth60 else "") + ("_state" if a.savestate else "") +         ("_cup%d" % a.cup if a.cup else "") + ("_refuse" if a.refuse else "")
+        ("_s60" if a.smooth60 else "") + ("_state" if a.savestate else "") + \
+        ("_cup%d" % a.cup if a.cup else "") + ("_refuse" if a.refuse else "") + ("_desk" if a.desk_state else "")
     out = a.out or os.path.join(a.build, "cups_" + mode)
     cards = os.path.join(out, "cards", "dw15") if a.dw15 else os.path.join(out, "cards")
     shutil.rmtree(out, ignore_errors=True)
@@ -149,14 +153,40 @@ def main():
             g.route("6:cross,30:none")
         return free()
 
+    def judge_lists(sn, when="after the load"):
+        """The cup lists as the game holds them now (script `sn` in the buffer), against the disc's stock lists:
+        stock entries identical, additions only roster ids (stock run: nothing added)."""
+        active = struct.unpack("<H", rd(0x80134FC2, 2))[0]   # ACTIVE_MAP_SCRIPT
+        check(active == sn, "script %d is the active one (%d)" % (sn, active))
+        base = word(0x80134FB4)
+        guest = b"".join(rd(base + o, 0x400) for o in range(0, 0x3000, 0x400))
+        dg = Disc(a.bin or (DW15_BIN if a.dw15 else DEFAULT_BIN)).read("DG.SCN")
+        lo, hi = struct.unpack_from("<2I", dg, sn * 4)
+        _, stock = roster_cups.decode(dg[lo:hi])
+        _, now = roster_cups.decode(guest)
+        added, ok = [], True
+        for cup in range(roster_cups.N_CUPS):
+            for k in (1, 4):
+                ok &= now[cup][k] == stock[cup][k]
+            for k in (2, 3):
+                o, n = roster_cups.members(stock[cup][k]), roster_cups.members(now[cup][k])
+                ok &= n[:len(o)] == o and now[cup][k][-1] == stock[cup][k][-1]
+                added += n[len(o):]
+        lo_id = min(added) if added else None
+        check(ok and (added == [] if not a.roster else (added and lo_id >= 63 and (114 not in added or not a.dw15))),
+              "script %d's cup lists in guest RAM %s: stock entries, pools and requirements identical, %d roster "
+              "ids added (lowest %s)" % (sn, when, len(added), lo_id))
+
     def bag():
         b = f.bag()
         return {b[i]: b[30 + i] for i in range(30) if b[i] != 0xFF}
 
-    sched = {}
+    sched, judged = {}, []
 
     def make_partner(t):
         """The game's own evolution into t, as Field.measure and verify_roster15 force one."""
+        if g.partner_type == t:                      # a stock partner kept as it is (--roster 3)
+            return True
         for field, value in (("remaining_lifetime", 9999), ("poop_level", 0), ("tiredness", 0), ("script_sync_bit", 1),
                              ("evolution_target", t)):
             g.set(field, value)
@@ -187,6 +217,16 @@ def main():
         buf = rd(word(DGET_BUFFER), 30)
         print("schedule (5 days x 6, bit 0x80 open to the partner, 0x40 open with a penalty):", buf.hex(), flush=True)
         shot("schedule")
+        if not judged:                               # the schedule has read the lists: script 213 is in the buffer
+            judged.append(1)
+            judge_lists(213)
+            if a.desk_state:                         # a state taken here, at the desk, then loaded
+                g.savestate("save", 1)
+                g.advance(60)
+                g.savestate("load", 1)
+                g.advance(120)
+                judge_lists(213, "after loading a state taken at the desk")
+                buf = rd(word(DGET_BUFFER), 30)
         col0 = [b for b in buf[:6]]
         if row is None:
             row = next((i for i, b in enumerate(col0) if b != 0xFF and b & 0x3F == cup), None)
@@ -388,6 +428,7 @@ def main():
                  pstat(3), pstat(4)))
         if a.roster:
             check(how == "ui", "the roster species registered through the schedule itself")
+
         seen, matches, rec = run_cup(True, "win")
         after = i16s(COUNTERS, 3)
         check(matches == 3 + (1 if a.savestate else 0), "three matches fought (%d, one replayed after a load)" % matches
@@ -434,6 +475,10 @@ def main():
             want = roster_cups.DW15_ICON_SITE_NEW * 4 + roster_cups.DW15_ICON_HELPER_WORDS
             check(rec["dw15_icon"] == want, "1.5: the four icon reads call the clamp helper at 0x%08X, which is in RAM"
                   % roster_cups.DW15_ICON_HELPER)
+        if a.script102:
+            g.warp(106)
+            g.advance(180)
+            judge_lists(102)
         if a.smooth60:
             check("temporal blending" in open(os.path.join(out, "game.log"), errors="replace").read(),
                   "Smooth 60 FPS is active (the runtime's temporal-blending line is in the log)")
@@ -441,6 +486,14 @@ def main():
             from PIL import Image
             w, h = Image.open(os.path.join(out, "win_after.png")).size
             check(w * 9 >= h * 16 - 9, "Widescreen is active: the screenshot is %dx%d" % (w, h))
+        try:
+            cnt = {c["name"]: c.get("value", c.get("count")) for c in g.d.cmd("mod_counters").get("counters", [])
+                   if str(c.get("name", "")).startswith("roster.cups")}
+            print("counters: %s" % cnt, flush=True)
+            if a.roster:
+                check(not cnt.get("roster.cups.unknown"), "no script was left stock for not matching (%s)" % cnt)
+        except Exception as e:  # noqa: BLE001  (an older runtime without mod_counters)
+            print("counters unavailable: %s" % e, flush=True)
         f0 = g.d.frame()
         time.sleep(2)
         check(g.d.frame() > f0 + 30, "the game runs on")

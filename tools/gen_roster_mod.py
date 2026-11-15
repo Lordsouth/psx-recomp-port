@@ -176,18 +176,36 @@ def roster_vs_patches(vs_image):
     return out
 
 
-def roster_cup_patches(exe):
-    """Cup entry and penalty lists for every roster species (tools/roster_cups.py), stock disc."""
+def cup_runtime_data(exe):
+    """roster_cups.runtime_data on the stock disc and EXE (also used by gen_roster_dw15.py)."""
     import roster_cups
     from dw_tables import DEFAULT_BIN, Disc
     disc = Disc(DEFAULT_BIN)
     rec = lambda t: DIGIMON_DATA_VA + (115 if t == 114 else t) * DIGIMON_STRIDE - LOAD_ADDR + HDR
     info = lambda t: (exe[rec(t) + 29], exe[rec(t) + 30])     # level, special[0]; 114 is 115's record
-    roster = sorted([sp["type"] for sp in NEW_SPECIES] + [114])
-    out, report = roster_cups.patches(disc.read("DG.SCN"), disc.files["DG.SCN"][0], info, roster, "roster",
-                                      disc_bytes_patch)
-    print("cup lists: " + "; ".join(r for r in report if r.startswith("script")))
-    return out
+    roster15 = sorted(sp["type"] for sp in NEW_SPECIES)
+    return roster_cups.runtime_data(disc.read("DG.SCN"), info, roster15 + [114], roster15)
+
+
+def roster_cup_include(exe):
+    """Cup entry and penalty lists (tools/roster_cups.py): dw_roster.c rebuilds them in guest RAM, so the include
+    carries ids, offsets and hashes only. The 1.5 edition shares it (gen_roster_dw15.py checks its scripts)."""
+    data = cup_runtime_data(exe)
+    print("cup lists: rebuilt at run time for scripts %s" % [d["id"] for d in data])
+    lines = ["/* Cup lists (tools/roster_cups.py): rebuilt in the script buffer at run time. Per script: id, slot",
+             " * size, probe u16 position and its values {stock, rebuilt, rebuilt on 1.5}, FNV-1a of the whole slot",
+             " * {stock, rebuilt, rebuilt on 1.5}, additions [cup, list, n, ids...] ending 0xFF (1.5 skips 114). */",
+             "typedef struct { unsigned short id, size, probe_pos, probe[3]; unsigned int hash[3];"
+             " const unsigned char* adds; } RosterCupScript;"]
+    for d in data:
+        lines.append("static const unsigned char k_cup_adds_%d[%d] = { %s };"
+                     % (d["id"], len(d["adds"]), ", ".join("%d" % b for b in d["adds"])))
+    lines.append("static const RosterCupScript k_cup_scripts[%d] = {" % len(data))
+    for d in data:
+        lines.append("    { %d, 0x%X, 0x%X, { 0x%04X, 0x%04X, 0x%04X }, { 0x%08Xu, 0x%08Xu, 0x%08Xu }, k_cup_adds_%d },"
+                     % ((d["id"], d["size"], d["probe_pos"]) + d["probe"] + d["hash"] + (d["id"],)))
+    lines += ["};", ""]
+    return lines
 
 
 def std_bracket_patches(image, feature, lba=STD_BRACKET_LBA):
@@ -1413,7 +1431,6 @@ def main():
         out += word_patch(lo_va, old, new)
     out += overlay_retarget(ovl_sites, ovl_images)
     out += std_bracket_patches(ovl_images["STD_REL.BIN"], "roster")
-    out += roster_cup_patches(data)
     out += roster_vs_patches(ovl_images["VS_REL.BIN"])
     out += shard_patches
     out += AUTHORED["extra_patches"]
@@ -1492,6 +1509,8 @@ def main():
         "#define ROSTER_OFF_STD_ICONS 0x%04Xu" % OFF_STD_ICONS,
         "/* Versus portrait remap, 180 type ids (tools/roster_cups.py vs_remap). */",
         "#define ROSTER_OFF_VS_REMAP 0x%04Xu" % OFF_VS_REMAP,
+        "",
+    ] + roster_cup_include(data) + [
         "static const unsigned char k_vs_remap[180] = { %s };" % ", ".join(
             "%d" % b for b in __import__("roster_cups").vs_remap(set([sp["type"] for sp in NEW_SPECIES] + [114]))),
         "#define ROSTER_STD_ICONS_SRC 0x%08Xu" % OVL_RELOC["STD_PROJ_ICONS"][2],
