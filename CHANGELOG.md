@@ -9,7 +9,7 @@ contains **no game data** — you supply your own Digimon World (USA) disc image
 
 ---
 
-## Unreleased
+## 0.7.0
 
 **New: Smooth 60 FPS.** Tick it under **Mods → Video**. The game runs and draws
 at 20 frames per second, in towns and in battle, and every timer in it counts
