@@ -31,6 +31,7 @@ MAP_ENTRIES = 0x801292D4  # MapEntry[255], 16 bytes: char file[10] + 6 int8
 MAP_ENTRY_STRIDE = 16
 MAP_ENTRY_COUNT = 0xFF0 // MAP_ENTRY_STRIDE
 MAP_NAME_PTR = 0x801291BC  # char *[64], indexed by MapEntry.loadingName
+BOX_STATES = (7, 14, 20)   # tamer states that open UI box 1: item pickup, chest, award/sickness message (tamer.c)
 
 
 @dataclass(frozen=True)
@@ -338,8 +339,20 @@ class Game:
         between round trips and would otherwise run substate 1 against a stale
         substate.
 
+        A tamer state that holds UI box 1 open (BOX_STATES) is dismissed with
+        cross first. Flipping to state 5 over one orphans the box: the next
+        opener of box 1 adds a second world object for it, one survives every
+        later close, and after a battle it calls into the battle overlay once
+        the field has reloaded over it (docs/INTERNALS.md section 9).
+
         Returns the map record actually arrived at. Raises Wedge on timeout.
         """
+        for _ in range(60):
+            if self.tamer_state not in BOX_STATES:
+                break
+            self.route("4:cross,20:none")
+        else:
+            raise Wedge("tamer state %s never let go of its box" % self.tamer_state)
         self.set("target_map", map_id)
         self.set("current_exit", exit_id)
         self.set_atomic(("tamer_state", 5), ("tamer_substate", 0))
