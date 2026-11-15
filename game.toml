@@ -4,7 +4,7 @@
 [game]
 name = "Digimon World"
 id = "SLUS-01032"
-players = 1
+players = 2
 exe = "disc/SLUS_010.32"
 # Relative to the project root. Players pick their own dump with the
 # launcher's "Change Disc" button, which records the choice in
