@@ -85,7 +85,7 @@ psxrecomp/tools/package_setup_host.sh \
   --project-file dw_roster.c --project-file dw_roster_data.inc \
   --project-file dw_roster_saves.c --project-file dw_roster_saves.inc \
   --project-file dw_evolution.c --project-file dw_evolution.h \
-  --project-file dw_evoguide.c \
+  --project-file dw_evoguide.c --project-file dw_smooth60.c \
   --project-file dw_cheats.c --project-file dw_cheats_data.inc \
   --project-file dw_dw15.c --project-file dw_newmaps.c \
   --project-file dw_newmaps_files.c --project-file dw_newmaps_files.h \
