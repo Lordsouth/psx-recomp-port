@@ -1676,6 +1676,585 @@ offset = 303469440
 expected = "ff ff 83 22"
 replace = "ff ff 23 22"
 
+# DG script 213 +0x10BC: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292761788
+expected = "1c 2b 16 00 44 2b 16 00 d8 2c"
+replace = "cd 2a 16 00 e5 2a 16 00 4f 2b"
+
+# DG script 213 +0x11B6: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292762038
+expected = "d0 2a 16 00 32 2b 16 00 80 2b 16 00 ee 2c"
+replace = "62 2b 16 00 65 2b 16 00 7a 2b 16 00 e4 2b"
+
+# DG script 213 +0x12B8: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292762296
+expected = "d6 2a 16 00 18 2b 16 00 bc 2b 16 00 31 2d"
+replace = "25 2c 16 00 28 2c 16 00 e5 2a 16 00 29 2c"
+
+# DG script 213 +0x13BA: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292762554
+expected = "dc 2a 16 00 18 2b 16 00 bc 2b 16 00 7f 2d"
+replace = "75 2c 16 00 28 2c 16 00 e5 2a 16 00 78 2c"
+
+# DG script 213 +0x14BC: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292762812
+expected = "e2 2a 16 00 18 2b 16 00 80 2b 16 00 ad 2d"
+replace = "a3 2c 16 00 28 2c 16 00 7a 2b 16 00 a6 2c"
+
+# DG script 213 +0x15B6: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292763062
+expected = "d0 2a 16 00 18 2b 16 00 80 2b 16 00 c1 2d"
+replace = "62 2b 16 00 28 2c 16 00 7a 2b 16 00 28 2c"
+
+# DG script 213 +0x16EA: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292763370
+expected = "d0 2a 16 00 18 2b 16 00 f4 2b 16 00 c5 2d"
+replace = "62 2b 16 00 28 2c 16 00 b7 2c 16 00 b7 2c"
+
+# DG script 213 +0x1826: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292763686
+expected = "d0 2a 16 00 18 2b 16 00 04 2c 16 00 d5 2d"
+replace = "62 2b 16 00 28 2c 16 00 c4 2c 16 00 c4 2c"
+
+# DG script 213 +0x1962: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292764002
+expected = "d0 2a 16 00 18 2b 16 00 14 2c 16 00 e5 2d"
+replace = "62 2b 16 00 28 2c 16 00 d1 2c 16 00 d1 2c"
+
+# DG script 213 +0x1AAA: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292764330
+expected = "d0 2a 16 00 18 2b 16 00 24 2c 16 00 f5 2d"
+replace = "62 2b 16 00 28 2c 16 00 de 2c 16 00 de 2c"
+
+# DG script 213 +0x1BEC: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292764652
+expected = "d0 2a 16 00 18 2b 16 00 34 2c 16 00 05 2e"
+replace = "62 2b 16 00 28 2c 16 00 eb 2c 16 00 25 2d"
+
+# DG script 213 +0x1D52: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292765010
+expected = "e8 2a 16 00 18 2b 16 00 40 2c 16 00 3f 2e"
+replace = "5c 2d 16 00 28 2c 16 00 5f 2d 16 00 6e 2d"
+
+# DG script 213 +0x1E8C: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292765324
+expected = "ee 2a 16 00 18 2b 16 00 4a 2c 16 00 4f 2e"
+replace = "7b 2d 16 00 28 2c 16 00 7e 2d 16 00 96 2d"
+
+# DG script 213 +0x1FD6: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292765654
+expected = "f4 2a 16 00 18 2b 16 00 5c 2c 16 00 6d 2e"
+replace = "b1 2d 16 00 28 2c 16 00 b4 2d 16 00 c5 2d"
+
+# DG script 213 +0x2124: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292765988
+expected = "fa 2a 16 00 18 2b 16 00 68 2c 16 00 7d 2e"
+replace = "d3 2d 16 00 28 2c 16 00 d6 2d 16 00 ed 2d"
+
+# DG script 213 +0x2257: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292766295
+expected = "2b 16 00 18 2b 16 00 76 2c 16 00 93"
+replace = "2e 16 00 28 2c 16 00 03 2e 16 00 14"
+
+# DG script 213 +0x23A2: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292766626
+expected = "06 2b 16 00 18 2b 16 00 82 2c 16 00 a5"
+replace = "23 2e 16 00 28 2c 16 00 26 2e 16 00 31"
+
+# DG script 213 +0x24DC: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292766940
+expected = "0c 2b 16 00 18 2b 16 00 8c 2c 16 00 b0"
+replace = "3a 2e 16 00 28 2c 16 00 3d 2e 16 00 3d"
+
+# DG script 213 +0x2614: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292767252
+expected = "12 2b 16 00 18 2b 16 00 92 2c 16 00 b8"
+replace = "d3 2d 16 00 28 2c 16 00 43 2e 16 00 5d"
+
+# DG script 213 +0x2745: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292767557
+expected = "2b 16 00 18 2b 16 00 a2 2c 16 00 d0"
+replace = "2e 16 00 28 2c 16 00 72 2e 16 00 8f"
+
+# DG script 213 +0x2856: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292767830
+expected = "fa 2a 16 00 18 2b 16 00 b4 2c 16 00 ea"
+replace = "d3 2d 16 00 28 2c 16 00 a6 2e 16 00 b6"
+
+# DG script 213 +0x298A: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292768138
+expected = "fa 2a 16 00 18 2b 16 00 c2 2c 16 00 fe"
+replace = "d3 2d 16 00 28 2c 16 00 c7 2e 16 00 de"
+
+# DG script 213 +0x2AAE: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292768430
+expected = "18 2b 16 00 d0 2c 16 00 14 2f"
+replace = "28 2c 16 00 f2 2e 16 00 fb 2e"
+
+# DG script 213 +0x2ACF: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292768463
+expected = "ff 6b 00 08 00 00 ff 6b 00 18 00 00 ff 6b 00 08 04 02 ff 6b 00 08 00 01 ff 6b 00 08 04 38 ff 6b 00 08 04 30 ff 6b 00 08 04 3b ff 6b 00 08 04 3d ff 6b 00 08 04 3c ff 6b 00 06 03 3c ff 6b 00 03 02 35 ff 6b 00 08 04 3d ff 6b 00 fe ff 6b 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 3f 40 41 42 ff 6b 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 42 ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 fe ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e fe ff 6b 00 11 12 13 14 15 16 17 18 19 1a 1b 1c fe ff 6b 00 1f 20 21 22 23 24 25 26 27 28 29 2a fe ff 6b 00 2d 2e 2f 30 31 32 33 34 35 36 37 38 fe ff 6b 00 39 3a 3b 3c 3d 3f 40 41 fe ff 6b 00 03 05 09 15 24 2f 38 ff 6b 00 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 3f 41 fe ff 6b 00 07 12 14 21 25 2d 32 3b fe ff 6b 00 04 0a 16 17 18 23 31 34 39 3d fe ff 6b 00 13 19 20 2e 33 37 3a 3c fe ff 6b 00 0c 1c 28 29 36 41 fe ff 6b 00 0b 27 35 ff 6b 00 03 04 08 05 07 0a 0c 23 2f 36 3d 41 fe ff 6b 00 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c ff 6b 00 0e 16 18 21 24 26 2a 30 39 3f fe ff 6b 00 06 09 14 22 24 28 2a 30 3a 41 fe ff 6b 00 13 20 33 3c fe ff 6b 00 03 04 11 12 1f 20 2d 2e 39 4a 50 52 53 56 60 67 6d 6f fe ff 6b 00 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 43 44 45 47 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 56 57 5b 5c 5d 5e 5f 60 61 62 63 65 66 67 69 6a 6b 6d 6f ff 6b 00 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f ff 6b 00 05 06 07 0c 0d 0e 13 14 15 1a 1b 1c 20 21 22 28 29 2a 2f 30 31 36 37 38 3a 3b 3c 3d 3f 40 41 42 46 48 55 58 59 5a 64 68 6c 6e fe ff 6b 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 42 fe ff 6b 00 fe ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e fe ff 6b 00 11 12 13 14 15 16 17 18 19 1a 1b 1c fe ff 6b 00 1f 20 21 22 23 24 25 26 27 28 29 2a fe ff 6b 00 2d 2e 2f 30 31 32 33 34 35 36 37 38 fe ff 6b 00 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f fe ff 6b 00 03 05 09 15 24 2f 38 45 58 65 68 69 fe ff 6b 00 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 44 46 48 4e 4f 50 51 52 53 61 6a 6b 6c 5a fe ff 6b 00 07 12 14 21 25 2d 32 42 43 4b 55 5f 66 ff 6b 00 04 0a 16 17 18 23 31 34 39 3d 47 59 5e 62 64 67 6d 6e fe ff 6b 00 13 19 20 2e 33 37 3a 3c 4a 4d 56 5b 5d 63 fe ff 6b 00 0c 1c 28 29 36 4c 54 5c ff 6b 00 0b 27 35 49 57 ff 6b 00 03 04 08 05 07 0a 0c 23 2f 36 3d 45 47 53 54 58 5b 62 65 6a fe ff 6b 00 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c 43 55 5f 60 64 66 6a fe ff 6b 00 0e 16 18 21 24 26 2a 30 39 45 46 4b 4f 5d 65 69 fe ff 6b 00 06 09 14 22 24 28"
+replace = "0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 3f 40 41 42 46 5a 70 72 ff 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 ff 03 04 11 12 1f 20 2d 2e 39 4a 50 52 53 56 60 67 6d 6f fe 08 00 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 42 46 5a 70 72 ff 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 fe 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 43 44 45 47 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 56 57 5b 5c 5d 5e 5f 60 61 62 63 65 66 67 69 6a 6b 6d 6f ff 18 00 00 fe 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f ff 08 04 02 05 06 07 0c 0d 0e 13 14 15 1a 1b 1c 20 21 22 28 29 2a 2f 30 31 36 37 38 3a 3b 3c 3d 3f 40 41 42 46 48 55 58 59 5a 64 68 6c 6e fe 08 00 01 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 42 fe 03 04 05 06 07 08 09 0a 0b 0c 0d 0e fe 11 12 13 14 15 16 17 18 19 1a 1b 1c fe 1f 20 21 22 23 24 25 26 27 28 29 2a fe 2d 2e 2f 30 31 32 33 34 35 36 37 38 fe 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 fe 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f fe 08 04 38 03 05 09 15 24 2f 38 45 4c 54 58 61 65 71 ff 03 05 09 15 24 2f 38 45 58 65 68 69 fe 08 04 30 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 3f 41 44 46 4e 4f 50 51 52 60 69 fe 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 44 46 48 4e 4f 50 51 52 53 61 6a 6b 6c 5a fe 08 04 3b 07 12 14 21 25 2d 32 3b 42 43 4b 55 59 5f 66 6b fe 07 12 14 21 25 2d 32 42 43 4b 55 5f 66 ff 08 04 3d 04 0a 16 17 18 23 31 34 39 3d 47 48 53 5e 64 67 68 6a 6c 6d 6e 70 fe 04 0a 16 17 18 23 31 34 39 3d 47 59 5e 62 64 67 6d 6e fe 08 04 3c 13 19 20 2e 33 37 3a 3c 4a 4d 56 5b 5d 62 63 6f fe 13 19 20 2e 33 37 3a 3c 4a 4d 56 5b 5d 63 fe 06 03 3c 0c 1c 28 29 36 41 40 5a 5c 72 fe 0c 1c 28 29 36 4c 54 5c ff 03 02 35 0b 27 35 49 57 ff 03 04 08 05 07 0a 0c 23 2f 36 3d 41 40 45 47 53 54 58 5b 62 65 6d 6e 70 72 fe 03 04 08 05 07 0a 0c 23 2f 36 3d 45 47 53 54 58 5b 62 65 6a fe 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c 40 42 43 4b 55 5d 5f 60 64 66 6a 6f 72 ff 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c 43 55 5f 60 64 66 6a fe 0e 16 18 21 24 26 2a 30 39 3f 41 46 4b 4f 69 fe 0e 16 18 21 24 26 2a 30 39 45 46 4b 4f 5d 65 69 fe 06 09 14 22 24 28 2a 30 3a 41 3f 42 48 50 55 59 5a 5c 61 64 67 68 fe 06 09 14 22 24 28 2a 30 34 3a 42 48 50 55 59 61 64 6e 68 ff 13 20 33 3c 43 4a 66 6f fe 43 4a 66 6f 13 20 33 3c fe"
+
+# DG script 102 +0xECC: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292312780
+expected = "2c 29 16 00 54 29 16 00 e8 2a"
+replace = "dd 28 16 00 f5 28 16 00 5f 29"
+
+# DG script 102 +0xFC6: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292313030
+expected = "e0 28 16 00 42 29 16 00 90 29 16 00 fe 2a"
+replace = "72 29 16 00 75 29 16 00 8a 29 16 00 f4 29"
+
+# DG script 102 +0x10C8: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292313288
+expected = "e6 28 16 00 28 29 16 00 cc 29 16 00 41 2b"
+replace = "35 2a 16 00 38 2a 16 00 f5 28 16 00 39 2a"
+
+# DG script 102 +0x11CA: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292313546
+expected = "ec 28 16 00 28 29 16 00 cc 29 16 00 8f 2b"
+replace = "85 2a 16 00 38 2a 16 00 f5 28 16 00 88 2a"
+
+# DG script 102 +0x12CC: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292313804
+expected = "f2 28 16 00 28 29 16 00 90 29 16 00 bd 2b"
+replace = "b3 2a 16 00 38 2a 16 00 8a 29 16 00 b6 2a"
+
+# DG script 102 +0x13C6: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292314054
+expected = "e0 28 16 00 28 29 16 00 90 29 16 00 d1 2b"
+replace = "72 29 16 00 38 2a 16 00 8a 29 16 00 38 2a"
+
+# DG script 102 +0x14FA: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292314362
+expected = "e0 28 16 00 28 29 16 00 04 2a 16 00 d5 2b"
+replace = "72 29 16 00 38 2a 16 00 c7 2a 16 00 c7 2a"
+
+# DG script 102 +0x1636: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292314678
+expected = "e0 28 16 00 28 29 16 00 14 2a 16 00 e5 2b"
+replace = "72 29 16 00 38 2a 16 00 d4 2a 16 00 d4 2a"
+
+# DG script 102 +0x1772: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292314994
+expected = "e0 28 16 00 28 29 16 00 24 2a 16 00 f5 2b"
+replace = "72 29 16 00 38 2a 16 00 e1 2a 16 00 e1 2a"
+
+# DG script 102 +0x18BA: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292315322
+expected = "e0 28 16 00 28 29 16 00 34 2a 16 00 05 2c"
+replace = "72 29 16 00 38 2a 16 00 ee 2a 16 00 ee 2a"
+
+# DG script 102 +0x19FC: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292315644
+expected = "e0 28 16 00 28 29 16 00 44 2a 16 00 15 2c"
+replace = "72 29 16 00 38 2a 16 00 fb 2a 16 00 35 2b"
+
+# DG script 102 +0x1B62: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292316002
+expected = "f8 28 16 00 28 29 16 00 50 2a 16 00 4f 2c"
+replace = "6c 2b 16 00 38 2a 16 00 6f 2b 16 00 7e 2b"
+
+# DG script 102 +0x1C9C: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292316316
+expected = "fe 28 16 00 28 29 16 00 5a 2a 16 00 5f 2c"
+replace = "8b 2b 16 00 38 2a 16 00 8e 2b 16 00 a6 2b"
+
+# DG script 102 +0x1DE6: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292316646
+expected = "04 29 16 00 28 29 16 00 6c 2a 16 00 7d 2c"
+replace = "c1 2b 16 00 38 2a 16 00 c4 2b 16 00 d5 2b"
+
+# DG script 102 +0x1F34: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292316980
+expected = "0a 29 16 00 28 29 16 00 78 2a 16 00 8d 2c"
+replace = "e3 2b 16 00 38 2a 16 00 e6 2b 16 00 fd 2b"
+
+# DG script 102 +0x2067: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292317287
+expected = "29 16 00 28 29 16 00 86 2a 16 00 a3"
+replace = "2c 16 00 38 2a 16 00 13 2c 16 00 24"
+
+# DG script 102 +0x21B2: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292317618
+expected = "16 29 16 00 28 29 16 00 92 2a 16 00 b5"
+replace = "33 2c 16 00 38 2a 16 00 36 2c 16 00 41"
+
+# DG script 102 +0x22EC: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292317932
+expected = "1c 29 16 00 28 29 16 00 9c 2a 16 00 c0"
+replace = "4a 2c 16 00 38 2a 16 00 4d 2c 16 00 4d"
+
+# DG script 102 +0x2424: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292318244
+expected = "22 29 16 00 28 29 16 00 a2 2a 16 00 c8"
+replace = "e3 2b 16 00 38 2a 16 00 53 2c 16 00 6d"
+
+# DG script 102 +0x2555: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292318549
+expected = "29 16 00 28 29 16 00 b2 2a 16 00 e0"
+replace = "2c 16 00 38 2a 16 00 82 2c 16 00 9f"
+
+# DG script 102 +0x2666: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292318822
+expected = "0a 29 16 00 28 29 16 00 c4 2a 16 00 fa"
+replace = "e3 2b 16 00 38 2a 16 00 b6 2c 16 00 c6"
+
+# DG script 102 +0x279A: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292319130
+expected = "0a 29 16 00 28 29 16 00 d2 2a 16 00 0e 2d"
+replace = "e3 2b 16 00 38 2a 16 00 d7 2c 16 00 ee 2c"
+
+# DG script 102 +0x28BE: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292319422
+expected = "28 29 16 00 e0 2a 16 00 24"
+replace = "38 2a 16 00 02 2d 16 00 0b"
+
+# DG script 102 +0x28DF: cup lists
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 292319455
+expected = "ff 6b 00 08 00 00 ff 6b 00 18 00 00 ff 6b 00 08 04 02 ff 6b 00 08 00 01 ff 6b 00 08 04 38 ff 6b 00 08 04 30 ff 6b 00 08 04 3b ff 6b 00 08 04 3d ff 6b 00 08 04 3c ff 6b 00 06 03 3c ff 6b 00 03 02 35 ff 6b 00 08 04 3d ff 6b 00 fe ff 6b 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 3f 40 41 42 ff 6b 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 42 ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 fe ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e fe ff 6b 00 11 12 13 14 15 16 17 18 19 1a 1b 1c fe ff 6b 00 1f 20 21 22 23 24 25 26 27 28 29 2a fe ff 6b 00 2d 2e 2f 30 31 32 33 34 35 36 37 38 fe ff 6b 00 39 3a 3b 3c 3d 3f 40 41 fe ff 6b 00 03 05 09 15 24 2f 38 ff 6b 00 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 3f 41 fe ff 6b 00 07 12 14 21 25 2d 32 3b fe ff 6b 00 04 0a 16 17 18 23 31 34 39 3d fe ff 6b 00 13 19 20 2e 33 37 3a 3c fe ff 6b 00 0c 1c 28 29 36 41 fe ff 6b 00 0b 27 35 ff 6b 00 03 04 08 05 07 0a 0c 23 2f 36 3d 41 fe ff 6b 00 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c ff 6b 00 0e 16 18 21 24 26 2a 30 39 3f fe ff 6b 00 06 09 14 22 24 28 2a 30 3a 41 fe ff 6b 00 13 20 33 3c fe ff 6b 00 03 04 11 12 1f 20 2d 2e 39 4a 50 52 53 56 60 67 6d 6f fe ff 6b 00 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 43 44 45 47 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 56 57 5b 5c 5d 5e 5f 60 61 62 63 65 66 67 69 6a 6b 6d 6f ff 6b 00 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f ff 6b 00 05 06 07 0c 0d 0e 13 14 15 1a 1b 1c 20 21 22 28 29 2a 2f 30 31 36 37 38 3a 3b 3c 3d 3f 40 41 42 46 48 55 58 59 5a 64 68 6c 6e fe ff 6b 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 42 fe ff 6b 00 fe ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e fe ff 6b 00 11 12 13 14 15 16 17 18 19 1a 1b 1c fe ff 6b 00 1f 20 21 22 23 24 25 26 27 28 29 2a fe ff 6b 00 2d 2e 2f 30 31 32 33 34 35 36 37 38 fe ff 6b 00 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f fe ff 6b 00 03 05 09 15 24 2f 38 45 58 65 68 69 fe ff 6b 00 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 44 46 48 4e 4f 50 51 52 53 61 6a 6b 6c 5a fe ff 6b 00 07 12 14 21 25 2d 32 42 43 4b 55 5f 66 ff 6b 00 04 0a 16 17 18 23 31 34 39 3d 47 59 5e 62 64 67 6d 6e fe ff 6b 00 13 19 20 2e 33 37 3a 3c 4a 4d 56 5b 5d 63 fe ff 6b 00 0c 1c 28 29 36 4c 54 5c ff 6b 00 0b 27 35 49 57 ff 6b 00 03 04 08 05 07 0a 0c 23 2f 36 3d 45 47 53 54 58 5b 62 65 6a fe ff 6b 00 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c 43 55 5f 60 64 66 6a fe ff 6b 00 0e 16 18 21 24 26 2a 30 39 45 46 4b 4f 5d 65 69 fe ff 6b 00 06 09 14 22 24 28"
+replace = "0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 3f 40 41 42 46 5a 70 72 ff 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 ff 03 04 11 12 1f 20 2d 2e 39 4a 50 52 53 56 60 67 6d 6f fe 08 00 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 42 46 5a 70 72 ff 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 fe 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 43 44 45 47 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 56 57 5b 5c 5d 5e 5f 60 61 62 63 65 66 67 69 6a 6b 6d 6f ff 18 00 00 fe 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f ff 08 04 02 05 06 07 0c 0d 0e 13 14 15 1a 1b 1c 20 21 22 28 29 2a 2f 30 31 36 37 38 3a 3b 3c 3d 3f 40 41 42 46 48 55 58 59 5a 64 68 6c 6e fe 08 00 01 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 42 fe 03 04 05 06 07 08 09 0a 0b 0c 0d 0e fe 11 12 13 14 15 16 17 18 19 1a 1b 1c fe 1f 20 21 22 23 24 25 26 27 28 29 2a fe 2d 2e 2f 30 31 32 33 34 35 36 37 38 fe 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 fe 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f fe 08 04 38 03 05 09 15 24 2f 38 45 4c 54 58 61 65 71 ff 03 05 09 15 24 2f 38 45 58 65 68 69 fe 08 04 30 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 3f 41 44 46 4e 4f 50 51 52 60 69 fe 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 44 46 48 4e 4f 50 51 52 53 61 6a 6b 6c 5a fe 08 04 3b 07 12 14 21 25 2d 32 3b 42 43 4b 55 59 5f 66 6b fe 07 12 14 21 25 2d 32 42 43 4b 55 5f 66 ff 08 04 3d 04 0a 16 17 18 23 31 34 39 3d 47 48 53 5e 64 67 68 6a 6c 6d 6e 70 fe 04 0a 16 17 18 23 31 34 39 3d 47 59 5e 62 64 67 6d 6e fe 08 04 3c 13 19 20 2e 33 37 3a 3c 4a 4d 56 5b 5d 62 63 6f fe 13 19 20 2e 33 37 3a 3c 4a 4d 56 5b 5d 63 fe 06 03 3c 0c 1c 28 29 36 41 40 5a 5c 72 fe 0c 1c 28 29 36 4c 54 5c ff 03 02 35 0b 27 35 49 57 ff 03 04 08 05 07 0a 0c 23 2f 36 3d 41 40 45 47 53 54 58 5b 62 65 6d 6e 70 72 fe 03 04 08 05 07 0a 0c 23 2f 36 3d 45 47 53 54 58 5b 62 65 6a fe 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c 40 42 43 4b 55 5d 5f 60 64 66 6a 6f 72 ff 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c 43 55 5f 60 64 66 6a fe 0e 16 18 21 24 26 2a 30 39 3f 41 46 4b 4f 69 fe 0e 16 18 21 24 26 2a 30 39 45 46 4b 4f 5d 65 69 fe 06 09 14 22 24 28 2a 30 3a 41 3f 42 48 50 55 59 5a 5c 61 64 67 68 fe 06 09 14 22 24 28 2a 30 34 3a 42 48 50 55 59 61 64 6e 68 ff 13 20 33 3c 43 4a 66 6f fe 43 4a 66 6f 13 20 33 3c fe"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F9124
+expected = "13 80 02 3c"
+replace = "00 9f 01 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F9128
+expected = "28 f5 42 24"
+replace = "21 08 31 00"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F912C
+expected = "21 10 51 00"
+replace = "c0 32 31 90"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F9130
+expected = "00 00 42 90"
+replace = "13 80 02 3c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F9134
+expected = "20 01 04 24"
+replace = "28 f5 42 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F9138
+expected = "af 4a 02 0c"
+replace = "21 10 51 00"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F913C
+expected = "e0 01 45 20"
+replace = "00 00 42 90"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F9140
+expected = "73 00 01 24"
+replace = "20 01 04 24"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F9144
+expected = "07 00 21 16"
+replace = "af 4a 02 0c"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F9148
+expected = "0e 00 42 a6"
+replace = "e0 01 45 20"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F914C
+expected = "30 00 62 92"
+replace = "0e 00 42 a6"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F9150
+expected = "e0 00 06 24"
+replace = "04 00 00 10"
+
+[[patch]]
+feature = "roster"
+target = "main_exe"
+address = 0x800F9154
+expected = "00 11 02 00"
+replace = "00 00 00 00"
+
+# versus portrait 0x800574A0
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303681984
+expected = "07 80 02 3c"
+replace = "00 9f 01 3c"
+
+# versus portrait 0x800574A4
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303681988
+expected = "28 fa 42 24"
+replace = "21 08 32 00"
+
+# versus portrait 0x800574A8
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303681992
+expected = "21 10 52 00"
+replace = "c0 32 32 90"
+
+# versus portrait 0x800574AC
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303681996
+expected = "00 00 42 90"
+replace = "07 80 02 3c"
+
+# versus portrait 0x800574B0
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303682000
+expected = "20 01 04 24"
+replace = "28 fa 42 24"
+
+# versus portrait 0x800574B4
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303682004
+expected = "af 4a 02 0c"
+replace = "21 10 52 00"
+
+# versus portrait 0x800574B8
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303682008
+expected = "e0 01 45 20"
+replace = "00 00 42 90"
+
+# versus portrait 0x800574BC
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303682012
+expected = "73 00 01 24"
+replace = "20 01 04 24"
+
+# versus portrait 0x800574C0
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303682016
+expected = "04 00 41 16"
+replace = "af 4a 02 0c"
+
+# versus portrait 0x800574C4
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303682020
+expected = "0e 00 02 a6"
+replace = "e0 01 45 20"
+
+# versus portrait 0x800574C8
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303682024
+expected = "e0 00 06 24"
+replace = "0e 00 02 a6"
+
+# versus portrait 0x800574CC
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303682028
+expected = "10 00 00 10"
+replace = "01 00 00 10"
+
+# versus portrait 0x800574D0
+[[patch]]
+feature = "roster"
+target = "disc_user"
+offset = 303682032
+expected = "21 28 c0 00"
+replace = "00 00 00 00"
+
 # EVL_REL.BIN 0x80063154: evolution shard scratch -> arena
 [[patch]]
 feature = "roster"
@@ -5177,4 +5756,428 @@ target = "disc_user"
 offset = 303469440
 expected = "ff ff 83 22"
 replace = "ff ff 23 22"
+
+# cup bracket icon clamp helper (types 112+ read icon 111)
+[[patch]]
+feature = "roster-15"
+target = "main_exe"
+address = 0x801F0D84
+expected = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+replace = "70 00 61 2c 02 00 20 14 08 80 02 3c 6f 00 03 24 08 00 e0 03 21 10 43 00"
+
+# cup bracket icon read 0x8005E250 -> clamp
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303472496
+expected = "08 80 02 3c 0c a5 42 24 21 10 43 00 00 00 42 90"
+replace = "61 c3 07 0c 00 00 00 00 00 00 00 00 0c a5 42 90"
+
+# cup bracket icon read 0x8005E29C -> clamp
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303472572
+expected = "08 80 02 3c 0c a5 42 24 21 10 43 00 00 00 42 90"
+replace = "61 c3 07 0c 00 00 00 00 00 00 00 00 0c a5 42 90"
+
+# cup bracket icon read 0x8005E3B8 -> clamp
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303472856
+expected = "08 80 02 3c 0c a5 42 24 21 10 43 00 00 00 42 90"
+replace = "61 c3 07 0c 00 00 00 00 00 00 00 00 0c a5 42 90"
+
+# cup bracket icon read 0x8005E404 -> clamp
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 303472932
+expected = "08 80 02 3c 0c a5 42 24 21 10 43 00 00 00 42 90"
+replace = "61 c3 07 0c 00 00 00 00 00 00 00 00 0c a5 42 90"
+
+# DG script 213 +0x10BC: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333314236
+expected = "1c 2b 16 00 44 2b 16 00 d8 2c"
+replace = "cd 2a 16 00 e4 2a 16 00 4d 2b"
+
+# DG script 213 +0x11B6: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333314486
+expected = "d0 2a 16 00 32 2b 16 00 80 2b 16 00 ee 2c"
+replace = "60 2b 16 00 63 2b 16 00 77 2b 16 00 e0 2b"
+
+# DG script 213 +0x12B8: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333314744
+expected = "d6 2a 16 00 18 2b 16 00 bc 2b 16 00 31 2d"
+replace = "21 2c 16 00 24 2c 16 00 e4 2a 16 00 25 2c"
+
+# DG script 213 +0x13BA: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333315002
+expected = "dc 2a 16 00 18 2b 16 00 bc 2b 16 00 7f 2d"
+replace = "71 2c 16 00 24 2c 16 00 e4 2a 16 00 74 2c"
+
+# DG script 213 +0x14BC: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333315260
+expected = "e2 2a 16 00 18 2b 16 00 80 2b 16 00 ad 2d"
+replace = "9f 2c 16 00 24 2c 16 00 77 2b 16 00 a2 2c"
+
+# DG script 213 +0x15B6: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333315510
+expected = "d0 2a 16 00 18 2b 16 00 80 2b 16 00 c1 2d"
+replace = "60 2b 16 00 24 2c 16 00 77 2b 16 00 24 2c"
+
+# DG script 213 +0x16EA: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333315818
+expected = "d0 2a 16 00 18 2b 16 00 f4 2b 16 00 c5 2d"
+replace = "60 2b 16 00 24 2c 16 00 b3 2c 16 00 b3 2c"
+
+# DG script 213 +0x1826: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333316134
+expected = "d0 2a 16 00 18 2b 16 00 04 2c 16 00 d5 2d"
+replace = "60 2b 16 00 24 2c 16 00 c0 2c 16 00 c0 2c"
+
+# DG script 213 +0x1962: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333316450
+expected = "d0 2a 16 00 18 2b 16 00 14 2c 16 00 e5 2d"
+replace = "60 2b 16 00 24 2c 16 00 cd 2c 16 00 cd 2c"
+
+# DG script 213 +0x1AAA: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333316778
+expected = "d0 2a 16 00 18 2b 16 00 24 2c 16 00 f5 2d"
+replace = "60 2b 16 00 24 2c 16 00 da 2c 16 00 da 2c"
+
+# DG script 213 +0x1BEC: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333317100
+expected = "d0 2a 16 00 18 2b 16 00 34 2c 16 00 05 2e"
+replace = "60 2b 16 00 24 2c 16 00 e7 2c 16 00 20 2d"
+
+# DG script 213 +0x1D52: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333317458
+expected = "e8 2a 16 00 18 2b 16 00 40 2c 16 00 3f 2e"
+replace = "57 2d 16 00 24 2c 16 00 5a 2d 16 00 69 2d"
+
+# DG script 213 +0x1E8C: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333317772
+expected = "ee 2a 16 00 18 2b 16 00 4a 2c 16 00 4f 2e"
+replace = "76 2d 16 00 24 2c 16 00 79 2d 16 00 91 2d"
+
+# DG script 213 +0x1FD6: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333318102
+expected = "f4 2a 16 00 18 2b 16 00 5c 2c 16 00 6d 2e"
+replace = "ac 2d 16 00 24 2c 16 00 af 2d 16 00 c0 2d"
+
+# DG script 213 +0x2124: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333318436
+expected = "fa 2a 16 00 18 2b 16 00 68 2c 16 00 7d 2e"
+replace = "ce 2d 16 00 24 2c 16 00 d1 2d 16 00 e8 2d"
+
+# DG script 213 +0x2256: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333318742
+expected = "00 2b 16 00 18 2b 16 00 76 2c 16 00 93"
+replace = "fb 2d 16 00 24 2c 16 00 fe 2d 16 00 0f"
+
+# DG script 213 +0x23A2: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333319074
+expected = "06 2b 16 00 18 2b 16 00 82 2c 16 00 a5"
+replace = "1e 2e 16 00 24 2c 16 00 21 2e 16 00 2b"
+
+# DG script 213 +0x24DC: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333319388
+expected = "0c 2b 16 00 18 2b 16 00 8c 2c 16 00 b0"
+replace = "34 2e 16 00 24 2c 16 00 37 2e 16 00 37"
+
+# DG script 213 +0x2614: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333319700
+expected = "12 2b 16 00 18 2b 16 00 92 2c 16 00 b8"
+replace = "ce 2d 16 00 24 2c 16 00 3d 2e 16 00 56"
+
+# DG script 213 +0x2744: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333320004
+expected = "00 2b 16 00 18 2b 16 00 a2 2c 16 00 d0"
+replace = "fb 2d 16 00 24 2c 16 00 6b 2e 16 00 87"
+
+# DG script 213 +0x2856: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333320278
+expected = "fa 2a 16 00 18 2b 16 00 b4 2c 16 00 ea"
+replace = "ce 2d 16 00 24 2c 16 00 9e 2e 16 00 ae"
+
+# DG script 213 +0x298A: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333320586
+expected = "fa 2a 16 00 18 2b 16 00 c2 2c 16 00 fe"
+replace = "ce 2d 16 00 24 2c 16 00 bf 2e 16 00 d6"
+
+# DG script 213 +0x2AAE: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333320878
+expected = "18 2b 16 00 d0 2c 16 00 14 2f"
+replace = "24 2c 16 00 ea 2e 16 00 f3 2e"
+
+# DG script 213 +0x2ACF: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 333320911
+expected = "ff 6b 00 08 00 00 ff 6b 00 18 00 00 ff 6b 00 08 04 02 ff 6b 00 08 00 01 ff 6b 00 08 04 38 ff 6b 00 08 04 30 ff 6b 00 08 04 3b ff 6b 00 08 04 3d ff 6b 00 08 04 3c ff 6b 00 06 03 3c ff 6b 00 03 02 35 ff 6b 00 08 04 3d ff 6b 00 fe ff 6b 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 3f 40 41 42 ff 6b 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 42 ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 fe ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e fe ff 6b 00 11 12 13 14 15 16 17 18 19 1a 1b 1c fe ff 6b 00 1f 20 21 22 23 24 25 26 27 28 29 2a fe ff 6b 00 2d 2e 2f 30 31 32 33 34 35 36 37 38 fe ff 6b 00 39 3a 3b 3c 3d 3f 40 41 fe ff 6b 00 03 05 09 15 24 2f 38 ff 6b 00 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 3f 41 fe ff 6b 00 07 12 14 21 25 2d 32 3b fe ff 6b 00 04 0a 16 17 18 23 31 34 39 3d fe ff 6b 00 13 19 20 2e 33 37 3a 3c fe ff 6b 00 0c 1c 28 29 36 41 fe ff 6b 00 0b 27 35 ff 6b 00 03 04 08 05 07 0a 0c 23 2f 36 3d 41 fe ff 6b 00 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c ff 6b 00 0e 16 18 21 24 26 2a 30 39 3f fe ff 6b 00 06 09 14 22 24 28 2a 30 3a 41 fe ff 6b 00 13 20 33 3c fe ff 6b 00 03 04 11 12 1f 20 2d 2e 39 4a 50 52 53 56 60 67 6d 6f fe ff 6b 00 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 43 44 45 47 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 56 57 5b 5c 5d 5e 5f 60 61 62 63 65 66 67 69 6a 6b 6d 6f ff 6b 00 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f ff 6b 00 05 06 07 0c 0d 0e 13 14 15 1a 1b 1c 20 21 22 28 29 2a 2f 30 31 36 37 38 3a 3b 3c 3d 3f 40 41 42 46 48 55 58 59 5a 64 68 6c 6e fe ff 6b 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 42 fe ff 6b 00 fe ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e fe ff 6b 00 11 12 13 14 15 16 17 18 19 1a 1b 1c fe ff 6b 00 1f 20 21 22 23 24 25 26 27 28 29 2a fe ff 6b 00 2d 2e 2f 30 31 32 33 34 35 36 37 38 fe ff 6b 00 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f fe ff 6b 00 03 05 09 15 24 2f 38 45 58 65 68 69 fe ff 6b 00 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 44 46 48 4e 4f 50 51 52 53 61 6a 6b 6c 5a fe ff 6b 00 07 12 14 21 25 2d 32 42 43 4b 55 5f 66 ff 6b 00 04 0a 16 17 18 23 31 34 39 3d 47 59 5e 62 64 67 6d 6e fe ff 6b 00 13 19 20 2e 33 37 3a 3c 4a 4d 56 5b 5d 63 fe ff 6b 00 0c 1c 28 29 36 4c 54 5c ff 6b 00 0b 27 35 49 57 ff 6b 00 03 04 08 05 07 0a 0c 23 2f 36 3d 45 47 53 54 58 5b 62 65 6a fe ff 6b 00 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c 43 55 5f 60 64 66 6a fe ff 6b 00 0e 16 18 21 24 26 2a 30 39 45 46 4b 4f 5d 65 69 fe ff"
+replace = "0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 3f 40 41 42 46 5a 70 ff 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 ff 03 04 11 12 1f 20 2d 2e 39 4a 50 52 53 56 60 67 6d 6f fe 08 00 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 42 46 5a 70 ff 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 fe 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 43 44 45 47 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 56 57 5b 5c 5d 5e 5f 60 61 62 63 65 66 67 69 6a 6b 6d 6f ff 18 00 00 fe 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f ff 08 04 02 05 06 07 0c 0d 0e 13 14 15 1a 1b 1c 20 21 22 28 29 2a 2f 30 31 36 37 38 3a 3b 3c 3d 3f 40 41 42 46 48 55 58 59 5a 64 68 6c 6e fe 08 00 01 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 42 fe 03 04 05 06 07 08 09 0a 0b 0c 0d 0e fe 11 12 13 14 15 16 17 18 19 1a 1b 1c fe 1f 20 21 22 23 24 25 26 27 28 29 2a fe 2d 2e 2f 30 31 32 33 34 35 36 37 38 fe 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 fe 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f fe 08 04 38 03 05 09 15 24 2f 38 45 4c 54 58 61 65 71 ff 03 05 09 15 24 2f 38 45 58 65 68 69 fe 08 04 30 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 3f 41 44 46 4e 4f 50 51 52 60 69 fe 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 44 46 48 4e 4f 50 51 52 53 61 6a 6b 6c 5a fe 08 04 3b 07 12 14 21 25 2d 32 3b 42 43 4b 55 59 5f 66 6b fe 07 12 14 21 25 2d 32 42 43 4b 55 5f 66 ff 08 04 3d 04 0a 16 17 18 23 31 34 39 3d 47 48 53 5e 64 67 68 6a 6c 6d 6e 70 fe 04 0a 16 17 18 23 31 34 39 3d 47 59 5e 62 64 67 6d 6e fe 08 04 3c 13 19 20 2e 33 37 3a 3c 4a 4d 56 5b 5d 62 63 6f fe 13 19 20 2e 33 37 3a 3c 4a 4d 56 5b 5d 63 fe 06 03 3c 0c 1c 28 29 36 41 40 5a 5c fe 0c 1c 28 29 36 4c 54 5c ff 03 02 35 0b 27 35 49 57 ff 03 04 08 05 07 0a 0c 23 2f 36 3d 41 40 45 47 53 54 58 5b 62 65 6d 6e 70 fe 03 04 08 05 07 0a 0c 23 2f 36 3d 45 47 53 54 58 5b 62 65 6a fe 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c 40 42 43 4b 55 5d 5f 60 64 66 6a 6f ff 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c 43 55 5f 60 64 66 6a fe 0e 16 18 21 24 26 2a 30 39 3f 41 46 4b 4f 69 fe 0e 16 18 21 24 26 2a 30 39 45 46 4b 4f 5d 65 69 fe 06 09 14 22 24 28 2a 30 3a 41 3f 42 48 50 55 59 5a 5c 61 64 67 68 fe 06 09 14 22 24 28 2a 30 34 3a 42 48 50 55 59 61 64 6e 68 ff 13 20 33 3c 43 4a 66 6f fe 43 4a 66 6f 13 20 33 3c fe"
+
+# DG script 102 +0xECC: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332861132
+expected = "2c 29 16 00 54 29 16 00 e8 2a"
+replace = "dd 28 16 00 f4 28 16 00 5d 29"
+
+# DG script 102 +0xFC6: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332861382
+expected = "e0 28 16 00 42 29 16 00 90 29 16 00 fe 2a"
+replace = "70 29 16 00 73 29 16 00 87 29 16 00 f0 29"
+
+# DG script 102 +0x10C8: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332861640
+expected = "e6 28 16 00 28 29 16 00 cc 29 16 00 41 2b"
+replace = "31 2a 16 00 34 2a 16 00 f4 28 16 00 35 2a"
+
+# DG script 102 +0x11CA: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332861898
+expected = "ec 28 16 00 28 29 16 00 cc 29 16 00 8f 2b"
+replace = "81 2a 16 00 34 2a 16 00 f4 28 16 00 84 2a"
+
+# DG script 102 +0x12CC: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332862156
+expected = "f2 28 16 00 28 29 16 00 90 29 16 00 bd 2b"
+replace = "af 2a 16 00 34 2a 16 00 87 29 16 00 b2 2a"
+
+# DG script 102 +0x13C6: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332862406
+expected = "e0 28 16 00 28 29 16 00 90 29 16 00 d1 2b"
+replace = "70 29 16 00 34 2a 16 00 87 29 16 00 34 2a"
+
+# DG script 102 +0x14FA: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332862714
+expected = "e0 28 16 00 28 29 16 00 04 2a 16 00 d5 2b"
+replace = "70 29 16 00 34 2a 16 00 c3 2a 16 00 c3 2a"
+
+# DG script 102 +0x1636: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332863030
+expected = "e0 28 16 00 28 29 16 00 14 2a 16 00 e5 2b"
+replace = "70 29 16 00 34 2a 16 00 d0 2a 16 00 d0 2a"
+
+# DG script 102 +0x1772: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332863346
+expected = "e0 28 16 00 28 29 16 00 24 2a 16 00 f5 2b"
+replace = "70 29 16 00 34 2a 16 00 dd 2a 16 00 dd 2a"
+
+# DG script 102 +0x18BA: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332863674
+expected = "e0 28 16 00 28 29 16 00 34 2a 16 00 05 2c"
+replace = "70 29 16 00 34 2a 16 00 ea 2a 16 00 ea 2a"
+
+# DG script 102 +0x19FC: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332863996
+expected = "e0 28 16 00 28 29 16 00 44 2a 16 00 15 2c"
+replace = "70 29 16 00 34 2a 16 00 f7 2a 16 00 30 2b"
+
+# DG script 102 +0x1B62: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332864354
+expected = "f8 28 16 00 28 29 16 00 50 2a 16 00 4f 2c"
+replace = "67 2b 16 00 34 2a 16 00 6a 2b 16 00 79 2b"
+
+# DG script 102 +0x1C9C: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332864668
+expected = "fe 28 16 00 28 29 16 00 5a 2a 16 00 5f 2c"
+replace = "86 2b 16 00 34 2a 16 00 89 2b 16 00 a1 2b"
+
+# DG script 102 +0x1DE6: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332864998
+expected = "04 29 16 00 28 29 16 00 6c 2a 16 00 7d 2c"
+replace = "bc 2b 16 00 34 2a 16 00 bf 2b 16 00 d0 2b"
+
+# DG script 102 +0x1F34: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332865332
+expected = "0a 29 16 00 28 29 16 00 78 2a 16 00 8d 2c"
+replace = "de 2b 16 00 34 2a 16 00 e1 2b 16 00 f8 2b"
+
+# DG script 102 +0x2066: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332865638
+expected = "10 29 16 00 28 29 16 00 86 2a 16 00 a3"
+replace = "0b 2c 16 00 34 2a 16 00 0e 2c 16 00 1f"
+
+# DG script 102 +0x21B2: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332865970
+expected = "16 29 16 00 28 29 16 00 92 2a 16 00 b5"
+replace = "2e 2c 16 00 34 2a 16 00 31 2c 16 00 3b"
+
+# DG script 102 +0x22EC: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332866284
+expected = "1c 29 16 00 28 29 16 00 9c 2a 16 00 c0"
+replace = "44 2c 16 00 34 2a 16 00 47 2c 16 00 47"
+
+# DG script 102 +0x2424: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332866596
+expected = "22 29 16 00 28 29 16 00 a2 2a 16 00 c8"
+replace = "de 2b 16 00 34 2a 16 00 4d 2c 16 00 66"
+
+# DG script 102 +0x2554: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332866900
+expected = "10 29 16 00 28 29 16 00 b2 2a 16 00 e0"
+replace = "0b 2c 16 00 34 2a 16 00 7b 2c 16 00 97"
+
+# DG script 102 +0x2666: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332867174
+expected = "0a 29 16 00 28 29 16 00 c4 2a 16 00 fa"
+replace = "de 2b 16 00 34 2a 16 00 ae 2c 16 00 be"
+
+# DG script 102 +0x279A: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332867482
+expected = "0a 29 16 00 28 29 16 00 d2 2a 16 00 0e 2d"
+replace = "de 2b 16 00 34 2a 16 00 cf 2c 16 00 e6 2c"
+
+# DG script 102 +0x28BE: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332867774
+expected = "28 29 16 00 e0 2a 16 00 24"
+replace = "34 2a 16 00 fa 2c 16 00 03"
+
+# DG script 102 +0x28DF: cup lists
+[[patch]]
+feature = "roster-15"
+target = "disc_user"
+offset = 332867807
+expected = "ff 6b 00 08 00 00 ff 6b 00 18 00 00 ff 6b 00 08 04 02 ff 6b 00 08 00 01 ff 6b 00 08 04 38 ff 6b 00 08 04 30 ff 6b 00 08 04 3b ff 6b 00 08 04 3d ff 6b 00 08 04 3c ff 6b 00 06 03 3c ff 6b 00 03 02 35 ff 6b 00 08 04 3d ff 6b 00 fe ff 6b 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 3f 40 41 42 ff 6b 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 42 ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 fe ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e fe ff 6b 00 11 12 13 14 15 16 17 18 19 1a 1b 1c fe ff 6b 00 1f 20 21 22 23 24 25 26 27 28 29 2a fe ff 6b 00 2d 2e 2f 30 31 32 33 34 35 36 37 38 fe ff 6b 00 39 3a 3b 3c 3d 3f 40 41 fe ff 6b 00 03 05 09 15 24 2f 38 ff 6b 00 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 3f 41 fe ff 6b 00 07 12 14 21 25 2d 32 3b fe ff 6b 00 04 0a 16 17 18 23 31 34 39 3d fe ff 6b 00 13 19 20 2e 33 37 3a 3c fe ff 6b 00 0c 1c 28 29 36 41 fe ff 6b 00 0b 27 35 ff 6b 00 03 04 08 05 07 0a 0c 23 2f 36 3d 41 fe ff 6b 00 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c ff 6b 00 0e 16 18 21 24 26 2a 30 39 3f fe ff 6b 00 06 09 14 22 24 28 2a 30 3a 41 fe ff 6b 00 13 20 33 3c fe ff 6b 00 03 04 11 12 1f 20 2d 2e 39 4a 50 52 53 56 60 67 6d 6f fe ff 6b 00 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 43 44 45 47 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 56 57 5b 5c 5d 5e 5f 60 61 62 63 65 66 67 69 6a 6b 6d 6f ff 6b 00 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f ff 6b 00 05 06 07 0c 0d 0e 13 14 15 1a 1b 1c 20 21 22 28 29 2a 2f 30 31 36 37 38 3a 3b 3c 3d 3f 40 41 42 46 48 55 58 59 5a 64 68 6c 6e fe ff 6b 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 42 fe ff 6b 00 fe ff 6b 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e fe ff 6b 00 11 12 13 14 15 16 17 18 19 1a 1b 1c fe ff 6b 00 1f 20 21 22 23 24 25 26 27 28 29 2a fe ff 6b 00 2d 2e 2f 30 31 32 33 34 35 36 37 38 fe ff 6b 00 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f fe ff 6b 00 03 05 09 15 24 2f 38 45 58 65 68 69 fe ff 6b 00 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 44 46 48 4e 4f 50 51 52 53 61 6a 6b 6c 5a fe ff 6b 00 07 12 14 21 25 2d 32 42 43 4b 55 5f 66 ff 6b 00 04 0a 16 17 18 23 31 34 39 3d 47 59 5e 62 64 67 6d 6e fe ff 6b 00 13 19 20 2e 33 37 3a 3c 4a 4d 56 5b 5d 63 fe ff 6b 00 0c 1c 28 29 36 4c 54 5c ff 6b 00 0b 27 35 49 57 ff 6b 00 03 04 08 05 07 0a 0c 23 2f 36 3d 45 47 53 54 58 5b 62 65 6a fe ff 6b 00 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c 43 55 5f 60 64 66 6a fe ff 6b 00 0e 16 18 21 24 26 2a 30 39 45 46 4b 4f 5d 65 69 fe ff"
+replace = "0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 3f 40 41 42 46 5a 70 ff 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 ff 03 04 11 12 1f 20 2d 2e 39 4a 50 52 53 56 60 67 6d 6f fe 08 00 00 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 42 46 5a 70 ff 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 11 12 13 14 15 16 17 18 19 1a 1b 1c 1f 20 21 22 23 24 25 26 27 28 29 2a 2d 2e 2f 30 31 32 33 34 35 36 37 38 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 fe 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 43 44 45 47 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 56 57 5b 5c 5d 5e 5f 60 61 62 63 65 66 67 69 6a 6b 6d 6f ff 18 00 00 fe 05 06 07 08 09 0a 0b 13 14 15 16 17 18 19 21 22 23 24 25 26 27 2f 30 31 32 33 34 35 3a 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f ff 08 04 02 05 06 07 0c 0d 0e 13 14 15 1a 1b 1c 20 21 22 28 29 2a 2f 30 31 36 37 38 3a 3b 3c 3d 3f 40 41 42 46 48 55 58 59 5a 64 68 6c 6e fe 08 00 01 0c 0d 0e 1a 1b 1c 28 29 2a 36 37 38 3b 3c 3d 42 fe 03 04 05 06 07 08 09 0a 0b 0c 0d 0e fe 11 12 13 14 15 16 17 18 19 1a 1b 1c fe 1f 20 21 22 23 24 25 26 27 28 29 2a fe 2d 2e 2f 30 31 32 33 34 35 36 37 38 fe 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 fe 39 3a 3b 3c 3d 3f 40 41 42 43 44 45 46 47 48 49 4a 4b 4c 4d 4e 4f 50 51 52 53 54 55 56 57 58 59 5a 5b 5c 5d 5e 5f 60 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f fe 08 04 38 03 05 09 15 24 2f 38 45 4c 54 58 61 65 71 ff 03 05 09 15 24 2f 38 45 58 65 68 69 fe 08 04 30 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 3f 41 44 46 4e 4f 50 51 52 60 69 fe 06 08 0d 0e 11 1a 1b 1f 22 26 2a 30 44 46 48 4e 4f 50 51 52 53 61 6a 6b 6c 5a fe 08 04 3b 07 12 14 21 25 2d 32 3b 42 43 4b 55 59 5f 66 6b fe 07 12 14 21 25 2d 32 42 43 4b 55 5f 66 ff 08 04 3d 04 0a 16 17 18 23 31 34 39 3d 47 48 53 5e 64 67 68 6a 6c 6d 6e 70 fe 04 0a 16 17 18 23 31 34 39 3d 47 59 5e 62 64 67 6d 6e fe 08 04 3c 13 19 20 2e 33 37 3a 3c 4a 4d 56 5b 5d 62 63 6f fe 13 19 20 2e 33 37 3a 3c 4a 4d 56 5b 5d 63 fe 06 03 3c 0c 1c 28 29 36 41 40 5a 5c fe 0c 1c 28 29 36 4c 54 5c ff 03 02 35 0b 27 35 49 57 ff 03 04 08 05 07 0a 0c 23 2f 36 3d 41 40 45 47 53 54 58 5b 62 65 6d 6e 70 fe 03 04 08 05 07 0a 0c 23 2f 36 3d 45 47 53 54 58 5b 62 65 6a fe 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c 40 42 43 4b 55 5d 5f 60 64 66 6a 6f ff 06 07 0c 13 14 15 1f 21 2d 32 33 36 37 3b 3c 43 55 5f 60 64 66 6a fe 0e 16 18 21 24 26 2a 30 39 3f 41 46 4b 4f 69 fe 0e 16 18 21 24 26 2a 30 39 45 46 4b 4f 5d 65 69 fe 06 09 14 22 24 28 2a 30 3a 41 3f 42 48 50 55 59 5a 5c 61 64 67 68 fe 06 09 14 22 24 28 2a 30 34 3a 42 48 50 55 59 61 64 6e 68 ff 13 20 33 3c 43 4a 66 6f fe 43 4a 66 6f 13 20 33 3c fe"
 

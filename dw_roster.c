@@ -145,7 +145,14 @@ static void roster_fill(void) {
         psx_mod_write_byte(
             roster_arena + ROSTER_OFF_STD_GLYPH + 113u * 14u + i,
             k_std_glyph_113[i]);
+        psx_mod_write_byte(
+            roster_arena + ROSTER_OFF_STD_GLYPH + 114u * 14u + i,
+            k_std_glyph_114[i]);
     }
+
+    /* Versus portrait remap: type ids only, from the generator. */
+    for (i = 0; i < sizeof(k_vs_remap); i++)
+        psx_mod_write_byte(roster_arena + ROSTER_OFF_VS_REMAP + i, k_vs_remap[i]);
 
     /* The two overlay tables come from baked constants, not guest RAM. */
     for (i = 0; i < sizeof(k_train_anim_stock); i++)

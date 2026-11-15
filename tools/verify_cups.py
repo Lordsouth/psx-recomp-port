@@ -39,6 +39,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game  # noqa: E402
 from field_drive import Field, IS_SCRIPT_PAUSED, MONEY  # noqa: E402
 from gen_roster_mod import ARENA, OFF_STD_ICONS, STD_BRACKET, STD_ICON_DONORS  # noqa: E402
+import roster_cups  # noqa: E402
 from dw_tables import DEFAULT_BIN, Disc  # noqa: E402
 
 LOBBY, CUP = 208, 0                                  # Arena Lobby; Grade D
@@ -97,12 +98,14 @@ def main():
     ap.add_argument("--savestate", action="store_true",
                     help="inside the cup: save a state at the bracket, wipe the arena's icons, load the state after "
                          "the first match; the icons must come back and the cup finish")
+    ap.add_argument("--cup", type=int, default=0, help="the cup to enter (default 0, Grade D); must be on day 0")
+    ap.add_argument("--refuse", action="store_true", help="the schedule must refuse this partner for --cup")
     ap.add_argument("--bin", help="the disc image to read the cup's pool from (default: stock, or 1.5 with --dw15)")
     a = ap.parse_args()
     species = a.roster or a.partner
     mode = ("roster%d" % a.roster if a.roster else "partner%d" % a.partner if a.partner else "stock") + \
         ("_dw15" if a.dw15 else "") + ("_revert" if a.revert_fix else "") + ("_wide" if a.wide else "") + \
-        ("_s60" if a.smooth60 else "") + ("_state" if a.savestate else "")
+        ("_s60" if a.smooth60 else "") + ("_state" if a.savestate else "") +         ("_cup%d" % a.cup if a.cup else "") + ("_refuse" if a.refuse else "")
     out = a.out or os.path.join(a.build, "cups_" + mode)
     cards = os.path.join(out, "cards", "dw15") if a.dw15 else os.path.join(out, "cards")
     shutil.rmtree(out, ignore_errors=True)
@@ -150,6 +153,8 @@ def main():
         b = f.bag()
         return {b[i]: b[30 + i] for i in range(30) if b[i] != 0xFF}
 
+    sched = {}
+
     def make_partner(t):
         """The game's own evolution into t, as Field.measure and verify_roster15 force one."""
         for field, value in (("remaining_lifetime", 9999), ("poop_level", 0), ("tiredness", 0), ("script_sync_bit", 1),
@@ -168,8 +173,8 @@ def main():
         g.set("evolution_target", -1)
         return g.partner_type == t
 
-    def register(cup, row):
-        """Greymon, Yes, the schedule; today's column, row `row`; enter. -> how it registered."""
+    def register(cup, row=None):
+        """Greymon, Yes, the schedule; today's column, the row holding `cup`; enter. -> how it registered."""
         g.d.write_bytes(struct.pack("<hh", 9, 0), HOUR)
         f.go(DESK, lambda: f.near(*DESK, r=80), limit=40, vec=vec)
         f.walk(0x10, 0.3)
@@ -182,6 +187,12 @@ def main():
         buf = rd(word(DGET_BUFFER), 30)
         print("schedule (5 days x 6, bit 0x80 open to the partner, 0x40 open with a penalty):", buf.hex(), flush=True)
         shot("schedule")
+        col0 = [b for b in buf[:6]]
+        if row is None:
+            row = next((i for i, b in enumerate(col0) if b != 0xFF and b & 0x3F == cup), None)
+            check(row is not None, "cup %d is on today's schedule (column %s)" % (cup, buf[:6].hex()))
+            row = row or 0
+        sched[cup] = col0[row]
         for _ in range(row):
             g.route("6:down,30:none")
         check(rd(SCHED_COL, 2) == bytes([0, row]), "schedule cursor on today, row %d" % row)
@@ -195,6 +206,8 @@ def main():
             g.route("6:triangle,40:none")
             how = "poke"
         clear_text()
+        if a.refuse:
+            return how
         if how == "poke":                            # pstats first: a tick that sees trigger 37 with another
             p = state() + 0x159                      # species in pstat 4 drops the entry (tournament.c:52-56)
             g.d.write_bytes(bytes([i16s(DAY, 1)[0] & 0x7F, cup, g.partner_type]), p + 2)
@@ -237,10 +250,14 @@ def main():
                 time.sleep(0.2)
             if f.gstate() == 5:
                 break
-            clear_text()
+            for _ in range(40):                      # the reminder, or the penalty box (trigger 40): stop
+                if f.gstate() == 5 or free():        # pressing the moment the cup starts
+                    break
+                g.route("6:cross,30:none")
         check(f.gstate() == 5, "%s: the cup started (GAME_STATE 5)" % tag)
         seen, matches, last_s, rec = set(), 0, None, {}
         best, reverted, k, saved, loaded = [], False, 0, False, False
+        dumps = 0
         t0 = time.time()
         while time.time() - t0 < 300:
             s = f.gstate()
@@ -255,7 +272,9 @@ def main():
                     g.d.write_bytes(struct.pack("<I", 0x2442A50C), lo)
                 reverted = all(word(va) == old for va, old, _ in STD_BRACKET)
                 print("control: stock bracket code back in the overlay: %s" % reverted, flush=True)
-            if s == 5 and slot < 8 and parts[slot] == g.partner_type and matches == 0 and len(best) < 8:
+            if s == 5 and slot < 8 and parts[slot] == g.partner_type and matches == 0 and len(best) < 8 \
+                    and time.time() - t0 < 30:      # the first bracket; a slow dump must not run into a match
+                dumps += 1
                 q = bracket_quads(g.d.frame() - 1)
                 if len(q) > len(best):
                     best = q
@@ -264,7 +283,9 @@ def main():
                                code=["0x%08X" % word(va) for va, _, _ in STD_BRACKET],
                                icon_ref=["0x%08X" % word(x) for x in ICON_REFS[0]],
                                icons=list(rd(ARENA + OFF_STD_ICONS, 115)) if a.roster and not a.dw15 else None,
-                               icons_stock=list(rd(PROJ_ICONS, 112)))
+                               icons_stock=list(rd(PROJ_ICONS, 112)),
+                               dw15_icon=[word(va + 4 * i) for va in roster_cups.DW15_ICON_SITES for i in range(4)]
+                               + [word(roster_cups.DW15_ICON_HELPER + 4 * i) for i in range(6)] if a.dw15 else None)
                     if len(q) >= 8:
                         shot("%s_bracket" % tag)
                         if a.savestate and not saved:
@@ -334,9 +355,18 @@ def main():
         check(f.screen() == LOBBY, "warped to the Arena Lobby (%d)" % LOBBY)
         if species:
             check(make_partner(species), "the partner evolved into %d" % species)
-            g.warp(LOBBY)
-        pool = cup_pool(a.bin or (DW15_BIN if a.dw15 else DEFAULT_BIN), CUP)
-        print("Grade D pool from the disc: %d species" % len(pool), flush=True)
+            for _ in range(3):                       # the evolution's last box can still hold the tamer
+                clear_text()
+                try:
+                    g.warp(LOBBY)
+                    break
+                except Exception as e:  # noqa: BLE001  (dwdbg.Wedge)
+                    print("warp retry: %s" % e, flush=True)
+        CUP = a.cup
+        pool = cup_pool(a.bin or (DW15_BIN if a.dw15 else DEFAULT_BIN), 0)
+        if CUP:                                      # its own pool too: a cup opens on recruits from its pool
+            pool += cup_pool(a.bin or (DW15_BIN if a.dw15 else DEFAULT_BIN), CUP)
+        print("pool flags from the disc: %d species" % len(pool), flush=True)
         check(len(pool) >= 7, "the cup's pool was read from the disc")
         for t in pool:
             set_trig(200 + t)
@@ -345,10 +375,19 @@ def main():
         print("before: counters (won, wins, lost) %s, bits %d, bag %s" % (before["counters"], before["money"],
                                                                           before["bag"]), flush=True)
 
-        how = register(CUP, 0)
+        how = register(CUP)
+        flag = sched.get(CUP, 0xFF)
+        if a.refuse:
+            check(how == "poke" and not trig(37) and flag & 0xC0 == 0,
+                  "the schedule refuses partner %d for cup %d: its byte 0x%02X has neither 0x80 nor 0x40, trigger 37 "
+                  "stays clear" % (g.partner_type, CUP, flag))
+            return 1 if fails else 0
         check(trig(37) and pstat(3) == CUP and pstat(4) == g.partner_type,
-              "registered for Grade D by %s: trigger 37, pstat 3 = %d, pstat 4 = %d"
-              % ("the schedule" if how == "ui" else "poke (the schedule refused this species)", pstat(3), pstat(4)))
+              "registered for cup %d by %s: schedule byte 0x%02X, trigger 37, pstat 3 = %d, pstat 4 = %d"
+              % (CUP, "the schedule" if how == "ui" else "poke (the schedule refused this species)", flag,
+                 pstat(3), pstat(4)))
+        if a.roster:
+            check(how == "ui", "the roster species registered through the schedule itself")
         seen, matches, rec = run_cup(True, "win")
         after = i16s(COUNTERS, 3)
         check(matches == 3 + (1 if a.savestate else 0), "three matches fought (%d, one replayed after a load)" % matches
@@ -391,6 +430,10 @@ def main():
             if a.savestate:
                 check(rec.get("icons_after_wipe") == want, "icons rewritten within 10 frames of a wipe")
                 check(rec.get("icons_after_load") == want, "icons right after a savestate load inside the cup")
+        if a.dw15 and a.roster and rec.get("dw15_icon"):
+            want = roster_cups.DW15_ICON_SITE_NEW * 4 + roster_cups.DW15_ICON_HELPER_WORDS
+            check(rec["dw15_icon"] == want, "1.5: the four icon reads call the clamp helper at 0x%08X, which is in RAM"
+                  % roster_cups.DW15_ICON_HELPER)
         if a.smooth60:
             check("temporal blending" in open(os.path.join(out, "game.log"), errors="replace").read(),
                   "Smooth 60 FPS is active (the runtime's temporal-blending line is in the log)")
@@ -403,6 +446,9 @@ def main():
         check(g.d.frame() > f0 + 30, "the game runs on")
         with open(os.path.join(out, "bracket.json"), "w") as fh:
             json.dump(rec, fh)
+    except Exception as e:
+        fails.append("exception: %r" % e)
+        raise
     finally:
         g.shutdown()
         print("RESULT cups %s: %s" % (mode, "FAIL %s" % fails if fails else "PASS"), flush=True)

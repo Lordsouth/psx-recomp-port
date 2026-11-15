@@ -111,6 +111,11 @@ def words(ws):
     return b"".join(struct.pack("<I", w) for w in ws)
 
 
+def _disc_patch(offset, old, new, note, feature):
+    return ["# " + note, "[[patch]]", 'feature = "%s"' % feature, 'target = "disc_user"', "offset = %d" % offset,
+            'expected = "%s"' % hexs(old), 'replace = "%s"' % hexs(new), ""]
+
+
 def build(disc, exe):
     problems, out = [], []
     ram = lambda a, n: bytes(exe.ram[a - RAM_BASE:a - RAM_BASE + n])
@@ -229,6 +234,32 @@ def build(disc, exe):
             out.extend(std_bracket_patches(disc.user(STD_BRACKET_LBA * 2048, 0xB000), "roster-15"))
         except AssertionError as e:
             problems.append(str(e))
+    # The cup bracket's projectile icon for 112/113: no arena on 1.5, so a six-word clamp helper in the
+    # zero padding right after the setDigimonRaised rewrite above, called from the four icon reads.
+    import roster_cups
+    h = roster_cups.DW15_ICON_HELPER
+    if h != SET_RAISED + 4 * len(SET_NEW) or any(ram(h, 4 * 7)):
+        problems.append("1.5's padding at 0x%08X is not free for the icon helper" % h)
+    else:
+        exe_patch("cup bracket icon clamp helper (types 112+ read icon 111)", h, words(roster_cups.DW15_ICON_HELPER_WORDS))
+        std = disc.user(STD_BRACKET_LBA * 2048, 0xC000)
+        for va in roster_cups.DW15_ICON_SITES:
+            off = va - 0x80052AE0
+            if std[off:off + 16] != words(roster_cups.DW15_ICON_SITE_STOCK):
+                problems.append("1.5's STD icon read at 0x%08X differs" % va)
+                continue
+            out.extend(_disc_patch(STD_BRACKET_LBA * 2048 + off, std[off:off + 16],
+                                   words(roster_cups.DW15_ICON_SITE_NEW), "cup bracket icon read 0x%08X -> clamp" % va,
+                                   "roster-15"))
+    # Cup entry and penalty lists (tools/roster_cups.py) in 1.5's own DG.SCN, from 1.5's species data.
+    dg_lba, dg_size = disc.files["/DG.SCN"] if "/DG.SCN" in disc.files else disc.files["/SCN/DG.SCN"]
+    try:
+        cup_out, _rep = roster_cups.patches(
+            disc.user(dg_lba * 2048, dg_size), dg_lba, lambda t: tuple(ram(DIGIMON_DATA + t * DD_STRIDE + 29, 2)),
+            sorted(sp["type"] for sp in NEW_SPECIES), "roster-15", _disc_patch)
+        out.extend(cup_out)
+    except AssertionError as e:
+        problems.append("cup lists: %s" % e)
     return problems, "\n".join(out) + "\n"
 
 

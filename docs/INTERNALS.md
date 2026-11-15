@@ -957,8 +957,31 @@ is baked: STD's own table stays in place, so `dw_roster.c` copies it into the ar
 right after a savestate load inside a cup, since the arena is not in the snapshot. The 1.5 edition writes the same nine
 words (the function is unchanged in 1.5) but has no arena, so on 1.5 the projectile icon of 112 reads the next table's
 first byte (a valid icon), and 113 its second, which then indexes the palette table at -1 (a junk 8x8 patch, no crash).
-Roster species above 66 are on no cup's entry list, so the schedule refuses them (GAME.md 15.3); that is not
-changed. `tools/verify_cups.py --roster N` checks the portrait from the GPU commands; `--revert-fix` is the control.
+Machinedramon's battle-intro banner row (114) is now composed like 112 and 113: ム from Muchomon's row, ゲ from
+Geremon's, ン from the "MON" suffix and ドラモン from Megadramon's, each asserted in the generator.
+`tools/verify_cups.py --roster N` checks the portrait from the GPU commands; `--revert-fix` is the control.
+
+**Cup eligibility.** Every roster species can register for cups (`tools/roster_cups.py`, called by both generators). The
+lists are in DG.SCN scripts 213 (File City's arena) and 102 (the yearly cup on map 106), reached through u16 offsets
+from the script's start, packed with no room after them. So the generator rebuilds the whole list area of each script:
+stock lists byte-identical, roster lists with the additions, identical lists stored once (the six grade cups share
+one entry list), packed from the area's start, every offset rewritten. Script 213's lists then end at 0x2F06 of its
+0x3000 slot and 102's at 0x2D16; the rest of each slot is stock bytes nothing references. The rules are the stock ones
+of GAME.md 15.3, asserted against the stock partners on every run: grade cups and cup 10 by level and id, the element
+cups by `special[0]`, the penalty lists of cups 0 and 1 by Ultimate. The hand-picked cups 18-22 take each species by
+the stock look-alike in `CUP_ANALOGUE` (by body shape: Tankmon like Giromon, WaruSeadramon like Seadramon,
+Machinedramon like Megadramon, and so on), not by the raise donors, which are gameplay donors. A species already on a
+cup's stock list (63-66) keeps its stock place. Pools and unlocks are untouched. `py -3.12 tools/roster_cups.py` prints
+the before/after diff of all 23 cups; every stock entry is unchanged and only roster ids are added.
+
+**Versus portraits.** A roster partner registered on the save screen reaches versus mode, whose two portrait
+renderers (`VS__renderSelectDigimonPlayer` in the EXE at 0x800F9124, `VS_renderFighterNamePlate` in `VS_REL.BIN` at
+0x800574A0) take the cell from type-3 and the palette from 68-entry tables. With the roster both first map the type
+through a 180-byte table in the arena at `0x32C0` (ids only, `vs_remap`): types up to 65 unchanged, Machinedramon (114
+and the stock 115) to the sheet's Machinedramon cell, every other roster species to its `CUP_ANALOGUE` look-alike's
+portrait. The name beside it is the fighter's own. 13 words per site; the type-115 special case is skipped, since cell
+63 drawn as 66 is the same quad with an in-table palette. Not run in the game: versus mode needs two memory cards'
+registrations, which the harness does not drive.
 
 Regenerate: `py -3.12 tools/gen_roster_mod.py` (`--check` verifies only).
 
@@ -1272,8 +1295,12 @@ test and the Prosperity bound are the stock roster's patches, unchanged on 1.5.
 
 Not carried over: Machinedramon (slot 114 is Veemon); the battle-intro name glyphs, which
 1.5 still reads from the stock 112-row table, so WaruSeadramon and Meteormon show garbage
-on the arena banner, as they do without the roster; the cup bracket's projectile icon table
-(the bracket's code fix is carried over, 4.1 "Cup bracket"); and the chart cursor fix.
+on the arena banner, as they do without the roster; the arena tables in general; the versus portrait remap; and the
+chart cursor fix. Carried over: the bracket's code fix and the cup eligibility (4.1), from 1.5's own DG.SCN and species
+data. The projectile icon of 112/113, which needs the arena on the stock edition, is clamped on 1.5 by a six-word helper
+in the zero padding right after roster-15's `setDigimonRaised` rewrite (0x801F0D84), called from the four icon reads in
+`STD_renderBracketProjectile`: types 112 and up read icon 111 from the stock table. The generator checks the padding
+is zero and starts right where `setDigimonRaised` ends.
 
 Checked in game (2026-11-11), `tools/verify_roster15.py`, 1.5's own choosers picking from
 shaped stats: Airdramon to Gigadramon (Champion), Meteormon to MudFrigimon (a roster source)
