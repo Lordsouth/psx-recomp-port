@@ -126,7 +126,9 @@ def save_checks(ram, name, level):
     for what, addr, n in (("createSavegameChecksum", 0x80112D34, 0x50),
                           ("the 0x2B save and sync calls", 0x80111480, 0xB0),
                           ("the 0x41 save and sync calls", 0x80112040, 0xB0),
-                          ("the Continue checksum calls", 0x80110D70, 0x60)):
+                          ("the Continue checksum calls", 0x80110D70, 0x60),
+                          ("countRegisteredDigimon (Versus mode's card read)", 0x8011341C, 0x2C),
+                          ("MemCardSync's entry", 0x800EB980, 0x10)):
         if ram(addr, n) != srd(addr, n):
             problems.append("1.5 differs from stock in %s (0x%08X), which dw_roster_saves.c hooks or filters on"
                             % (what, addr))

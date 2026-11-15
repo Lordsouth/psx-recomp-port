@@ -46,8 +46,18 @@
  *     (script_interp.c:1811); updateTournamentRegistration drops the entry when it no longer matches the partner,
  *     so it follows the partner to its stand-in. The disc scripts store a type in no other saved pstat
  *     (STORE_DIGIMON_TYPE, op 0x22, targets only pstats 5, 103, 200; 103 and 200 are not saved);
- *   - stock edition: a Battle Mode registration (+500, 40 records, main_menu.c:5230-5245) of 114 is written as 115,
- *     the stock Machinedramon whose record and model 114 uses (stock has no model for 114). On 1.5, 114 is Veemon.
+ *   - a Battle Mode registration (+500, 40 records of 0x40, main_menu.c:5230-5245): on the stock edition 114 is
+ *     written as 115, the stock Machinedramon whose record and model 114 uses (stock has no model for 114); every
+ *     other roster species (63-113, both editions; on 1.5, 114 is Veemon, its own species) as its stand-in, its
+ *     three move slots translated into the stand-in's list as for the partner. Versus mode, the only reader, indexes
+ *     68-entry portrait palette tables by the id and the species' move list by the slots (vs_select.c:797,
+ *     vs_scene.c:1344, vs_combat.c:477), so a roster id there reads past the tables with the roster off. The true
+ *     id and slots go into the record's own unused bytes (RegisteredDigimon.unk20, +0x20..+0x3F: nothing reads
+ *     them, every copy moves the whole record), with a hash of the record's first 0x20 bytes as written:
+ *       rec+0x20 'R' 'V', +0x22 true id, +0x23 its three slots, +0x26 u32 FNV-1a of rec+0x00..+0x1F
+ *     A record is restored exactly when that hash still matches: a registration made again on the stock game
+ *     rewrites the stats and name, so it stays as made. Each record stands alone (no payload hash), so a card
+ *     saved again without the roster keeps its untouched registrations restorable.
  * Everything else (stats, PartnerPara, learned moves, name, lives, the raised flags dw_roster_flags.c banks at
  * trigger 0x2CD+) is generic data the stock game reads correctly or never reads, and is left alone.
  *
@@ -102,6 +112,8 @@
 #define F_PSTAT4  4u
 #define VERSION   2u
 #define SLOT0    0x2Eu                  /* a move slot value is 0x2E + index into DIGIMON_DATA.moves */
+#define R_ID     0x1Cu                  /* RegisteredDigimon.digimonId; moves[3] at +0x1D */
+#define R_TAG    0x20u                  /* unk20: 'R' 'V', true id, its three slots, u32 hash of +0x00..+0x1F */
 
 typedef struct {
     uint32_t digimon_data;  /* 52 B each: special[3] +30, moves[16] +35 */
@@ -177,19 +189,80 @@ static uint8_t fresh_finisher(const Edition* e, uint32_t type) {
     return 0xFF;
 }
 
-static void remap_moves(const Edition* e, uint32_t from, uint32_t to) {
+/* Three equipped slots at `at` (the partner's Stats.base.moves, or a registration's moves) from `from`'s move list
+ * into `to`'s; with fin_too, the finisher slot at at+3 as well. */
+static void remap_moves_at(const Edition* e, uint32_t at, uint32_t from, uint32_t to, int fin_too) {
     uint8_t out[4] = {0xFF, 0xFF, 0xFF, 0xFF}, n = 0;
     for (uint32_t i = 0; i < 3; i++) {
-        uint8_t s = slot_of(e, to, move_id(e, from, psx_mod_read_byte(S0 + P_MOVES + i)));
+        uint8_t s = slot_of(e, to, move_id(e, from, psx_mod_read_byte(at + i)));
         if (s != 0xFF)
             out[n++] = s;
     }
     if (n == 0)
         out[0] = fresh_move(e, to);
-    uint8_t fin = slot_of(e, to, move_id(e, from, psx_mod_read_byte(S0 + P_MOVES + 3)));
-    out[3] = (fin != 0xFF && move_id(e, to, fin) >= 0x3A && move_id(e, to, fin) < 0x71) ? fin : fresh_finisher(e, to);
-    for (uint32_t i = 0; i < 4; i++)
-        psx_mod_write_byte(S0 + P_MOVES + i, out[i]);
+    if (fin_too) {
+        uint8_t fin = slot_of(e, to, move_id(e, from, psx_mod_read_byte(at + 3)));
+        out[3] = (fin != 0xFF && move_id(e, to, fin) >= 0x3A && move_id(e, to, fin) < 0x71) ? fin
+                                                                                          : fresh_finisher(e, to);
+    }
+    for (uint32_t i = 0; i < (fin_too ? 4u : 3u); i++)
+        psx_mod_write_byte(at + i, out[i]);
+}
+
+static void remap_moves(const Edition* e, uint32_t from, uint32_t to) {
+    remap_moves_at(e, S0 + P_MOVES, from, to, 1);
+}
+
+static uint32_t rec_hash(uint32_t r) {
+    uint32_t h = 2166136261u;
+    for (uint32_t o = 0; o < R_TAG; o++)
+        h = (h ^ psx_mod_read_byte(r + o)) * 16777619u;
+    return h;
+}
+
+static int rec_tagged(uint32_t r) {
+    return psx_mod_read_byte(r + R_TAG) == 'R' && psx_mod_read_byte(r + R_TAG + 1) == 'V';
+}
+
+/* One registration to the card: a roster id becomes its stand-in (114 -> 115 on the stock edition), the truth goes
+ * into the record's unused tail with a hash of what is written. A tag that no longer matches (the record was made
+ * again since) is cleared. Returns 1 when the record was remapped. */
+static int save_reg(const Edition* e, uint32_t r) {
+    uint8_t id = psx_mod_read_byte(r + R_ID);
+    uint8_t to = (e->stock && id == 114) ? 115 : stand_in(e, id);
+    if (!to) {
+        if (rec_tagged(r) && psx_mod_read_word(r + R_TAG + 6) != rec_hash(r))
+            for (uint32_t i = 0; i < 10; i++)
+                psx_mod_write_byte(r + R_TAG + i, 0);
+        return 0;
+    }
+    psx_mod_write_byte(r + R_TAG, 'R');
+    psx_mod_write_byte(r + R_TAG + 1, 'V');
+    psx_mod_write_byte(r + R_TAG + 2, id);
+    for (uint32_t i = 0; i < 3; i++)
+        psx_mod_write_byte(r + R_TAG + 3 + i, psx_mod_read_byte(r + R_ID + 1 + i));
+    if (to != 115)                                  /* 114 has 115's record and move list */
+        remap_moves_at(e, r + R_ID + 1, id, to, 0);
+    psx_mod_write_byte(r + R_ID, to);
+    psx_mod_write_word(r + R_TAG + 6, rec_hash(r));
+    return 1;
+}
+
+/* The roster registration back from its tag, if the record is still as written. */
+static int restore_reg(uint32_t r) {
+    if (!rec_tagged(r) || psx_mod_read_word(r + R_TAG + 6) != rec_hash(r))
+        return 0;
+    psx_mod_write_byte(r + R_ID, psx_mod_read_byte(r + R_TAG + 2));
+    for (uint32_t i = 0; i < 3; i++)
+        psx_mod_write_byte(r + R_ID + 1 + i, psx_mod_read_byte(r + R_TAG + 3 + i));
+    return 1;
+}
+
+static uint32_t restore_regs_tagged(uint32_t base) {
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < 40; i++)
+        n += (uint32_t)restore_reg(base + i * 0x40);
+    return n;
 }
 
 static int has_block(uint32_t p) {
@@ -212,13 +285,17 @@ static void save(const Edition* e, struct CPUState* cpu) {
     if (cpu->gpr[31] != DW_RA_SLEEP && cpu->gpr[31] != DW_RA_MACHINE)
         return;
     uint8_t regs[5] = {0, 0, 0, 0, 0}, any_reg = 0;
-    if (e->stock)
-        for (uint32_t i = 0; i < 40; i++)
-            if (psx_mod_read_byte(S0 + P_REGS + i * 0x40 + 0x1C) == 114) {
-                psx_mod_write_byte(S0 + P_REGS + i * 0x40 + 0x1C, 115);
-                regs[i / 8] |= (uint8_t)(1u << (i % 8));
-                any_reg = 1;
-            }
+    uint32_t n_regs = 0;
+    for (uint32_t i = 0; i < 40; i++) {
+        uint32_t r = S0 + P_REGS + i * 0x40;
+        if (e->stock && psx_mod_read_byte(r + R_ID) == 114) {   /* the version-2 mask too, as before */
+            regs[i / 8] |= (uint8_t)(1u << (i % 8));
+            any_reg = 1;
+        }
+        n_regs += (uint32_t)save_reg(e, r);
+    }
+    if (n_regs)
+        psx_mod_counter_add("dw.roster.saves.regs", n_regs);
 
     uint32_t type = psx_mod_read_word(S0 + P_TYPE);
     uint8_t pstat4 = psx_mod_read_byte(S0 + P_PSTAT4), pstat5 = psx_mod_read_byte(S0 + P_PSTAT5);
@@ -265,6 +342,8 @@ static void after_write(struct CPUState* cpu) {
         restore_regs(S0);
     if (has_block(S1))
         restore_regs(S1);
+    restore_regs_tagged(S0 + P_REGS);
+    restore_regs_tagged(S1 + P_REGS);
 }
 
 static void restore(uint32_t p) {
@@ -283,14 +362,20 @@ static void restore(uint32_t p) {
 
 static void load(struct CPUState* cpu) {
     const uint32_t p = cpu->gpr[4];
-    if (!has_block(p))
+    /* Both blocks are judged on the payloads as read, before anything changes them; registrations stand alone. */
+    const int blk = has_block(p), valid = blk && valid_block(p);
+    const uint32_t other = p == S0 ? S1 : p == S1 ? S0 : 0;
+    const int other_valid = other && valid_block(other);
+    const uint32_t n = restore_regs_tagged(p + P_REGS) + (other ? restore_regs_tagged(other + P_REGS) : 0);
+    if (n)
+        psx_mod_counter_add("dw.roster.saves.regs_restored", n);
+    if (!blk)
         return;
-    if (!valid_block(p)) {                                   /* saved again without the roster since */
+    if (!valid) {                                            /* saved again without the roster since */
         psx_mod_counter_add("dw.roster.saves.stale", 1);
         return;
     }
-    const uint32_t other = p == S0 ? S1 : p == S1 ? S0 : 0;
-    if (other && valid_block(other))                         /* judged before p changes, which it may equal */
+    if (other_valid)                                         /* judged before p changes, which it may equal */
         restore(other);
     restore(p);
     psx_mod_counter_add("dw.roster.saves.restored", 1);
@@ -301,6 +386,10 @@ static void load(struct CPUState* cpu) {
 static void versus(struct CPUState* cpu) {
     const uint32_t buf = cpu->gpr[4];
     const uint32_t copies[2] = {S0, S1};
+    if (restore_regs_tagged(buf)) {                          /* tagged records carry their own proof */
+        psx_mod_counter_add("dw.roster.saves.versus", 1);
+        return;
+    }
     for (uint32_t c = 0; c < 2; c++) {
         uint32_t p = copies[c], o = 0;
         if (!valid_block(p))
@@ -331,4 +420,6 @@ PSX_MOD_CONSTRUCTOR(dw_roster_saves_register) {
     psx_mod_register_function_entry_plugin("dw.roster", DW_COUNT_REGS, versus_stock);
     psx_mod_register_function_entry_plugin("dw.roster15", DW_CHECKSUM, save_dw15);
     psx_mod_register_function_entry_plugin("dw.roster15", DW_LOAD_SAVEGAME, load_any);
+    psx_mod_register_function_exit_plugin("dw.roster15", DW_MEMCARD_SYNC, sync_stock);
+    psx_mod_register_function_entry_plugin("dw.roster15", DW_COUNT_REGS, versus_stock);
 }

@@ -104,6 +104,8 @@ HOOK_OWNER = {
     0x800EEBDC: ROSTER,  # dw_roster.c       initializeHeap
     0x800A1F68: ROSTER,  # dw_roster.c       loadMMD
     0x800A2810: ROSTER,  # dw_roster.c       loadMMDAsync
+    0x800A254C: ROSTER,  # dw_roster.c       getEntityModelComponent (an NPC slot of 114: Versus player 2)
+    0x800A23F4: ROSTER,  # dw_roster.c       unloadModel (the same slot)
     0x800FF7F8: ROSTER,  # dw_roster_flags.c setDigimonRaised
     0x800FF824: ROSTER,  # dw_roster_flags.c hasDigimonRaised
     0x800E2544: "dw.vanilla.evolution/native-evolution",  # dw_evolution.c
@@ -112,8 +114,8 @@ HOOK_OWNER = {
     0x80112D34: ("dw.newmaps/glade", "dw.newmaps/glade-15", "dw.newmaps.factory/factory",
                  "dw.newmaps.factory/factory-15", ROSTER, ROSTER15),  # createSavegameChecksum (entry)
     0x80112D84: (ROSTER, ROSTER15),  # dw_roster_saves.c loadSavegame: the true roster partner back from the card
-    0x800EB980: ROSTER,  # dw_roster_saves.c MemCardSync (exit): 114 registrations back after the card write
-    0x8011341C: ROSTER,  # dw_roster_saves.c countRegisteredDigimon: 114 registrations back in Versus mode
+    0x800EB980: (ROSTER, ROSTER15),  # dw_roster_saves.c MemCardSync (exit): roster registrations back after the write
+    0x8011341C: (ROSTER, ROSTER15),  # dw_roster_saves.c countRegisteredDigimon: roster registrations back in Versus
     # lookupFileTable: a filter hook serving the new map names in dw_newmaps_files.inc (gen_factory.py)
     0x800A31F8: ("dw.newmaps.factory/factory", "dw.newmaps.factory/factory-15"),  # dw_newmaps.c  lookupFileTable (filter)
     # getScript: a filter hook serving the factory's and the glade's script ids in dw_newmaps_scripts.inc (gen_factory.py),

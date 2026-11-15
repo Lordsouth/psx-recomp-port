@@ -348,6 +348,20 @@ static void roster_remap_hook(struct CPUState* cpu, uint32_t address) {
         cpu->gpr[4] = 115u;
 }
 
+/* An NPC model slot (modelType 0) is keyed by the type loadMMD was given, which the hook above makes 115, while
+ * the entity keeps type 114. The partner and tamer slots are fixed, so the field never meets this, but Versus mode
+ * loads player 2's fighter into NPC slot 0 (VS_loadFighterEntities, vs_scene.c:1219-1227): with a 114 there the
+ * model lookup by 114 found nothing and the match never started (black screen, run 2026-11-15). The slot's other
+ * two type-keyed doors get the same rewrite, for the NPC slot only: getEntityModelComponent (a0 type, a1 0) and
+ * unloadModel (a0 type, a1 0, model.c:3455-3463), so a 114 slot is found and freed like any other. */
+#define ROSTER_GET_MODEL_COMPONENT_VADDR 0x800A254Cu  /* getEntityModelComponent(instance, type) */
+#define ROSTER_UNLOAD_MODEL_VADDR 0x800A23F4u         /* unloadModel(digiType, modelType) */
+static void roster_npc_slot_hook(struct CPUState* cpu, uint32_t address) {
+    (void)address;
+    if (roster_live && cpu->gpr[4] == 114u && cpu->gpr[5] == 0u)
+        cpu->gpr[4] = 115u;
+}
+
 static void roster_activate(void) {
     roster_arena = psx_mod_alloc_guest_memory(ROSTER_ARENA_SIZE, 16);
     if (roster_arena != ROSTER_ARENA_BASE) {
@@ -548,4 +562,6 @@ PSX_MOD_CONSTRUCTOR(dw_roster_register) {
     psx_mod_register_function_entry_plugin("dw.roster",
                                            ROSTER_LOADMMDASYNC_VADDR,
                                            roster_remap_hook);
+    psx_mod_register_function_entry_plugin("dw.roster", ROSTER_GET_MODEL_COMPONENT_VADDR, roster_npc_slot_hook);
+    psx_mod_register_function_entry_plugin("dw.roster", ROSTER_UNLOAD_MODEL_VADDR, roster_npc_slot_hook);
 }
