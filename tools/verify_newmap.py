@@ -60,7 +60,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game  # noqa: E402
 import newmap_engine as E  # noqa: E402
-from gen_newmap import BITS, FULL_LINES, HAUL, PAID_PAGES, REWARD_TRIGGER, STACK_LINES  # noqa: E402
+from gen_newmap import (BITS, FULL_LINES, HAUL, PAID_PAGES, PURSE_LINES, REWARD_TRIGGER,  # noqa: E402
+                        SCRATCH_PSTAT, STACK_LINES)
 from field_drive import (  # noqa: E402
     Field, UP, TAMER, NPC0, CAMERA, IS_SCRIPT_PAUSED, PREVIOUS_SCREEN, CURRENT_EXIT, NPC_ON_MAP,
     NPC_STATS, PARTNER_STATS, HOUR, CURRENT_FRAME, MONEY, TRIGGER_BASE)
@@ -391,21 +392,30 @@ def main():
         pages = PAID_PAGES(names)
         script = open(os.path.join(pkg_dir, "assets", "glade.dg"), "rb").read()      # the bytes the game was served
         texts = {"p%d" % k: E.dialog_text(pg) for k, pg in enumerate(pages)}
-        texts["full"], texts["stack"] = E.dialog_text(FULL_LINES()), E.dialog_text(STACK_LINES)
+        texts.update(full=E.dialog_text(FULL_LINES), stack=E.dialog_text(STACK_LINES), purse=E.dialog_text(PURSE_LINES))
         at = {k: script.find(t) + len(t) + 4 for k, t in texts.items()}     # where the pointer sits with that box up
         assert min(at.values()) > 4 and len(set(at.values())) == len(at), "every box must be in glade.dg, once"
         seen = lambda: [k for o in f.boxes for k, v in at.items() if v == o]     # the boxes shown, in order
         counts = lambda b: {t: k for t, k in zip(b[:30], b[30:60]) if t != 0xFF}
         haul = {i: n for i, n, _ in HAUL}
+        kinds = [i for i, _, _ in HAUL]
         pay_boxes = ["p%d" % k for k in range(len(pages))]
         money = lambda: f.i32(MONEY)
+        limit = 999999 - BITS                          # the purse after the fight's own bits must not pass this
 
         def stop():
             if fails:
                 raise SystemExit("RESULT newmap glade reward: FAIL %s" % fails)
 
+        def dump(when):
+            """What the game is doing, for a failure nobody can explain afterwards."""
+            print("STATE %s: map %d, game state %d, tamer state %d, script idle %s, tamer at %s, hour %d"
+                  % (when, screen(), gstate(), g.tamer_state, i32(IS_SCRIPT_PAUSED) == 1, pos(TAMER), struct.unpack("<h", g.d.read(HOUR, 2))[0]),
+                  flush=True)
+            shot("state_" + when.replace(" ", "_"))
+
         def won(bag, paid=None, cash=None):
-            """The bag set to `bag` (None: as it is), the boss fought and beaten: the bag and flag before and after.
+            """The bag set to `bag` (None: as it is), the boss fought and beaten: the bag before and after.
             paid: the bits the win should add (default the boss's own); cash: bits to hold going in."""
             if bag is not None:
                 f.set_bag(bag)
@@ -419,7 +429,10 @@ def main():
             return before, f.bag()
 
         def again(bag, **kw):
+            n = len(fails)
             walk_out()
+            if len(fails) > n:
+                dump("after walk_out failed")
             wait_for(lambda: i32(IS_SCRIPT_PAUSED) == 1, 20)
             g.advance(60)
             walk_in()
@@ -427,13 +440,18 @@ def main():
             stop()
             return won(bag, **kw)
 
-        def unpaid(what, before, after, box):
+        def unpaid(what, before, after, box, bits=5000):
             check(after == before and not f.trigger(REWARD_TRIGGER) and seen() == [box],
                   "%s: the bag is as it was (%s), trigger %d clear, the one box shown was %r (boxes seen: %s)"
                   % (what, "same" if after == before else counts(after), REWARD_TRIGGER, box, seen()))
             stop()
 
-        def clear_trigger():                           # the card as it was before the first payment
+        def needs(want):                               # the number the full box shows: kinds the bag did not hold
+            check(f.pstat(SCRATCH_PSTAT) == want, "the full box counted %d kinds the bag lacked (pstat %d = %d)"
+                  % (want, SCRATCH_PSTAT, f.pstat(SCRATCH_PSTAT)))
+            stop()
+
+        def clear_trigger():                           # the card as it was before the payment
             b = g.d.read(TRIGGER_BASE + REWARD_TRIGGER // 8, 1)[0]
             g.d.write_bytes(bytes([b & ~(1 << REWARD_TRIGGER % 8)]), TRIGGER_BASE + REWARD_TRIGGER // 8)
 
@@ -448,13 +466,25 @@ def main():
               % (size, need, REWARD_TRIGGER))
         stop()
         fillers = [(t, 1) for t in range(128) if t not in haul][:size]
-        before, after = won(fillers)                                                       # a full bag
+        room = lambda free, held=(): list(held) + fillers[:size - free - len(held)]    # `free` slots left, `held` in the bag
+        before, after = won(fillers)                                                       # a full bag: the first give fails
         unpaid("first win, bag full", before, after, "full")
-        before, after = again(fillers[:size - need + 1])                                   # one slot short: 7 gives, then rollback
+        needs(need)
+        before, after = again(room(1))                                                     # the 2nd give fails
+        unpaid("next win, 1 free slot", before, after, "full")
+        before, after = again(room(need - 1))                                              # the last give fails
         unpaid("next win, %d of %d slots free" % (need - 1, need), before, after, "full")
-        before, after = again([(23, 99)] + fillers[:size - need])                          # room, but a stack at 99
-        unpaid("next win, room but item 23 at 99", before, after, "stack")
-        before, after = again(fillers[:size - need], paid=5000 + BITS)                     # exactly enough room
+        held = [(kinds[0], 1), (kinds[1], 1)]                                              # two kinds held: rollback over held stacks
+        before, after = again(room(1, held))                                               # the 4th give fails
+        unpaid("next win, kinds %d and %d held, 1 free slot" % tuple(kinds[:2]), before, after, "full")
+        needs(need - 2)
+        before, after = again(room(need, [(kinds[0], 99)]))                                # room, but the first kind at 99
+        unpaid("next win, room but item %d at 99" % kinds[0], before, after, "stack")
+        before, after = again(room(need, [(kinds[-1], 100 - haul[kinds[-1]])]))            # room, but the last kind at 95
+        unpaid("next win, room but item %d at %d" % (kinds[-1], 100 - haul[kinds[-1]]), before, after, "stack")
+        before, after = again(room(need), cash=limit - 5000 + 1)                           # purse 1 over after the fight's bits
+        unpaid("next win, room but %d bits in the purse after the fight (limit %d)" % (limit + 1, limit), before, after, "purse")
+        before, after = again(room(need), paid=5000 + BITS, cash=100000)                              # exactly enough room
         want = {**counts(before), **haul}
         check(counts(after) == want and f.trigger(REWARD_TRIGGER) and seen() == pay_boxes,
               "next win, %d free slots: every haul item arrived (%s), %d bits with them, trigger %d set, boxes shown %s"
@@ -465,13 +495,13 @@ def main():
               "second win: nothing more (%s), trigger %d still set, no box shown (boxes seen %s)"
               % ("bag the same" if after == before else counts(after), REWARD_TRIGGER, seen()))
         stop()
-        # the card as it was before the payment, to check the stack boundary and the bits' cap: 94 + 5 is exactly 99, and
-        # ADD_MONEY stops at 999,999 (the boss's own bits come first)
+        # the card as it was before the payment: the stack boundary (94 + 5 is exactly 99) and the purse exactly at the
+        # limit, which ADD_MONEY then fills to its 999,999
         clear_trigger()
-        before, after = again([(23, 99 - haul[23])] + fillers[:size - need], paid=999999 - 990000, cash=990000)
+        before, after = again(room(need, [(23, 99 - haul[23])]), paid=999999 - (limit - 5000), cash=limit - 5000)
         want = {**counts(before), **haul, 23: 99}
         check(counts(after) == want and f.trigger(REWARD_TRIGGER) and money() == 999999 and seen() == pay_boxes,
-              "flag cleared, item 23 at %d: paid again, item 23 now %d (stack stops at 99), bits %d (cap 999999), boxes %s"
+              "flag cleared, item 23 at %d, purse at the limit: paid, item 23 now %d (stack stops at 99), bits %d, boxes %s"
               % (99 - haul[23], counts(after).get(23), money(), seen()))
         stop()
         save_here()
@@ -585,6 +615,8 @@ def main():
             walk_out()
     finally:
         g.shutdown()
+        if fails:                                      # the next run overwrites the log: keep this one beside it
+            shutil.copy(os.path.join(out, a.mode + ".log"), os.path.join(out, "%s_failed_%d.log" % (a.mode, a.port)))
     print("RESULT newmap %s %s: %s" % (a.map, a.mode, "FAIL %s" % fails if fails else "PASS"))
     return 1 if fails else 0
 

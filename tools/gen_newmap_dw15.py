@@ -88,7 +88,6 @@ def glade_checks(disc, exe):
     return ["1.5 names a haul item differently from the stock disc: the paid box %s is not in glade.dg" % (bad[0],)] if bad else []
 
 
-
 # Per package: its manifest, the feature and its edition, the edition's plugin, the asset swaps, the DG slot whose
 # overlay becomes a DG.SCN patch (glade), whose section the MAPHEAD tail follows (None: 1.5's own), how a moved
 # section is rebuilt (None: its bytes hold no offsets), and package-specific checks.

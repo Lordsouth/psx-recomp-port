@@ -523,7 +523,7 @@ Still to do:
 medicines and 60,000 bits. `gen_newmap.py`'s `HAUL` is the one table to tune (item id, amount, the dw_decomp name symbol
 it is asserted against), `BITS` the money. `boss_script` ends in `haul_tail` (`tools/newmap_engine.py`), the many-item
 sibling of `reward_tail`, which the factory keeps: the factory's one-per-item rollback ladder is not reused because
-eight copies of the full box would not fit a sector. `haul_tail` checks every stack for the 99 cap first (one OR-ed IF), gives
+eight copies of the full box would not fit a sector. `haul_tail` checks every stack for the 99 cap first (one OR-ed IF) and that the purse can take the bits whole (`ADD_MONEY` would clamp at 999,999 and lose the excess), gives
 item by item, falls into one chain of `REMOVE_ITEM`s on a failed give, and adds the bits only after the last give. The
 flag is trigger 630 (`REWARD_TRIGGER`; GAME.md 4.8, 6.2, 7.17). Item names are read from the disc's `ITEM_PARA` at
 generation; `gen_newmap_dw15.py`'s `glade_checks` asserts the paid boxes built from the 1.5 image's names are the ones in

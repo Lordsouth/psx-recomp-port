@@ -108,8 +108,13 @@ HAUL = ((23, 5, "OFF_CHIP"), (24, 5, "DEF_CHIP"), (25, 5, "BRAIN_CHIP"), (26, 5,
         (12, 5, "SUP_RESTORE"))            # revives and cures, the rarest non-evolution medicine
 BITS = 60000
 ITEM_PARA = 0x801269DC
-FULL_LINES = lambda: ("Not enough room in the bag.", "Free up to %d slots." % len(HAUL), "Then win again.")
+SCRATCH_PSTAT = 90          # free and not saved (docs/GAME.md 4.7): the script counts there the kinds the bag lacks
+# the second row of the full box reads that count with the text control code 04 (pstat as a number, docs/GAME.md 4.9)
+FULL_LINES = ("Not enough room in the bag.",
+              E.dialog_text(["Needs "]) + b"\x04" + bytes([SCRATCH_PSTAT]) + E.dialog_text([" free slots."]),
+              "Then win again.")
 STACK_LINES = ("An item stack is too full.", "Use some up.", "Then win again.")
+PURSE_LINES = ("Your purse is too full.", "Spend some bits first.", "Then win again.")
 def PAID_PAGES(names):
     """The paid boxes, three lines each: one line per item (names[i] is HAUL[i]'s name in the game), then the bits."""
     lines = ["Got %s x%d!" % (name, n) for name, (_, n, _) in zip(names, HAUL)] + ["Got %d bits!" % BITS]
@@ -277,7 +282,7 @@ def boss_script(names):
     head = E.say(BOSS_DG_SECTION, BOSS_LINES) + bytes.fromhex("2700 6700 0100 6600")
     table = struct.pack("<6H", 12, 0xFE, 12, BOSS_DG_SECTION, 14, 0xFFFF) + b"\xfe\x00"
     return table + head + E.haul_tail(len(table) + len(head), REWARD_TRIGGER, [(i, n) for i, n, _ in HAUL], BITS,
-                                      PAID_PAGES(names), FULL_LINES(), STACK_LINES)
+                                      PAID_PAGES(names), FULL_LINES, STACK_LINES, PURSE_LINES, SCRATCH_PSTAT)
 
 
 # ---- the glade as an engine Screen -----------------------------------------
