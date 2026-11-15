@@ -84,6 +84,10 @@ toggle on **D-Pad**. If you switch it to Analog, **every button stops working** 
 this game only understands the digital controller, and that is not a bug in the
 port.
 
+**Battle Mode** (two players, two memory cards) needs a second controller: assign
+one to **Player 2** in the launcher. Register a partner at Jijimon's Save Machine
+first. Digimon from the Expanded Roster can be registered too.
+
 **Keyboard:** Enter = Start, X = Cross, S = Circle, A = Triangle, Z = Square,
 arrow keys = D-Pad. Rebind them in the launcher's Controls page.
 

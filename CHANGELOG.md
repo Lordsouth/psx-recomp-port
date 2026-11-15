@@ -79,8 +79,8 @@ for Tankmon, on Digimon World 1.5 too.
   by main element, and the Dino, Wing, Animal, Human and Insect cups by a close
   original look-alike. The original Digimon's entries are unchanged. It works on
   Digimon World 1.5 too. Machinedramon's name now shows on the arena banner.
-* Versus mode no longer reads past its portrait table for a roster partner. This
-  fix was checked in the code only: versus mode was not played.
+* Battle Mode no longer reads past its portrait table for a roster partner (see
+  Battle Mode below).
 
 **Hidden Glade: a big reward for the secret fight.** Beating the glade's boss for
 the first time pays a haul, once: five of each of the six stat chips, five
@@ -100,6 +100,33 @@ exactly as you left it. If you saved again without the roster in between, the
 classic partner you went on with stays. Sukamon's cure, a tournament entry and a
 Battle Mode registration of Machinedramon are handled the same way. It works on
 Digimon World 1.5 too.
+
+**Battle Mode works, with two controllers.** The port was built for one controller,
+so Battle Mode on the title screen stopped at player 2's memory card. It now runs
+from the title to the result and back. Assign a controller to **Player 2** in the
+launcher; it starts as "none", so playing alone is unchanged. Savestates made with
+earlier versions no longer load (the launcher says "Load failed" and nothing else
+happens); memory cards are unaffected. The matches in testing were ended by setting a
+fighter to 1 HP, not fought out, and were single rounds driven by the test tool, not
+by a second physical controller.
+
+**Expanded Roster in Battle Mode.**
+
+* Machinedramon as player 2's fighter no longer leaves the match on a black screen.
+* A registration of one of the new Digimon is saved as a classic look-alike, so the
+  original game can show it. With the roster on it comes back as registered, on
+  Digimon World and on 1.5, including after the card was saved again without the
+  roster. A Machinedramon registration stays the classic Machinedramon on 1.5 and
+  comes back on Digimon World.
+* Fixed: saving twice in one session without the roster could write a new Digimon
+  onto the card as it was, which the original game cannot show.
+* Registrations saved by earlier versions convert the next time you save with the
+  roster on.
+* On 1.5, a new Digimon numbered 66 or higher shows Machinedramon's portrait in
+  Battle Mode.
+* Known limit: Veemon, 1.5's own Digimon, is stored as it is on a 1.5 card, so the
+  original game cannot show a Veemon registration or partner. A classic Machinedramon
+  partner that you continue and save on 1.5 stays MetalGreymon. Neither was run.
 
 **Widescreen: a recruit's "X joins the city!" no longer freezes the game.**
 A player reported "Agumon joins the city!" staying on screen for good: the world
