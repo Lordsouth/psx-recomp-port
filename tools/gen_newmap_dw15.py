@@ -77,15 +77,16 @@ def factory_checks(disc, exe):
 
 
 def glade_checks(disc, exe):
-    """The boss's reward is the item the glade's paid line names: 1.5's table calls that id the same (the line is built
-    from the stock disc's name, and the glade's script is the same bytes on both editions)."""
+    """The boss's haul is what the glade's paid boxes name: 1.5's table calls every id in it what the stock disc does (the
+    boxes are built from the stock disc's names, and the glade's script is the same bytes on both editions)."""
     import newmap_engine as E
-    from gen_newmap import ITEM_PARA, PAID_LINES, REWARD
-    name = bytes(exe.ram[ITEM_PARA - RAM_BASE + 32 * REWARD[0][0]:][:20]).split(b"\0")[0].decode("ascii", "replace")
+    from gen_newmap import HAUL, ITEM_PARA, PAID_PAGES
+    name = lambda item: bytes(exe.ram[ITEM_PARA - RAM_BASE + 32 * item:][:20]).split(b"\0")[0].decode("ascii", "replace")
     script = open(os.path.join(PKGS, "dw.newmaps", "1.0.0", "assets", "glade.dg"), "rb").read()
-    if E.dialog_text(PAID_LINES(name)) not in script:
-        return ["item %d is %r on 1.5: the glade's paid line does not read it" % (REWARD[0][0], name)]
-    return []
+    names = [name(item) for item, _, _ in HAUL]
+    bad = [p for p in PAID_PAGES(names) if E.dialog_text(p) not in script]
+    return ["1.5 names a haul item differently from the stock disc: the paid box %s is not in glade.dg" % (bad[0],)] if bad else []
+
 
 
 # Per package: its manifest, the feature and its edition, the edition's plugin, the asset swaps, the DG slot whose

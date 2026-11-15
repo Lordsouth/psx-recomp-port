@@ -45,7 +45,7 @@ class Field:
         self.g, self.check = g, check
         self.species = SPECIES_15 if dw15 else SPECIES
         self.shot = shot or (lambda name: None)       # shot(name) -> screenshot path, for the caller's own folder
-        self.boxes = set()                            # script offsets a text box was up at, see sample_box
+        self.boxes = []                               # script offsets a text box was up at, in order, see sample_box
 
     def enter(self):
         """Title -> CONTINUE. DOWN waits for the menu to take input: an early DOWN is dropped and the crosses then
@@ -78,10 +78,11 @@ class Field:
     def sample_box(self):
         """Note where the running script's text box is, if one is up: SHOW_TEXTBOX (1A) as the active op, the script
         pointer just past its text (verify_ws_camera.py's at_box). win and win_group call it before every press, so
-        any box that is waiting for one is seen; self.boxes holds the offsets, from the script's start."""
+        any box that is waiting for one is seen; self.boxes holds the offsets, from the script's start, in the order seen."""
         base, ptr = struct.unpack("<2I", self.g.d.read(ACTIVE_SCRIPT, 8))
         if self.g.d.read(ACTIVE_INSTRUCTION, 1)[0] == 0x1A and 0 <= ptr - base < 0x4000:
-            self.boxes.add(ptr - base)
+            if ptr - base not in self.boxes:
+                self.boxes.append(ptr - base)
 
     def pstat(self, n):
         return self.g.d.read(PSTAT_BASE + n, 1)[0]
@@ -370,7 +371,7 @@ class Field:
         self.g.d.write_bytes(struct.pack("<4h", stat, stat, stat, stat), PARTNER_STATS)
         self.g.d.write_bytes(struct.pack("<4h", hp, 9999, hp, 9999), PARTNER_MAX_HP)
 
-    def win(self, rec, row, brains=0, end_fix=True):
+    def win(self, rec, row, brains=0, end_fix=True, paid=None):
         """A maxed partner. First the boss (stat record `rec`) fights for real until it has used every move (a move
         plays the animation of its slot number), both sides topped up, then on 1 HP it takes a hit and runs off.
         `brains`: the Brains the battle should have started on (judged, and its MP message after the win)."""
@@ -414,7 +415,8 @@ class Field:
         if end_fix and brains and brains + 1 in MP_BONUS:
             text = b"#C1MP Cost Bonus!#Rreduced by %d pct!#W" % MP_BONUS[brains + 1]
             check(box is not None and text in box, "the end box finished on its MP bonus message")
-        check(self.i32(MONEY) - bits == rec[19], "the bits were paid: %d -> %d" % (bits, self.i32(MONEY)))
+        check(self.i32(MONEY) - bits == (rec[19] if paid is None else paid),
+              "the bits were paid: %d -> %d" % (bits, self.i32(MONEY)))
         check(g.d.read(NPC_ON_MAP, 1)[0] == 0, "the boss has left the map")
         g.advance(30)
         self.shot("won")

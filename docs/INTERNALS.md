@@ -519,13 +519,18 @@ Still to do:
   it sees only scripts, so it calls the bands C owns free (`docs/GAME.md` 4.8). Ids
   631-639 and 641-649 are free of scripts, C and plugins (627-630 are the new maps')
 
-**The boss's reward.** The glade's win path pays 3 Omni Disks once, with the factory's script ops: `gen_newmap.py`'s
-`boss_script` and `gen_factory.py`'s `boss_section` both end in `reward_tail` (`tools/newmap_engine.py`), which emits
-the IF on the flag, the gives, the paid box and the rollbacks, so the two cannot drift apart (the factory's package
-is byte-identical to before the move). The flag is trigger 630 (`REWARD_TRIGGER`; GAME.md 4.8, 6.2, 7.17). The
-text's item name is read from the disc's `ITEM_PARA` at generation; `gen_newmap_dw15.py`'s `glade_checks` asserts the
-1.5 image names the id the same, so `glade-15` uses the same `glade.dg` (copied as an overlay, as the factory's
-scripts are; no guard on 1.5's DG.SCN is needed). `verify_newmap.py reward` and `off --card reward` prove it.
+**The boss's haul.** The glade's win path pays a haul once (GAME.md 7.17): five of each stat chip, five each of two top
+medicines and 60,000 bits. `gen_newmap.py`'s `HAUL` is the one table to tune (item id, amount, the dw_decomp name symbol
+it is asserted against), `BITS` the money. `boss_script` ends in `haul_tail` (`tools/newmap_engine.py`), the many-item
+sibling of `reward_tail`, which the factory keeps: the factory's one-per-item rollback ladder is not reused because
+eight copies of the full box would not fit a sector. `haul_tail` checks every stack for the 99 cap first (one OR-ed IF), gives
+item by item, falls into one chain of `REMOVE_ITEM`s on a failed give, and adds the bits only after the last give. The
+flag is trigger 630 (`REWARD_TRIGGER`; GAME.md 4.8, 6.2, 7.17). Item names are read from the disc's `ITEM_PARA` at
+generation; `gen_newmap_dw15.py`'s `glade_checks` asserts the paid boxes built from the 1.5 image's names are the ones in
+`glade.dg`, so `glade-15` uses the same script (an overlay on MMM.DAT, as the factory's; no guard on 1.5's DG.SCN is
+needed). If 1.5 ever renamed one of the ids, the check would fail and the script would need a 1.5 variant, as the
+factory's `afac4_15.dg`. `verify_newmap.py reward` and `off --card reward` prove it; `Field.sample_box` reads which box
+is up from the script pointer, so the test knows which box and in what order.
 - foreground sprites for the rocks, stump and log (their collision comes from
   the painting, so a sprite would need the painted footprint)
 

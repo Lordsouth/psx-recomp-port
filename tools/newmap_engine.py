@@ -53,6 +53,39 @@ def say(owner, lines):
     return bytes([0x1B, owner, 0x1A, 0]) + dialog_text(lines) + b"\x0d\x00\x00\x00"
 
 
+def haul_tail(at, trigger, items, bits, paid_pages, full_lines, stack_lines):
+    """A boss's one-time haul of many (item, amount) and `bits`, for a section whose win path starts at offset `at`.
+    In order: with `trigger` set it ends. Then one IF over every item (OR of "held > 99 - amount"): if any stack would pass 99
+    it jumps to the stack box and nothing is given, so no give is ever clamped and a rollback is exact. Then each give;
+    a failed one (no free slot) falls into the rollback chain, which takes back what went in, one REMOVE_ITEM per item
+    from the last given down, then shows `full_lines` and ends with the trigger clear (the bag byte for byte as it was).
+    When every give worked: ADD_MONEY `bits` (the script op caps at 999,999), set the trigger, show `paid_pages`."""
+    K = len(items)
+    flag = jump_if_set(trigger, 0)
+    pre_len = 2 + 6 * K + 4 + 2
+    give_len = 4 + len(jump_if_set(0, 0))
+    paid = (b"\x2a\x00" + struct.pack("<i", bits) + b"\x1c\x00" + struct.pack("<H", trigger)
+            + b"".join(say(0xFF, page) for page in paid_pages) + b"\xfe\x00")
+    full = say(0xFF, full_lines) + b"\xfe\x00"
+    pre_at = at + len(flag)
+    give_at = pre_at + pre_len
+    paid_at = give_at + K * give_len
+    end = paid_at + len(paid) - 2                      # paid's FE 00
+    roll = end + 2                                     # the removes, item K-1 first
+    stack = roll + 4 * K + len(full)
+    pre = (b"\x19\x00" + b"".join(bytes([0x24 if i == 0 else 0x64, 0, item, 4]) + struct.pack("<H", 99 - n)
+                                  for i, (item, n) in enumerate(items))
+           + b"\x10\x00" + struct.pack("<H", stack) + b"\x19\x00")
+    assert len(pre) == pre_len
+    gives = b"".join(bytes([0x28, 0, item, n]) + jump_if_set(0, roll + 4 * (K - k))     # k items are in: remove k-1..0
+                     for k, (item, n) in enumerate(items))
+    removes = b"".join(bytes([0x29, 0, item, n]) for item, n in reversed(items))
+    s = jump_if_set(trigger, end) + pre + gives + paid + removes + full + say(0xFF, stack_lines) + b"\xfe\x00"
+    assert s[end - at:end - at + 2] == b"\xfe\x00" and s[roll - at:roll - at + 2] == bytes([0x29, 0]) \
+        and s[stack - at:stack - at + 2] == b"\x1b\xff" and len(gives) == K * give_len
+    return s
+
+
 def reward_tail(at, trigger, items, paid_lines, full_lines=FULL_LINES):
     """A boss's one-time reward, all or nothing (docs/GAME.md 6.2), for a section whose win path starts at offset `at`
     (offsets are from the script's start). With `trigger` set it ends; otherwise each (item, amount) is given in turn

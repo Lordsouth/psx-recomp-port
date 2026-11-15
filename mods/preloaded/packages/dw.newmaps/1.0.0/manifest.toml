@@ -50,7 +50,7 @@ feature = "glade"
 target = "disc_user"
 offset = 306550784
 file = "assets/glade.dg"
-sha256 = "cb57a6ed214ba9cfdde7c2393ae85ef605485b0cd7d8af6becf254dec22fe531"
+sha256 = "c4decb590b336a2b9c746cbc5e26a874afc60b7999b5a32512d318fb0225d213"
 
 # MAP_ENTRIES[239] = MGEN17, 2 8bpp images
 [[patch]]
@@ -198,7 +198,7 @@ feature = "glade-15"
 target = "disc_user"
 offset = 306550784
 file = "assets/glade.dg"
-sha256 = "cb57a6ed214ba9cfdde7c2393ae85ef605485b0cd7d8af6becf254dec22fe531"
+sha256 = "c4decb590b336a2b9c746cbc5e26a874afc60b7999b5a32512d318fb0225d213"
 
 # copied
 [[patch]]
