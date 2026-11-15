@@ -36,8 +36,8 @@ def dialog_text(lines):
     """`1A`'s text (docs/GAME.md 4.9): fullwidth Shift-JIS rows joined by 0D 00, without the end code. The font has
     no glyph behind other symbols (they draw a triangle), and Shift-JIS has no fullwidth apostrophe."""
     wide = {32: 0x3000, 46: 0x3002, **{c: c + 0xFEE0 for c in range(33, 127) if c != 46}}
-    assert all(len(line) <= 28 and re.fullmatch(r"[A-Za-z0-9 .!?]*", line) for line in lines)
-    return b"\x0d\x00".join(line.translate(wide).encode("shift_jis") for line in lines)
+    assert all(isinstance(line, bytes) or (len(line) <= 28 and re.fullmatch(r"[A-Za-z0-9 .!?]*", line)) for line in lines)
+    return b"\x0d\x00".join(line if isinstance(line, bytes) else line.translate(wide).encode("shift_jis") for line in lines)
 
 
 FULL_LINES = ("Your bag is full.", "Make room and come back.")
@@ -51,6 +51,55 @@ def jump_if_set(trigger, to):
 def say(owner, lines):
     """A box of `lines` from `owner` (docs/GAME.md 4.9, 4.10) that waits for a press."""
     return bytes([0x1B, owner, 0x1A, 0]) + dialog_text(lines) + b"\x0d\x00\x00\x00"
+
+
+def haul_tail(at, trigger, items, bits, paid_pages, full_lines, stack_lines, purse_lines, scratch):
+    """A boss's one-time haul of many (item, amount) and `bits`, for a section whose win path starts at offset `at`.
+    In order: with `trigger` set it ends. Then one IF over every item (OR of "held > 99 - amount"): if any stack would pass 99
+    it jumps to the stack box and nothing is given, so no give is ever clamped and a rollback is exact. Then each give;
+    a failed one (no free slot) falls into the rollback chain, which takes back what went in, one REMOVE_ITEM per item
+    from the last given down, then shows `full_lines` and ends with the trigger clear (the bag byte for byte as it was).
+    A second IF jumps to the purse box, nothing given, when the purse cannot take `bits` whole (ADD_MONEY stops at 999,999 and
+    would lose the excess): `money > 999999 - bits`. The full box is preceded by a count of the haul's kinds the bag does not
+    hold (one IF per kind adding 1 to pstat `scratch`), so a line of `full_lines` may show it with the control code `04 scratch`:
+    that is how many free slots the haul needs. When every give worked: ADD_MONEY `bits`, set the trigger, show `paid_pages`."""
+    K = len(items)
+    purse_len = 2 + 8 + 4 + 2
+    count_len = 4 + K * (14 + 4)
+    flag = jump_if_set(trigger, 0)
+    pre_len = 2 + 6 * K + 4 + 2
+    give_len = 4 + len(jump_if_set(0, 0))
+    paid = (b"\x2a\x00" + struct.pack("<i", bits) + b"\x1c\x00" + struct.pack("<H", trigger)
+            + b"".join(say(0xFF, page) for page in paid_pages) + b"\xfe\x00")
+    full = say(0xFF, full_lines) + b"\xfe\x00"
+    pre_at = at + len(flag)
+    give_at = pre_at + pre_len + purse_len
+    paid_at = give_at + K * give_len
+    end = paid_at + len(paid) - 2                      # paid's FE 00
+    roll = end + 2                                     # the removes, item K-1 first
+    count_at = roll + 4 * K
+    stack = count_at + count_len + len(full)
+    purse = stack + len(say(0xFF, stack_lines)) + 2
+    pre = (b"\x19\x00" + b"".join(bytes([0x24 if i == 0 else 0x64, 0, item, 4]) + struct.pack("<H", 99 - n)
+                                  for i, (item, n) in enumerate(items))
+           + b"\x10\x00" + struct.pack("<H", stack) + b"\x19\x00")
+    assert len(pre) == pre_len
+    pre += (b"\x19\x00\x25\x00\x00\x04" + struct.pack("<i", 999999 - bits) + b"\x10\x00" + struct.pack("<H", purse) + b"\x19\x00")
+    count = bytes([0x1E, 0, scratch, 0])
+    for i, (item, n) in enumerate(items):
+        after = count_at + len(count) + 14 + 4
+        count += (b"\x19\x00" + bytes([0x24, 0, item, 0]) + b"\x00\x00" + b"\x18\x00" + struct.pack("<H", after) + b"\x19\x00"
+                  + bytes([0x1F, 0, scratch, 1]))
+    assert len(count) == count_len
+    gives = b"".join(bytes([0x28, 0, item, n]) + jump_if_set(0, roll + 4 * (K - k))     # k items are in: remove k-1..0
+                     for k, (item, n) in enumerate(items))
+    removes = b"".join(bytes([0x29, 0, item, n]) for item, n in reversed(items))
+    s = (jump_if_set(trigger, end) + pre + gives + paid + removes + count + full + say(0xFF, stack_lines) + b"\xfe\x00"
+         + say(0xFF, purse_lines) + b"\xfe\x00")
+    assert s[end - at:end - at + 2] == b"\xfe\x00" and s[roll - at:roll - at + 2] == bytes([0x29, 0]) \
+        and s[stack - at:stack - at + 2] == b"\x1b\xff" and s[purse - at:purse - at + 2] == b"\x1b\xff" \
+        and len(gives) == K * give_len and give_at + K * give_len == paid_at
+    return s
 
 
 def reward_tail(at, trigger, items, paid_lines, full_lines=FULL_LINES):

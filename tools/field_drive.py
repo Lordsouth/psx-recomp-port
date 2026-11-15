@@ -45,7 +45,7 @@ class Field:
         self.g, self.check = g, check
         self.species = SPECIES_15 if dw15 else SPECIES
         self.shot = shot or (lambda name: None)       # shot(name) -> screenshot path, for the caller's own folder
-        self.boxes = set()                            # script offsets a text box was up at, see sample_box
+        self.boxes = []                               # script offsets a text box was up at, in order, see sample_box
 
     def enter(self):
         """Title -> CONTINUE. DOWN waits for the menu to take input: an early DOWN is dropped and the crosses then
@@ -78,10 +78,13 @@ class Field:
     def sample_box(self):
         """Note where the running script's text box is, if one is up: SHOW_TEXTBOX (1A) as the active op, the script
         pointer just past its text (verify_ws_camera.py's at_box). win and win_group call it before every press, so
-        any box that is waiting for one is seen; self.boxes holds the offsets, from the script's start."""
+        any box that is waiting for one is seen; self.boxes holds the offsets, from the script's start, in the order seen."""
         base, ptr = struct.unpack("<2I", self.g.d.read(ACTIVE_SCRIPT, 8))
         if self.g.d.read(ACTIVE_INSTRUCTION, 1)[0] == 0x1A and 0 <= ptr - base < 0x4000:
-            self.boxes.add(ptr - base)
+            if ptr - base not in self.boxes:
+                self.boxes.append(ptr - base)
+                self.g.advance(40)                    # the text is typed out first; the box waits for the press
+                self.shot("box_%x" % (ptr - base))
 
     def pstat(self, n):
         return self.g.d.read(PSTAT_BASE + n, 1)[0]
@@ -144,7 +147,7 @@ class Field:
                     if struct.unpack("<h", g.d.read(NPC_BASE + NPC_SIZE * s + 0x4C, 2))[0] > 1:
                         g.d.write_bytes(struct.pack("<h", 1), NPC_BASE + NPC_SIZE * s + 0x4C)
             self.sample_box()
-            g.route("4:cross,20:none")
+            g.route("3:cross,21:none")           # one game tick (3 frames) sees it: a longer hold can also dismiss the next box
         check(done and gstate() == 0 and g.tamer_state == 0 and self.screen() == row,
               "won: the run-off ended, player in control, still on map %d" % row)
         check(self.i32(MONEY) - money == bits, "the bits were paid: %d -> %d (%d expected)" % (money, self.i32(MONEY), bits))
@@ -350,11 +353,33 @@ class Field:
             last = self.pos(TAMER)
         self.pad(0)
         time.sleep(3)
-        check(self.gstate() == 0 and g.tamer_state == 0 and self.i32(IS_SCRIPT_PAUSED) == 1,
-              "next to it at %s, standing still starts nothing" % (last,))
+        # tamer state 6 is the tamer's idle state (tamerTick's case 6): after a few seconds on the spot he can be in it, and then
+        # the first confirm may do nothing; that is how the game works, not a fault, so it is accepted and the retry below
+        # steps off and presses again
+        idle = self.gstate() == 0 and g.tamer_state in (0, 6) and self.i32(IS_SCRIPT_PAUSED) == 1
+        if not idle:       # say what the game was doing: the next run overwrites everything
+            print("STATE at the boss: game state %d, tamer state %d, script idle %s, hour %d:%02d, partner condition %#x, screen %d"
+                  % (self.gstate(), g.tamer_state, self.i32(IS_SCRIPT_PAUSED) == 1, *struct.unpack("<hh", g.d.read(HOUR, 4)),
+                     g.para_condition, self.screen()), flush=True)
+        check(idle, "next to it at %s, standing still starts nothing" % (last,))
         self.shot("boss")
         g.route("6:cross,20:none")
         time.sleep(1)
+        for _ in range(3):      # the greedy walk can stop up to 200 units off the boss's column: step toward it and press again
+            if self.gstate() == 0 and self.i32(IS_SCRIPT_PAUSED) != 1:
+                break
+            here = self.pos(TAMER)
+            print("RETRY talk: no dialogue at %s, boss at x %d: stepping sideways and pressing confirm again" % (here, x), flush=True)
+            side = (max if x > here[0] else min)(vec, key=lambda d: vec[d][0])
+            self.pad(side)
+            time.sleep(0.1)
+            self.pad(0)
+            self.pad(north)
+            time.sleep(0.8)
+            self.pad(0)
+            time.sleep(1)
+            g.route("6:cross,20:none")
+            time.sleep(1)
         check(self.gstate() == 0 and self.i32(IS_SCRIPT_PAUSED) != 1, "confirm opens its dialogue (the game is still on the map)")
         self.shot("talk")
         end = time.time() + 30
@@ -370,7 +395,7 @@ class Field:
         self.g.d.write_bytes(struct.pack("<4h", stat, stat, stat, stat), PARTNER_STATS)
         self.g.d.write_bytes(struct.pack("<4h", hp, 9999, hp, 9999), PARTNER_MAX_HP)
 
-    def win(self, rec, row, brains=0, end_fix=True):
+    def win(self, rec, row, brains=0, end_fix=True, paid=None):
         """A maxed partner. First the boss (stat record `rec`) fights for real until it has used every move (a move
         plays the animation of its slot number), both sides topped up, then on 1 HP it takes a hit and runs off.
         `brains`: the Brains the battle should have started on (judged, and its MP message after the win)."""
@@ -408,13 +433,14 @@ class Field:
                 self.shot("end_box")
                 print("MEASURE end box, %d rows: %r" % (rows, box), flush=True)
             self.sample_box()
-            g.route("4:cross,20:none")
+            g.route("3:cross,21:none")           # one game tick (3 frames) sees it: a longer hold can also dismiss the next box
         check(hit and gstate() == 0 and g.tamer_state == 0 and self.screen() == row,
               "won: the run-off ended, player in control, still on map %d" % row)
         if end_fix and brains and brains + 1 in MP_BONUS:
             text = b"#C1MP Cost Bonus!#Rreduced by %d pct!#W" % MP_BONUS[brains + 1]
             check(box is not None and text in box, "the end box finished on its MP bonus message")
-        check(self.i32(MONEY) - bits == rec[19], "the bits were paid: %d -> %d" % (bits, self.i32(MONEY)))
+        check(self.i32(MONEY) - bits == (rec[19] if paid is None else paid),
+              "the bits were paid: %d -> %d" % (bits, self.i32(MONEY)))
         check(g.d.read(NPC_ON_MAP, 1)[0] == 0, "the boss has left the map")
         g.advance(30)
         self.shot("won")

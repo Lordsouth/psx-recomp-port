@@ -60,10 +60,11 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dwgame import Game  # noqa: E402
 import newmap_engine as E  # noqa: E402
-from gen_newmap import PAID_LINES, REWARD, REWARD_TRIGGER  # noqa: E402
+from gen_newmap import (BITS, FULL_LINES, HAUL, PAID_PAGES, PURSE_LINES, REWARD_TRIGGER,  # noqa: E402
+                        SCRATCH_PSTAT, STACK_LINES)
 from field_drive import (  # noqa: E402
     Field, UP, TAMER, NPC0, CAMERA, IS_SCRIPT_PAUSED, PREVIOUS_SCREEN, CURRENT_EXIT, NPC_ON_MAP,
-    NPC_STATS, PARTNER_STATS, HOUR, CURRENT_FRAME)
+    NPC_STATS, PARTNER_STATS, HOUR, CURRENT_FRAME, MONEY, TRIGGER_BASE)
 
 
 ITEM_PARA = 0x801269DC                            # the item table, 32 B each, the name first
@@ -343,8 +344,8 @@ def main():
     def talk(vec):
         f.talk(vec, spec["boss"]["at"], tuple(spec["meadow"][1]))
 
-    def win():
-        f.win(spec["boss"]["record"], row, a.brains, not a.no_end_fix)
+    def win(paid=None):
+        f.win(spec["boss"]["record"], row, a.brains, not a.no_end_fix, paid)
 
     def flee():
         f.flee(mp["host_row"], mp["host_at"])
@@ -370,7 +371,7 @@ def main():
                 lambda: boss_fresh("on arrival"), lambda: vec.update(calibrate()),
               lambda: a.brains and (g.d.write_bytes(struct.pack("<h", a.brains), PARTNER_STATS + 6),
                                     g.d.write_bytes(struct.pack("<h", 999), NPC_STATS + 6)),   # a sure gain
-                lambda: talk(vec), win,
+                lambda: talk(vec), lambda: win(5000 + BITS),    # the first win also pays the haul's bits (docs/GAME.md 7.17)
                 loaded_files,                          # the battle left the map's art and collision as they were
                 lambda: measure("after_win"), save_here]
         stage(*head, walk_out,
@@ -387,66 +388,121 @@ def main():
         shot("row122")
 
     def reward():
-        item, n = REWARD[0]
-        name = g.d.read(ITEM_PARA + 32 * item, 20).split(b"\0")[0].decode("ascii")      # as the game names it
-        paid, full = E.dialog_text(PAID_LINES(name)), E.dialog_text(E.FULL_LINES)
-        counts = lambda b: {t: k for t, k in zip(b[:30], b[30:60]) if t != 0xFF}
+        names = [g.d.read(ITEM_PARA + 32 * i, 20).split(b"\0")[0].decode("ascii") for i, _, _ in HAUL]   # as the game names them
+        pages = PAID_PAGES(names)
         script = open(os.path.join(pkg_dir, "assets", "glade.dg"), "rb").read()      # the bytes the game was served
-        at = {k: script.find(t) for k, t in (("paid", paid), ("full", full))}
-        assert min(at.values()) > 0, "the paid and full boxes must be in glade.dg"
-        # a box shown is one the script pointer was at, just past its text, with SHOW_TEXTBOX active (f.sample_box)
-        shown = lambda k: any(at[k] <= o <= at[k] + len(paid if k == "paid" else full) + 8 for o in f.boxes)
+        texts = {"p%d" % k: E.dialog_text(pg) for k, pg in enumerate(pages)}
+        texts.update(full=E.dialog_text(FULL_LINES), stack=E.dialog_text(STACK_LINES), purse=E.dialog_text(PURSE_LINES))
+        at = {k: script.find(t) + len(t) + 4 for k, t in texts.items()}     # where the pointer sits with that box up
+        assert min(at.values()) > 4 and len(set(at.values())) == len(at), "every box must be in glade.dg, once"
+        seen = lambda: [k for o in f.boxes for k, v in at.items() if v == o]     # the boxes shown, in order
+        counts = lambda b: {t: k for t, k in zip(b[:30], b[30:60]) if t != 0xFF}
+        haul = {i: n for i, n, _ in HAUL}
+        kinds = [i for i, _, _ in HAUL]
+        pay_boxes = ["p%d" % k for k in range(len(pages))]
+        money = lambda: f.i32(MONEY)
+        limit = 999999 - BITS                          # the purse after the fight's own bits must not pass this
 
         def stop():
             if fails:
                 raise SystemExit("RESULT newmap glade reward: FAIL %s" % fails)
 
-        def won(bag):
-            """The bag set to `bag` (None: as it is), the boss fought and beaten: the bag before and after."""
+        def dump(when):
+            """What the game is doing, for a failure nobody can explain afterwards."""
+            print("STATE %s: map %d, game state %d, tamer state %d, script idle %s, tamer at %s, hour %d"
+                  % (when, screen(), gstate(), g.tamer_state, i32(IS_SCRIPT_PAUSED) == 1, pos(TAMER), struct.unpack("<h", g.d.read(HOUR, 2))[0]),
+                  flush=True)
+            shot("state_" + when.replace(" ", "_"))
+
+        def won(bag, paid=None, cash=None):
+            """The bag set to `bag` (None: as it is), the boss fought and beaten: the bag before and after.
+            paid: the bits the win should add (default the boss's own); cash: bits to hold going in."""
             if bag is not None:
                 f.set_bag(bag)
+            if cash is not None:
+                g.d.write_bytes(struct.pack("<i", cash), MONEY)
             before = f.bag()
             talk(vec)
             f.boxes.clear()                            # win() samples the text box before every press
-            win()
+            win(paid)
             stop()
             return before, f.bag()
 
-        def again(bag):
+        def again(bag, **kw):
+            n = len(fails)
             walk_out()
+            if len(fails) > n:
+                dump("after walk_out failed")
             wait_for(lambda: i32(IS_SCRIPT_PAUSED) == 1, 20)
             g.advance(60)
             walk_in()
             boss_fresh("on the next visit")
             stop()
-            return won(bag)
+            return won(bag, **kw)
+
+        def unpaid(what, before, after, box, bits=5000):
+            check(after == before and not f.trigger(REWARD_TRIGGER) and seen() == [box],
+                  "%s: the bag is as it was (%s), trigger %d clear, the one box shown was %r (boxes seen: %s)"
+                  % (what, "same" if after == before else counts(after), REWARD_TRIGGER, box, seen()))
+            stop()
+
+        def needs(want):                               # the number the full box shows: kinds the bag did not hold
+            check(f.pstat(SCRATCH_PSTAT) == want, "the full box counted %d kinds the bag lacked (pstat %d = %d)"
+                  % (want, SCRATCH_PSTAT, f.pstat(SCRATCH_PSTAT)))
+            stop()
+
+        def clear_trigger():                           # the card as it was before the payment
+            b = g.d.read(TRIGGER_BASE + REWARD_TRIGGER // 8, 1)[0]
+            g.d.write_bytes(bytes([b & ~(1 << REWARD_TRIGGER % 8)]), TRIGGER_BASE + REWARD_TRIGGER // 8)
 
         g.warp(mp["host_row"], spec["host"]["exit"])
         walk_in()
         boss_fresh("on arrival")
         vec = calibrate()
         size = f.bag()[90]
-        check(size >= 2 and not f.trigger(REWARD_TRIGGER) and item not in counts(f.bag()),
-              "a fresh card: bag size %d, no item %d, trigger %d clear" % (size, item, REWARD_TRIGGER))
+        need = len(HAUL)
+        check(size > need and not f.trigger(REWARD_TRIGGER) and not set(haul) & set(counts(f.bag())),
+              "a fresh card: bag size %d (the haul needs up to %d slots), none of it held, trigger %d clear"
+              % (size, need, REWARD_TRIGGER))
         stop()
-        fillers = [(t, 1) for t in range(128) if t != item][:size]
-        before, after = won(fillers)                   # a full bag
-        check(after == before and not f.trigger(REWARD_TRIGGER) and shown("full") and not shown("paid"),
-              "first win, bag full: the bag is as it was (%s), trigger %d clear, the box shown was the full one "
-              "(boxes seen at script offsets %s; full at %d, paid at %d)"
-              % ("same" if after == before else counts(after), REWARD_TRIGGER, sorted(f.boxes), at["full"], at["paid"]))
-        stop()
-        before, after = again(fillers[:size - 1])      # one free slot
-        check(counts(after) == {**counts(before), item: n} and f.trigger(REWARD_TRIGGER) and shown("paid")
-              and not shown("full"),
-              "next win, room: %d of item %d arrived (bag %s -> %s), trigger %d set, the box shown was the paid one "
-              "%r (boxes seen at script offsets %s)"
-              % (n, item, counts(before), counts(after), REWARD_TRIGGER, PAID_LINES(name), sorted(f.boxes)))
+        fillers = [(t, 1) for t in range(128) if t not in haul][:size]
+        room = lambda free, held=(): list(held) + fillers[:size - free - len(held)]    # `free` slots left, `held` in the bag
+        before, after = won(fillers)                                                       # a full bag: the first give fails
+        unpaid("first win, bag full", before, after, "full")
+        needs(need)
+        before, after = again(room(1))                                                     # the 2nd give fails
+        unpaid("next win, 1 free slot", before, after, "full")
+        before, after = again(room(need - 1))                                              # the last give fails
+        unpaid("next win, %d of %d slots free" % (need - 1, need), before, after, "full")
+        held = [(kinds[0], 1), (kinds[1], 1)]                                              # two kinds held: rollback over held stacks
+        before, after = again(room(1, held))                                               # the 4th give fails
+        unpaid("next win, kinds %d and %d held, 1 free slot" % tuple(kinds[:2]), before, after, "full")
+        needs(need - 2)
+        before, after = again(room(need, [(kinds[0], 99)]))                                # room, but the first kind at 99
+        unpaid("next win, room but item %d at 99" % kinds[0], before, after, "stack")
+        before, after = again(room(need, [(kinds[-1], 100 - haul[kinds[-1]])]))            # room, but the last kind at 95
+        unpaid("next win, room but item %d at %d" % (kinds[-1], 100 - haul[kinds[-1]]), before, after, "stack")
+        before, after = again(room(need), cash=limit - 5000 + 1)                           # purse 1 over after the fight's bits
+        unpaid("next win, room but %d bits in the purse after the fight (limit %d)" % (limit + 1, limit), before, after, "purse")
+        before, after = again(room(need), paid=5000 + BITS, cash=100000)                              # exactly enough room
+        want = {**counts(before), **haul}
+        check(counts(after) == want and f.trigger(REWARD_TRIGGER) and seen() == pay_boxes,
+              "next win, %d free slots: every haul item arrived (%s), %d bits with them, trigger %d set, boxes shown %s"
+              % (need, {i: counts(after).get(i) for i in haul}, BITS, REWARD_TRIGGER, seen()))
         stop()
         before, after = again(None)
-        check(after == before and f.trigger(REWARD_TRIGGER) and not shown("paid") and not shown("full"),
-              "second win: nothing more (%s), trigger %d still set, neither box shown (boxes seen at %s)"
-              % ("bag the same" if after == before else counts(after), REWARD_TRIGGER, sorted(f.boxes)))
+        check(after == before and f.trigger(REWARD_TRIGGER) and seen() == [],
+              "second win: nothing more (%s), trigger %d still set, no box shown (boxes seen %s)"
+              % ("bag the same" if after == before else counts(after), REWARD_TRIGGER, seen()))
+        stop()
+        # the card as it was before the payment: the stack boundary (94 + 5 is exactly 99) and the purse exactly at the
+        # limit, which ADD_MONEY then fills to its 999,999
+        clear_trigger()
+        before, after = again(room(need, [(23, 99 - haul[23])]), paid=999999 - (limit - 5000), cash=limit - 5000)
+        want = {**counts(before), **haul, 23: 99}
+        check(counts(after) == want and f.trigger(REWARD_TRIGGER) and money() == 999999 and seen() == pay_boxes,
+              "flag cleared, item 23 at %d, purse at the limit: paid, item 23 now %d (stack stops at 99), bits %d, boxes %s"
+              % (99 - haul[23], counts(after).get(23), money(), seen()))
         stop()
         save_here()
         keep_card("reward")
@@ -485,8 +541,8 @@ def main():
             shot("off_" + a.card)
             check(g.map_record(239)["file"] == "", "the mod is off: row 239 is empty")
             if a.card == "reward":                     # nothing on the card depends on the mod: flag and items are plain save data
-                check(f.trigger(REWARD_TRIGGER) and REWARD[0][0] in f.bag()[:30],
-                      "the card keeps trigger %d and item %d with the mod off" % (REWARD_TRIGGER, REWARD[0][0]))
+                check(f.trigger(REWARD_TRIGGER) and set(i for i, _, _ in HAUL) <= set(f.bag()[:30]),
+                      "the card keeps trigger %d and the haul's items with the mod off" % REWARD_TRIGGER)
             check(screen() == spec["host"]["row"], "Continue lands on the stock map %d" % spec["host"]["row"])
             check(p is not None and abs(p[0] - saved[0]) < 60 and abs(p[2] - saved[2]) < 60,
                   "at the saved position %s (now %s)" % (saved, p))
@@ -559,6 +615,8 @@ def main():
             walk_out()
     finally:
         g.shutdown()
+        if fails:                                      # the next run overwrites the log: keep this one beside it
+            shutil.copy(os.path.join(out, a.mode + ".log"), os.path.join(out, "%s_failed_%d.log" % (a.mode, a.port)))
     print("RESULT newmap %s %s: %s" % (a.map, a.mode, "FAIL %s" % fails if fails else "PASS"))
     return 1 if fails else 0
 

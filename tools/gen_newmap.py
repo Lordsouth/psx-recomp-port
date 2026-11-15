@@ -19,7 +19,7 @@ them. The scene drives all outputs, so they cannot drift apart:
     props, the pond and anything outside the painted frame, and blocked wherever
     the painting shows something other than ground under a character's feet;
   * the secret fight (BOSS, boss_script), in the entity block and script id 231 (MMM.DAT), which also pays the boss's one-time
-    reward (REWARD, trigger 630);
+    haul (HAUL and BITS, trigger 630);
   * foreground sprites, cut from the art, so characters can walk behind foliage
     and trunks (backdrops always draw behind characters: anything without a
     sprite may not be walked behind);
@@ -96,14 +96,29 @@ BOSS = struct.pack("<45h", BOSS_SPECIES, 2, *BOSS_AT,  # type, followMode 2 (tur
                    1, 0, -1, -1, -1, -1, -1, -1, -1,   # one AI step, a wait, whose count is the next word
                    *BOSS_AT)
 BOSS_LINES = ("So you found my glade.", "Show me your strength!")   # at most 28 characters each
-# The boss's one-time reward (docs/GAME.md 6.2, shared with the factory through E.reward_tail): 3 Omni Disks, item 18 of
-# ITEM_PARA. REWARD_TRIGGER is set once they are in the bag (trigger 630, docs/GAME.md 4.8). The name in the text box is
-# read from the disc's item table (ITEM_PARA, 32 B records) at generation time; main asserts item 18 against dw_decomp's
-# ITEM_PARA_NAME, and gen_newmap_dw15.py checks the 1.5 image names it the same.
+# The boss's one-time haul (docs/GAME.md 6.2, 7.17; E.haul_tail): HAUL is the one table to tune, (item id in ITEM_PARA,
+# amount, dw_decomp's ITEM_PARA_NAME symbol main asserts the id against), then BITS paid with it. REWARD_TRIGGER (630,
+# docs/GAME.md 4.8) is set once everything is in. The names in the text boxes are read from the disc's item table
+# (ITEM_PARA, 32 B records) at generation time; gen_newmap_dw15.py checks the 1.5 image names every id the same.
+# No evolution item (they set a flag only boot clears), no Omni Disk, no DV Chip (-24 h of life), no Auto Pilot (story script).
 REWARD_TRIGGER = 630
-REWARD = ((18, 3),)
+HAUL = ((23, 5, "OFF_CHIP"), (24, 5, "DEF_CHIP"), (25, 5, "BRAIN_CHIP"), (26, 5, "QUICK_CHIP"), (27, 5, "HP_CHIP"),
+        (28, 5, "MP_CHIP"),                # each permanent: +50 Off/Def/Brain/Speed, +500 HP/MP per chip
+        (3, 5, "SUP_RECOVERY"),            # full-heal-grade recovery (+9999 HP), a battle item
+        (12, 5, "SUP_RESTORE"))            # revives and cures, the rarest non-evolution medicine
+BITS = 60000
 ITEM_PARA = 0x801269DC
-PAID_LINES = lambda name: ("The glade falls quiet.", "Got %s x%d!" % (name, REWARD[0][1]))
+SCRATCH_PSTAT = 90          # free and not saved (docs/GAME.md 4.7): the script counts there the kinds the bag lacks
+# the second row of the full box reads that count with the text control code 04 (pstat as a number, docs/GAME.md 4.9)
+FULL_LINES = ("Not enough room in the bag.",
+              E.dialog_text(["Needs "]) + b"\x04" + bytes([SCRATCH_PSTAT]) + E.dialog_text([" free slots."]),
+              "Then win again.")
+STACK_LINES = ("An item stack is too full.", "Use some up.", "Then win again.")
+PURSE_LINES = ("Your purse is too full.", "Spend some bits first.", "Then win again.")
+def PAID_PAGES(names):
+    """The paid boxes, three lines each: one line per item (names[i] is HAUL[i]'s name in the game), then the bits."""
+    lines = ["Got %s x%d!" % (name, n) for name, (_, n, _) in zip(names, HAUL)] + ["Got %d bits!" % BITS]
+    return [tuple(lines[i:i + 3]) for i in range(0, len(lines), 3)]
 
 PAINT = (6, 5)                       # the frame the art is painted in (768 x 640) ...
 GW, GH = 6, 4                        # ... and the backdrop, its centre crop: 768 x 512, 24 tiles. Six fewer
@@ -259,14 +274,15 @@ def shore_spot(grid):
     return best
 
 
-def boss_script(item_name):
+def boss_script(names):
     """The glade's DG script: section table, the bare END section map arrival runs, the boss's section.
     Text is fullwidth Shift-JIS. 1B 05 pauses the game (it must come first), 1A 00 shows the text and waits
     for confirm, 27 00 closes the box, 67 00 01 00 waits a frame, 66 00 starts the battle. A flee or a loss never
-    comes back; a win runs E.reward_tail (the reward once, then FE 00 ends). item_name is item 18's, for the paid box."""
+    comes back; a win runs E.haul_tail (the haul once, then FE 00 ends). names: the haul's item names, for the paid boxes."""
     head = E.say(BOSS_DG_SECTION, BOSS_LINES) + bytes.fromhex("2700 6700 0100 6600")
     table = struct.pack("<6H", 12, 0xFE, 12, BOSS_DG_SECTION, 14, 0xFFFF) + b"\xfe\x00"
-    return table + head + E.reward_tail(len(table) + len(head), REWARD_TRIGGER, REWARD, PAID_LINES(item_name))
+    return table + head + E.haul_tail(len(table) + len(head), REWARD_TRIGGER, [(i, n) for i, n, _ in HAUL], BITS,
+                                      PAID_PAGES(names), FULL_LINES, STACK_LINES, PURSE_LINES, SCRATCH_PSTAT)
 
 
 # ---- the glade as an engine Screen -----------------------------------------
@@ -429,17 +445,18 @@ def main():
     assert struct.unpack_from("<I", rd("DG.SCN"), 222 * 4)[0] == files["DG.SCN"][1], "table[222] must be DG.SCN's size"
     assert SCRIPT > 222, "the script id must be past DG.SCN's table"
     cstr = lambda addr: exe[ram(addr):exe.index(b"\0", ram(addr))].decode("ascii")
-    item_name = cstr(ITEM_PARA + 32 * REWARD[0][0])
+    names = [cstr(ITEM_PARA + 32 * i) for i, _, _ in HAUL]
     # the decomp sits beside the main checkout; a worktree under wt/ is one level deeper
     item_c = next((c for c in (os.path.join(root, d, "dw_decomp", "src", "main", "item.c") for d in ("..", "../.."))
                    if os.path.exists(c)), os.path.join(root, "..", "dw_decomp", "src", "main", "item.c"))
     if os.path.exists(item_c):
         para = re.findall(r"ITEM_PARA_NAME\((\w+)\)", open(item_c, encoding="utf-8").read().split("Item ITEM_PARA[128]")[1])
-        assert len(para) == 128 and para[REWARD[0][0]] == "STR_ITEM_NAME_OMNI_DISK", "REWARD is not the Omni Disk"
+        assert len(para) == 128 and [para[i] for i, _, _ in HAUL] == ["STR_ITEM_NAME_" + t for _, _, t in HAUL], \
+            "HAUL is not what its symbols say in dw_decomp's ITEM_PARA"
     else:
-        print("no dw_decomp checkout at %s: the reward id is not checked against its ITEM_PARA_NAME" % item_c)
+        print("no dw_decomp checkout at %s: the haul ids are not checked against ITEM_PARA_NAME" % item_c)
 
-    dg_new = boss_script(item_name)
+    dg_new = boss_script(names)
     assert len(dg_new) <= 0x4000 and sectors(dg_new) == 1, "the script must fit its one MMM.DAT sector (served as id %d)" % SCRIPT
     assert not any(sector(f, MMM_LBA + SCRIPT_SECTOR)), "MMM.DAT sector %d is not zero" % SCRIPT_SECTOR
     mh = rd("MAPHEAD.SCN")
