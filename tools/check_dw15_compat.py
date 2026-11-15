@@ -146,7 +146,7 @@ EXTRA_EXE = [
     (0x800DD2A4, 0x800DD5E0, WS, "renderGameClock (bracketed)"),
     (0x800A936C, 0x800A97E0, WS, "renderStatusBars (bracketed)"),
     # dw_newmaps.c's getScript filter hard-codes the ACTIVE_MAP_SCRIPT and MAP_SCRIPT_PTR the stock body uses
-    (0x80106218, 0x8010629C, ("dw.newmaps/glade", "dw.newmaps.factory/factory", "dw.vanilla.roster/roster"),
+    (0x80106218, 0x8010629C, ("dw.newmaps/glade", "dw.newmaps.factory/factory", "dw.vanilla.roster/roster-15"),
      "getScript (the new maps' and the roster's filters assume its globals)"),
     # dw_smooth60.c matches these by return address
     (0x800EFB68, 0x800EFCB0, "dw.smooth60/smooth60", "gameLoop through its VSync call (pass point, RA match)"),

@@ -1318,6 +1318,8 @@ def main():
     shard_patches = evl_shard_patches(lambda va, n: data[va - LOAD_ADDR + HDR:va - LOAD_ADDR + HDR + n], ovl_images)
 
     if check_only:
+        cup_runtime_data(data)              # the run-time cup rebuild must keep every stock entry (roster_cups.diff)
+        print("cup lists: the run-time rebuild keeps every stock entry and adds only roster ids (both editions)")
         print("--check: nothing written")
         return 0
 

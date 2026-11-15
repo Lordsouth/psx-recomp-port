@@ -206,6 +206,31 @@ def fnv1a(b):
     return h
 
 
+def rebuild_like_c(sc, adds, skip):
+    """dw_roster.c's cup_rebuild, step for step: lists in (cup, list) order read from the script, the additions
+    [cup, list, n, ids...] inserted before each terminator (id `skip` dropped), identical lists once, packed from
+    the lowest list offset, u16s rewritten."""
+    refs, cups = decode(sc)
+    lists = {key: bytearray(cups[key[0]][key[1]]) for key in refs}
+    p = 0
+    while adds[p] != 0xFF:
+        cup, k, n = adds[p:p + 3]
+        ids = [t for t in adds[p + 3:p + 3 + n] if t != skip]
+        lists[(cup, k)][-1:-1] = bytes(ids)
+        p += 3 + n
+    out, at, placed = bytearray(sc), min(off for _, off in refs.values()), {}
+    for key in sorted(refs):
+        b = bytes(lists[key])
+        if b not in placed:
+            placed[b] = at
+            out[at:at + len(b)] = b
+            at += len(b)
+    assert at <= len(sc)
+    for key, (pos, _) in refs.items():
+        struct.pack_into("<H", out, pos, placed[bytes(lists[key])] - 2)
+    return bytes(out)
+
+
 def runtime_data(dg, info, roster, roster15):
     """-> one record per cup script: id, slot size, probe position and its stock/rebuilt values (stock and 1.5
     editions), whole-slot hashes, and the additions as bytes [cup, list, n, ids...]."""
@@ -221,14 +246,26 @@ def runtime_data(dg, info, roster, roster15):
             "the 1.5 additions are not the stock ones without the stock-only species")
         new, _ = relayout(sc, add)
         new15, _ = relayout(sc, add15)
+        blob = b"".join(bytes([cup, k, len(add[(cup, k)])]) + bytes(add[(cup, k)])
+                        for cup in range(N_CUPS) for k in (2, 3) if add[(cup, k)]) + bytes([0xFF])
+        # What dw_roster.c will build from these ids, over the owner's stock bytes: it must be the relayout, and it
+        # must decode to the stock lists with only roster ids added (diff() asserts both scripts, both editions).
+        for want, skip, ids in ((new, 0x100, roster), (new15, 114, roster15)):
+            got = rebuild_like_c(sc, blob, skip)
+            assert got == want, "script %d: the run-time rebuild differs from relayout()" % sn
+            diff(sc, got)
+            _, after = decode(got)
+            extra = set()
+            for cup in range(N_CUPS):
+                for k in (2, 3):
+                    extra |= set(members(after[cup][k])[len(members(cups[cup][k])):])
+            assert extra <= set(ids), "script %d: the rebuild adds non-roster ids %s" % (sn, sorted(extra - set(ids)))
         pos = refs[(0, 3)][0]
         probe = lambda b: struct.unpack_from("<H", b, pos)[0]
         assert len({probe(sc), probe(new), probe(new15)}) == (3 if roster != roster15 else 2), (
             "the probe word does not tell the layouts apart")
-        blob = b"".join(bytes([cup, k, len(add[(cup, k)])]) + bytes(add[(cup, k)])
-                        for cup in range(N_CUPS) for k in (2, 3) if add[(cup, k)])
         out.append(dict(id=sn, size=len(sc), probe_pos=pos, probe=(probe(sc), probe(new), probe(new15)),
-                        hash=(fnv1a(sc), fnv1a(new), fnv1a(new15)), adds=blob + bytes([0xFF])))
+                        hash=(fnv1a(sc), fnv1a(new), fnv1a(new15)), adds=blob))
     return out
 
 

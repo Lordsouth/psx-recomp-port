@@ -969,15 +969,18 @@ disjoint) serves a load of 213 or 102 itself, as the stock body would (the offse
 DG.SCN's cached start sector, read through the disc view so sector mods and 1.5's delta apply), checks the slot's
 FNV-1a hash against the generator's, writes it to the buffer and rebuilds the list area there: stock lists
 byte-identical, roster lists with the additions before the terminator, identical lists stored once (the six grade
-cups share one entry list), packed from the area's start, every offset rewritten. The include carries ids, two
-offsets and three hashes per script, nothing else. Every list read goes through `getScript(ACTIVE_MAP_SCRIPT)`, so the
+cups share one entry list), packed from the area's start, every offset rewritten. The include carries per script the
+slot size, the probe position, three probe values, three hashes and the added ids, nothing else; every generator
+run (`--check` too) rebuilds the lists in Python from exactly those ids over the disc's bytes and fails unless
+the result keeps every stock entry and adds only roster ids. Every list read goes through `getScript(ACTIVE_MAP_SCRIPT)`, so the
 cached path checks too: a probe word (cup 0's entry offset) tells stock, rebuilt and anything else apart in O(1); a
 stock buffer (the stock body loaded it, or a state from before the roster) is rebuilt there, a rebuilt one is left
 alone, so a savestate or rewind never double-applies. A slot that is not the stock one (another disc, another mod) is
 left as it is and counted (`roster.cups.unknown`): its cups keep the stock lists. The 1.5 edition registers the same
 filter under its own plugin id (`dw.roster15`, the 1.5 callback skips 114); `gen_roster_dw15.py` checks that 1.5's
 scripts 213/102 hash like stock and that 1.5's own species data gives the same additions. Script 213's lists then end
-at 0x2F06 of its 0x3000 slot (0x2EFE on 1.5) and 102's at 0x2D16. The rules are the stock ones
+at 0x2F08 of its 0x3000 slot (0x2F00 on 1.5) and 102's at 0x2D18 (0x2D10 on 1.5). A savestate taken with the
+other edition or with the roster off keeps that layout (counted as unknown) until the script is loaded again. The rules are the stock ones
 of GAME.md 15.3, asserted against the stock partners on every run: grade cups and cup 10 by level and id, the element
 cups by `special[0]`, the penalty lists of cups 0 and 1 by Ultimate (every roster Ultimate that may enter,
 so Gigadramon and MetalEtemon, stock-listed in Grade C without one, take the Grade C penalty too). The hand-picked cups 18-22 take each species by
@@ -994,7 +997,8 @@ through a 180-byte table in the arena at `0x32C0` (ids only, `vs_remap`): types 
 and the stock 115) to the sheet's Machinedramon cell, every other roster species to its `CUP_ANALOGUE` look-alike's
 portrait. The name beside it is the fighter's own. 13 words per site; the type-115 special case is skipped, since cell
 63 drawn as 66 is the same quad with an in-table palette. On 1.5 (no arena; both sites are byte-identical to stock
-there) the same 13 words clamp every type of 66 and up to 66, the Machinedramon cell. Not run in the game: versus mode needs two memory cards'
+there) the same 13 words clamp every type of 66 and up to 66, the Machinedramon cell, so 1.5's own Veemon (114)
+shows Machinedramon's portrait there (before, a garbage cell). Not run in the game: versus mode needs two memory cards'
 registrations, which the harness does not drive.
 
 Regenerate: `py -3.12 tools/gen_roster_mod.py` (`--check` verifies only).
