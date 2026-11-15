@@ -1737,7 +1737,7 @@ match (`VS__combatMain`, the fighters in `PARTNER_ENTITY` and `NPC_ENTITIES[0]`,
 **What it reads from a registration.** `registerBattleData` (`:5230-5245`, from the Save Machine for Memory Card
 Battle in Jijimon's house: map 205, confirm cell 85 runs DG script 165 section 0x55, routine 48 `openSaveMachine`,
 menus 0x3C register? / 0x3D slot / 0x3E confirm, then 0x3F-0x41 write the file) stores HP, MP, Offense, Defense, Speed,
-Brains, Discipline, the name, `digimonId` (+0x1C) and three move slots (+0x1D); +0x20..+0x3F (`unk20`) is never read.
+Brains, Discipline, the name, `digimonId` (+0x1C) and three move slots (+0x1D); +0x20..+0x3F (`unk20`) is never read [inferred: stock decomp, `include/dw/vs.h:31` has no named use; 1.5 by the versus runs].
 Versus mode uses the id for the model, `DIGIMON_DATA` (180 rows) and the two portrait renderers (68-entry palette
 tables, 15.5's kind of bug: 12.2 "Cup bracket sprites"), and the slots against that species' own move list. The game
 clear awards a Machinedramon registration (115, slots 0x2E/0x30/0x32) in slot 39 (`awardMachinedramonData`, `:5299`).

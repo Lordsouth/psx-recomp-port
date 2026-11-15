@@ -1018,7 +1018,7 @@ shows Machinedramon's portrait there (before, a garbage cell).
   another species' list). They are now written as stand-ins too ("Memory cards").
 Proven: portraits are judged from the GPU commands (cell and palette row against the table in RAM and the remap): with
 the roster, 114 drew cell 63 row 0 (Machinedramon), 105 Garurumon's cell, 112 Seadramon's, 68 and 113 Frigimon's, on
-the fighter screen and the name plates, every remap value at most 66; matches 114 v 114, 114 v 68, 105 v 114, 105 v 68,
+the fighter screen and the name plates, every remap value at most 66; matches 114 v 114, 105 v 114, 105 v 68 (and 114 v 68 on the build before the fix),
 112 v 113 played to a result with the fighters loaded as their own types, back to the title, cards unchanged.
 
 **Memory cards** (`dw_roster_saves.c`). A card names its partner by type, and with the roster off a type 63-114
@@ -1055,8 +1055,23 @@ back in both copies. Each remapped record carries its own proof in its unused ta
 read: +0x20 `RV`, the true id, its three slots, an FNV-1a of the record's first 0x20 bytes as written); it is restored
 at the sync, at `loadSavegame` and in Versus mode's buffer whenever that hash still matches, independent of the payload
 block, so a card saved again on the stock game keeps the registrations it did not touch, and one made again on the
-stock game (new stats and name) stays as made. The 40-bit mask of 114s is still written and read, for cards from the
+stock game (new stats and name) stays as made; one made again byte for byte the same (same species, stats, name and
+moves) is restored, being the same creature. The 40-bit mask of 114s is still written and read, for cards from the
 build before this.
+
+*Exit hooks are not gated by the plan.* `psx_mod_function_exit` calls every registered exit callback whether or not
+its feature is selected (`mod_runtime.cpp`, unlike entry hooks). The `MemCardSync` exit therefore acts only after a
+roster save hook of this same save ran (`g_pending`, set by the checksum entry hook, which the plan does gate, and
+cleared at the sync). Before, with the roster off, a stock save of a card carrying the block or tags had the true ids
+put back in `SAVE_FILE` afterwards, and the next stock save would have written them raw: run 2026-11-15, `off --card
+114` on the build without the gate read "card 115, SAVE_FILE 114/114" after the stock Sleep save.
+
+*Editions.* The stock edition alone stores a 114 (1.5 leaves its own 114, Veemon, alone), so 1.5 never brings a 114
+back: on roster-15 a stock Machinedramon registration stays 115 and keeps its tag, the partner and pstats 4/5 keep
+their stand-in, and the stock edition restores them later (`foreign()`). Restoring it as Veemon would have let the
+next 1.5 save write a raw 114 that the stock game cannot load. A stock Machinedramon *partner* continued and saved on
+1.5 is saved there as MetalGreymon (the block is rewritten for the live stand-in), so it does not come back on the
+stock edition [inferred, by code]; a registration does [run, below].
 At `loadSavegame` (`0x80112D84`), after the caller has checked the sum, the block is applied to both copies (the save
 machine later copies `saves[1]` over `saves[0]`) only if each hashes to the stored value: the card is then byte for
 byte what the roster save wrote, so nothing newer can be overwritten. Versus mode reads registrations from the card

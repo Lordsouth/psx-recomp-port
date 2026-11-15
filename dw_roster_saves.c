@@ -248,9 +248,18 @@ static int save_reg(const Edition* e, uint32_t r) {
     return 1;
 }
 
+/* A true value written by the stock edition that this edition must not bring back: 114 is the stock Machinedramon,
+ * and on 1.5 it is Veemon. Only the stock edition ever stores a 114 (1.5 leaves its own 114 alone), so on 1.5 the
+ * stand-in (115 for a registration, MetalGreymon for a partner) stays in play, and the card keeps the tag or block
+ * for the stock edition: restoring it as Veemon would let the next 1.5 save write a raw 114, which the stock game
+ * cannot load. */
+static int foreign(const Edition* e, uint8_t v) {
+    return !e->stock && v == 114;
+}
+
 /* The roster registration back from its tag, if the record is still as written. */
-static int restore_reg(uint32_t r) {
-    if (!rec_tagged(r) || psx_mod_read_word(r + R_TAG + 6) != rec_hash(r))
+static int restore_reg(const Edition* e, uint32_t r) {
+    if (!rec_tagged(r) || psx_mod_read_word(r + R_TAG + 6) != rec_hash(r) || foreign(e, psx_mod_read_byte(r + R_TAG + 2)))
         return 0;
     psx_mod_write_byte(r + R_ID, psx_mod_read_byte(r + R_TAG + 2));
     for (uint32_t i = 0; i < 3; i++)
@@ -258,10 +267,10 @@ static int restore_reg(uint32_t r) {
     return 1;
 }
 
-static uint32_t restore_regs_tagged(uint32_t base) {
+static uint32_t restore_regs_tagged(const Edition* e, uint32_t base) {
     uint32_t n = 0;
     for (uint32_t i = 0; i < 40; i++)
-        n += (uint32_t)restore_reg(base + i * 0x40);
+        n += (uint32_t)restore_reg(e, base + i * 0x40);
     return n;
 }
 
@@ -274,16 +283,27 @@ static int valid_block(uint32_t p) {
     return has_block(p) && psx_mod_read_word(p + B_HASH) == payload_hash(p);
 }
 
-/* Put the 114 registrations back in payload p, as the block's mask says. */
-static void restore_regs(uint32_t p) {
+/* Put the 114 registrations back in payload p, as the block's mask says (stock edition only: see foreign()). */
+static void restore_regs(const Edition* e, uint32_t p) {
+    if (!e->stock)
+        return;
     for (uint32_t i = 0; i < 40; i++)
         if (psx_mod_read_byte(p + B_REGS + i / 8) >> (i % 8) & 1)
             psx_mod_write_byte(p + P_REGS + i * 0x40 + 0x1C, 114);
 }
 
+/* The edition whose save hook ran for the card write now in progress, or NULL. Exit hooks fire whether or not
+ * their plugin's feature is selected (mod_runtime.cpp, psx_mod_function_exit), so the MemCardSync exit acts only
+ * after this edition's own checksum entry hook (which the plan does gate) ran in the same save: with the roster
+ * off, a stock save would otherwise have the true ids put back in SAVE_FILE, and the next stock save would write
+ * them raw. Held from the checksum call to the sync of one menu tick; a savestate taken in between resumes inside
+ * the same call chain. */
+static const Edition* g_pending = 0;
+
 static void save(const Edition* e, struct CPUState* cpu) {
     if (cpu->gpr[31] != DW_RA_SLEEP && cpu->gpr[31] != DW_RA_MACHINE)
         return;
+    g_pending = e;
     uint8_t regs[5] = {0, 0, 0, 0, 0}, any_reg = 0;
     uint32_t n_regs = 0;
     for (uint32_t i = 0; i < 40; i++) {
@@ -338,16 +358,26 @@ static void save(const Edition* e, struct CPUState* cpu) {
 static void after_write(struct CPUState* cpu) {
     if (cpu->gpr[31] != DW_RA_SLEEP_SYNC && cpu->gpr[31] != DW_RA_MACHINE_SYNC)
         return;
+    const Edition* e = g_pending;
+    g_pending = 0;
+    if (!e)                                                  /* no roster save ran: the roster is off */
+        return;
     if (has_block(S0))
-        restore_regs(S0);
+        restore_regs(e, S0);
     if (has_block(S1))
-        restore_regs(S1);
-    restore_regs_tagged(S0 + P_REGS);
-    restore_regs_tagged(S1 + P_REGS);
+        restore_regs(e, S1);
+    restore_regs_tagged(e, S0 + P_REGS);
+    restore_regs_tagged(e, S1 + P_REGS);
 }
 
-static void restore(uint32_t p) {
+static void restore(const Edition* e, uint32_t p) {
     uint8_t flags = psx_mod_read_byte(p + B_FLAGS);
+    if (foreign(e, psx_mod_read_byte(p + B_TYPE)))
+        flags &= (uint8_t)~F_PARTNER;
+    if (foreign(e, psx_mod_read_byte(p + B_PSTAT5)))
+        flags &= (uint8_t)~F_PSTAT5;
+    if (foreign(e, psx_mod_read_byte(p + B_PSTAT4)))
+        flags &= (uint8_t)~F_PSTAT4;
     if (flags & F_PARTNER) {
         psx_mod_write_word(p + P_TYPE, psx_mod_read_byte(p + B_TYPE));
         for (uint32_t i = 0; i < 4; i++)
@@ -357,16 +387,16 @@ static void restore(uint32_t p) {
         psx_mod_write_byte(p + P_PSTAT5, psx_mod_read_byte(p + B_PSTAT5));
     if (flags & F_PSTAT4)
         psx_mod_write_byte(p + P_PSTAT4, psx_mod_read_byte(p + B_PSTAT4));
-    restore_regs(p);
+    restore_regs(e, p);
 }
 
-static void load(struct CPUState* cpu) {
+static void load(const Edition* e, struct CPUState* cpu) {
     const uint32_t p = cpu->gpr[4];
     /* Both blocks are judged on the payloads as read, before anything changes them; registrations stand alone. */
     const int blk = has_block(p), valid = blk && valid_block(p);
     const uint32_t other = p == S0 ? S1 : p == S1 ? S0 : 0;
     const int other_valid = other && valid_block(other);
-    const uint32_t n = restore_regs_tagged(p + P_REGS) + (other ? restore_regs_tagged(other + P_REGS) : 0);
+    const uint32_t n = restore_regs_tagged(e, p + P_REGS) + (other ? restore_regs_tagged(e, other + P_REGS) : 0);
     if (n)
         psx_mod_counter_add("dw.roster.saves.regs_restored", n);
     if (!blk)
@@ -376,21 +406,21 @@ static void load(struct CPUState* cpu) {
         return;
     }
     if (other_valid)                                         /* judged before p changes, which it may equal */
-        restore(other);
-    restore(p);
+        restore(e, other);
+    restore(e, p);
     psx_mod_counter_add("dw.roster.saves.restored", 1);
 }
 
 /* countRegisteredDigimon(a0 = VS__REGISTERED_DIGIMON_BUFFER + player * 40 records), called right after Versus mode
  * copied the card's registrations there from whichever copy passed its checksum. */
-static void versus(struct CPUState* cpu) {
+static void versus(const Edition* e, struct CPUState* cpu) {
     const uint32_t buf = cpu->gpr[4];
     const uint32_t copies[2] = {S0, S1};
-    if (restore_regs_tagged(buf)) {                          /* tagged records carry their own proof */
+    if (restore_regs_tagged(e, buf)) {                          /* tagged records carry their own proof */
         psx_mod_counter_add("dw.roster.saves.versus", 1);
         return;
     }
-    for (uint32_t c = 0; c < 2; c++) {
+    for (uint32_t c = 0; c < 2 && e->stock; c++) {          /* the 114 mask: stock edition only */
         uint32_t p = copies[c], o = 0;
         if (!valid_block(p))
             continue;
@@ -409,17 +439,20 @@ static void versus(struct CPUState* cpu) {
 /* A hook takes no argument and a plugin id holds one hook per address, so each edition has its own entries. */
 static void save_stock(struct CPUState* cpu, uint32_t address) { (void)address; save(&k_stock, cpu); }
 static void save_dw15(struct CPUState* cpu, uint32_t address) { (void)address; save(&k_dw15, cpu); }
-static void load_any(struct CPUState* cpu, uint32_t address) { (void)address; load(cpu); }
-static void sync_stock(struct CPUState* cpu, uint32_t address) { (void)address; after_write(cpu); }
-static void versus_stock(struct CPUState* cpu, uint32_t address) { (void)address; versus(cpu); }
+static void load_stock(struct CPUState* cpu, uint32_t address) { (void)address; load(&k_stock, cpu); }
+static void load_dw15(struct CPUState* cpu, uint32_t address) { (void)address; load(&k_dw15, cpu); }
+static void sync_any(struct CPUState* cpu, uint32_t address) { (void)address; after_write(cpu); }
+static void versus_stock(struct CPUState* cpu, uint32_t address) { (void)address; versus(&k_stock, cpu); }
+static void versus_dw15(struct CPUState* cpu, uint32_t address) { (void)address; versus(&k_dw15, cpu); }
 
 PSX_MOD_CONSTRUCTOR(dw_roster_saves_register) {
     psx_mod_register_function_entry_plugin("dw.roster", DW_CHECKSUM, save_stock);
-    psx_mod_register_function_entry_plugin("dw.roster", DW_LOAD_SAVEGAME, load_any);
-    psx_mod_register_function_exit_plugin("dw.roster", DW_MEMCARD_SYNC, sync_stock);
+    psx_mod_register_function_entry_plugin("dw.roster", DW_LOAD_SAVEGAME, load_stock);
+    /* One exit registration serves both editions: exit hooks fire for every plan, and after_write acts only after
+     * a roster save hook of either edition ran (g_pending). */
+    psx_mod_register_function_exit_plugin("dw.roster", DW_MEMCARD_SYNC, sync_any);
     psx_mod_register_function_entry_plugin("dw.roster", DW_COUNT_REGS, versus_stock);
     psx_mod_register_function_entry_plugin("dw.roster15", DW_CHECKSUM, save_dw15);
-    psx_mod_register_function_entry_plugin("dw.roster15", DW_LOAD_SAVEGAME, load_any);
-    psx_mod_register_function_exit_plugin("dw.roster15", DW_MEMCARD_SYNC, sync_stock);
-    psx_mod_register_function_entry_plugin("dw.roster15", DW_COUNT_REGS, versus_stock);
+    psx_mod_register_function_entry_plugin("dw.roster15", DW_LOAD_SAVEGAME, load_dw15);
+    psx_mod_register_function_entry_plugin("dw.roster15", DW_COUNT_REGS, versus_dw15);
 }
