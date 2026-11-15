@@ -2452,6 +2452,19 @@ texture banks and `psx_mod_renderer_accelerated` (§5.0h).
 
 ## 9. Known issues and open work
 
+* **A battle can halt at its result box after a one-off write of the partner's whole
+  stat and HP/MP blocks. OPEN, cause unknown, older than 2026-11-14.** Seen in the
+  2026-11-14 integration run, with no mods ticked and on a build from before that
+  day's work alike: writing Offense, Defense, Speed and Brains to 999 and max HP,
+  max MP, HP and MP to 9999 once before a wild fight, then winning by an ordinary
+  kill, ends in `FAIL-FAST unknown dispatch addr=0x8006306C ra=0x800EDD1C`
+  (`renderBitBox` calling `BTL_renderBattleEndText` while the bytes there are not
+  code) [run: 5 of 5 on the merged build, 3 of 3 on the older one]. Every smaller
+  subset of those writes passed, one run each, and so did the port's max-stats
+  cheat, which writes the same values every frame (5 runs). Not shown reachable in
+  play; the mechanism was not investigated. `tools/field_drive.py`'s `Field.partner`
+  writes the same bytes during a fight and `Field.win` ends it by a run-off, which
+  is why the repo's own tests never met it.
 * **W2 UI counter-squash does not work** (§5.2). Dormant.
 * ~~Widescreen's entry hooks never ran.~~ **CLOSED (0.4.0)**: the framework
   update made entry hooks plan-selected (§2.2), and the widescreen manifest

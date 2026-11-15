@@ -74,13 +74,32 @@ for Tankmon, on Digimon World 1.5 too.
 * Tournaments were run in this port for the first time: a full Grade D cup, from
   the Arena Lobby desk to the prize, and a loss. On the cup bracket Gigadramon now
   shows its own portrait instead of an empty cell.
-* The Digimon the roster adds after Myotismon cannot enter cups. The arena's entry
-  lists predate them, and this update does not change that.
+* Every Digimon the roster adds can now register for arena cups by the same rules as
+  the original partners: the grade cups by level, the Version 0 Cup, the element cups
+  by main element, and the Dino, Wing, Animal, Human and Insect cups by a close
+  original look-alike. The original Digimon's entries are unchanged. It works on
+  Digimon World 1.5 too. Machinedramon's name now shows on the arena banner.
+* Versus mode no longer reads past its portrait table for a roster partner. This
+  fix was checked in the code only: versus mode was not played.
 
-**Hidden Glade: a reward for the secret fight.** Beating the glade's boss for the
-first time pays 3 Omni Disks, once. With a full bag it takes nothing and says so, and
-the reward waits for your next win. Later wins are as before. It works on Digimon
-World 1.5 too.
+**Hidden Glade: a big reward for the secret fight.** Beating the glade's boss for
+the first time pays a haul, once: five of each of the six stat chips, five
+Sup.recovery, five Sup.restore and 60,000 bits. It is all or nothing. If the bag
+lacks room it pays nothing and says how many free slots it needs; the same goes for
+a stack of one of those items that would pass 99, or a purse too full to hold the
+bits. The haul then waits for your next win. Later wins are as before. It works on
+Digimon World 1.5 too.
+
+**Expanded Roster: saves work with the mod on or off.** A game saved with one of
+the new Digimon as partner used to break on the original game: the partner was
+invisible and nameless, and the game soon stopped taking input. Now the card names
+a classic Digimon of the same level in its place, with moves it can use.
+Machinedramon is saved as MetalGreymon, most others as the Digimon they were
+modelled on. Turn the roster back on and Continue, and your real partner returns
+exactly as you left it. If you saved again without the roster in between, the
+classic partner you went on with stays. Sukamon's cure, a tournament entry and a
+Battle Mode registration of Machinedramon are handled the same way. It works on
+Digimon World 1.5 too.
 
 **Widescreen: a recruit's "X joins the city!" no longer freezes the game.**
 A player reported "Agumon joins the city!" staying on screen for good: the world

@@ -126,10 +126,11 @@ Click **Mods** in the launcher. Everything is off by default — including wides
 | **Fast Loading** | Shorter loads. **Off by default and best left off on this game** -- it speeds up real time whenever it thinks a load is happening, and on Digimon World it stays engaged, running the whole game at 4x. | Not checked |
 
 Turning a mod off restores the original game exactly — every change is a guarded
-patch, nothing is permanent. Two things a save can carry across, though: a save
-made with **Expanded Roster** on expects it to stay on (see below), and if you
-raised one of the new Digimon on 0.3.3 or earlier, the flags that recorded it
-stay set. Neither breaks anything.
+patch, nothing is permanent. A save made with **Expanded Roster** on also loads
+with it off: the card stands a classic Digimon of the same level in for a new one,
+and turning the mod back on brings your partner back (see below). One thing a save
+can carry across: if you raised one of the new Digimon on 0.3.3 or earlier, the
+flags that recorded it stay set. That breaks nothing.
 
 ### Digimon World 1.5
 
@@ -182,8 +183,10 @@ own; no game data is in the mod.
   image the game will not start while it is ticked: untick it to get back in.
 * **It works with Digimon World 1.5**: with 1.5 ticked it runs a 1.5 edition by
   itself, the same map and fight written where 1.5 keeps the files it moved.
-* **Beating the secret fight for the first time pays 3 Omni Disks**, once. With a
-  full bag it takes nothing and says so, and the reward waits for your next win.
+* **Beating the secret fight for the first time pays a big haul**, once: five of
+  each stat chip, five Sup.recovery, five Sup.restore and 60,000 bits. Without bag
+  room it pays nothing and says how many slots to free; the haul waits for your
+  next win.
 * It is small for now: it has no other Digimon.
 
 ### What is still rough in Widescreen
@@ -309,9 +312,16 @@ Machinedramon is the demanding one: 5000 HP and MP, 500 Offense and Defense,
 400 Speed and Brains, at most 5 care mistakes, 100 discipline, 50 battles won
 and 35 techniques learned.
 
-One caveat worth understanding: a save created with this mod on expects it to
-stay on. If you turn it off, that save's partner data no longer lines up.
-Either keep it enabled for that playthrough, or start a separate file.
+Saves work with this mod on or off, on Digimon World 1.5 too. If your partner is
+one of the new Digimon, the memory card names a classic Digimon of the same level in
+its place (Machinedramon is saved as MetalGreymon), so the save loads on the
+original game. Turn the mod back on and your real partner returns exactly as you
+left it, unless you saved again without the mod in between: then the classic
+partner you went on with stays.
+
+The new Digimon can enter the arena's cups by the same rules as the original
+partners. For the hand-picked type cups (Dino, Wing, Animal, Human, Insect) each
+follows a close original look-alike.
 
 **Cheats:** tick **Cheats** in the Mods panel and choose from the list — every
 code is there, grouped by what it affects. Turning that on hands the whole cheat
