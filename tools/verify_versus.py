@@ -21,6 +21,12 @@ match --p1 N --p2 M   N's card in slot 1, M's in slot 2. Title -> Battle Mode ->
       type); the round result (VS_STATE_WINS/LOSSES); the title menu afterwards; both card files byte for byte
       unchanged. --win N (default 1): 8 s into the match the other fighter is set to 1 HP so it ends in seconds (a
       test poke, as the cup tool does); 0 lets the AI fight it out.
+      card --from N --slot0 K: start from card N (no CROSS mash: a Save Machine card Continues on the machine's cell)
+      and register into slots K, K+1, ...; card.json keeps every slot's registration as made.
+resave --card N --name M   Continue from N's card in this edition's folder (no CROSS mash), walk off any confirm cell,
+      check SAVE_FILE's registrations after the load (with the roster: as registered, but a 114 stays 115 on 1.5),
+      Save Anywhere, and check that the card names only stock-safe species (115, the stand-ins) with their tags.
+      The cross-edition rule: card rA (stock roster, 114) -> resave --dw15 --mods roster -> match --mods off.
 State per run: --mods off (no mods at all) | roster (Expanded Roster); --dw15 runs on Digimon World 1.5 (off = plain
 1.5, roster = roster-15; cards in the dw15 subfolder). Run folders: <out>/runs/<mode>_<port>/ (log, screenshots).
 
@@ -39,6 +45,11 @@ The runs of task "versus" (C:/vv as --out):
     card --name qA --types 105,112,113 --mods roster --dw15      1.5 (roster-15)
     card --name qB --types 68,112 --mods roster --dw15
     match --p1 qA --p2 qB --dw15 --mods roster | off --pick 0,0 | 1,1
+Fix round 1:
+    resave --card rA --name rA15 --dw15 --mods roster            stock card through roster-15 and back
+    match --p1 rA15 --p2 rB --mods off --pick 0,0 | --mods roster --dw15 (p2 qB) | --mods roster
+    card --from rB --name rBs --types 3 --slot0 1 --mods off     re-register over a tagged slot on stock
+    match --p1 rA --p2 rBs --mods roster --pick 0,1
 """
 import argparse
 import hashlib
@@ -59,6 +70,8 @@ import roster_cups                                          # noqa: E402
 from verify_roster_saves import mapping                     # noqa: E402
 
 NO_MODS = "format_version = 2\n"
+SAVE_ANYWHERE = ('\n[[package]]\nid = "dw.vanilla.qol"\nversion = "1.0.0"\n\n'
+                 '[[feature]]\npackage_id = "dw.vanilla.qol"\nid = "save-anywhere"\nenabled = true\n')
 DW15_ONLY = ('format_version = 2\n\n[[package]]\nid = "dw.1_5"\nversion = "1.0.0"\n\n'
              '[[feature]]\npackage_id = "dw.1_5"\nid = "dw15"\nenabled = true\n')
 STATES = {(False, "off"): NO_MODS, (False, "roster"): ROSTER_STATE, (True, "off"): DW15_ONLY,
@@ -132,7 +145,10 @@ def portraits(entries, tpage_x=0x380):
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=("card", "match"))
+    ap.add_argument("mode", choices=("card", "match", "resave"))
+    ap.add_argument("--card", help="resave: the card to Continue from (a name under --out)")
+    ap.add_argument("--from", dest="from_card", help="card: start from this card (a name under --out), not the seed")
+    ap.add_argument("--slot0", type=int, default=0, help="card: the first slot to register into")
     ap.add_argument("--name")
     ap.add_argument("--types", default="")
     ap.add_argument("--p1")
@@ -149,24 +165,28 @@ def main():
     a = ap.parse_args()
     out = os.path.abspath(a.out or os.path.join(a.build, "versus"))
     sub = "dw15" if a.dw15 else ""
-    tag = a.name if a.mode == "card" else "%s_%s_%s%s_%s" % (a.p1, a.p2, a.mods, "_15" if a.dw15 else "",
+    tag = a.name if a.mode in ("card", "resave") else "%s_%s_%s%s_%s" % (a.p1, a.p2, a.mods, "_15" if a.dw15 else "",
                                                              a.pick.replace(",", ""))
     run = os.path.join(out, "runs", "%s_%d" % (a.mode, a.port))
     cards = os.path.join(run, "cards")
     card_dir = os.path.join(cards, sub) if sub else cards
     shutil.rmtree(run, ignore_errors=True)
     os.makedirs(card_dir)
-    if a.mode == "card":
+    if a.mode == "card" and a.from_card:
+        shutil.copy(os.path.join(out, a.from_card, "card1.mcd"), os.path.join(card_dir, "card1.mcd"))
+    elif a.mode == "card":
         if not seed_cards(a.seed, card_dir):
             print("no card to seed from at %s" % a.seed, file=sys.stderr)
             return 2
+    elif a.mode == "resave":
+        shutil.copy(os.path.join(out, a.card, "card1.mcd"), os.path.join(card_dir, "card1.mcd"))
     else:
         for n, who in (("card1.mcd", a.p1), ("card2.mcd", a.p2)):
             shutil.copy(os.path.join(out, who, "card1.mcd"), os.path.join(card_dir, n))
     before = {n: hashlib.sha1(open(os.path.join(card_dir, n), "rb").read()).hexdigest()
               for n in ("card1.mcd", "card2.mcd") if os.path.exists(os.path.join(card_dir, n))}
     with open(os.path.join(a.build, "mods", "state.toml"), "w") as fh:
-        fh.write(STATES[(a.dw15, a.mods)])
+        fh.write(STATES[(a.dw15, a.mods)] + (SAVE_ANYWHERE if a.mode == "resave" else ""))
     fails = []
 
     def check(cond, msg):
@@ -224,6 +244,8 @@ def main():
     try:
         if a.mode == "card":
             card(a, g, f, check, shot, press, until, menu, rd, u8, card_dir, out)
+        elif a.mode == "resave":
+            resave(a, g, f, check, rd, card_dir, out, counters)
         else:
             match(a, g, f, check, shot, press, until, menu, rd, u8, i16, card_dir, out, run, alive, counters)
         check(alive() is None, "still running")
@@ -240,11 +262,14 @@ def main():
 
 
 def card(a, g, f, check, shot, press, until, menu, rd, u8, card_dir, out):
-    """Registrations made through the Save Machine, one per type, in slots 0, 1, ..."""
-    f.enter()
+    """Registrations made through the Save Machine, one per type, in slots --slot0, --slot0 + 1, ..."""
+    if a.from_card:          # a Save Machine card: Continue puts the tamer on the machine's cell, so no CROSS mash
+        g.enter_game()
+    else:
+        f.enter()
     g.settle(timeout_frames=1800)
     types = [int(t) for t in a.types.split(",") if t]
-    for slot, t in enumerate(types):
+    for slot, t in enumerate(types, a.slot0):
         if g.partner_type != t and not check(force(g, t), "partner evolved to %d" % t):
             continue
         fresh(g)
@@ -318,7 +343,10 @@ def card(a, g, f, check, shot, press, until, menu, rd, u8, card_dir, out):
     os.makedirs(d)
     shutil.copy(os.path.join(card_dir, "card1.mcd"), d)
     cr = card_regs(os.path.join(d, "card1.mcd"))
-    cr.update(types=types, mods=a.mods, dw15=a.dw15)
+    made = json.load(open(os.path.join(out, a.from_card, "card.json")))["types"] if a.from_card else []
+    made = made + [0] * (a.slot0 + len(types) - len(made))
+    made[a.slot0:a.slot0 + len(types)] = types
+    cr.update(types=made, mods=a.mods, dw15=a.dw15, from_card=a.from_card)
     json.dump(cr, open(os.path.join(d, "card.json"), "w"), indent=1)
     print("CARD %s: %s" % (a.name, cr), flush=True)
     if a.mods == "roster":
@@ -326,13 +354,66 @@ def card(a, g, f, check, shot, press, until, menu, rd, u8, card_dir, out):
         # edition, 63-113 -> the partner stand-in), the truth in the record's unused tail
         stand = mapping(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), a.dw15)
         raw = card_records(os.path.join(d, "card1.mcd"))
-        for slot, t in enumerate(types):
+        for slot, t in enumerate(types, a.slot0):
             r = raw[slot]
             want = 115 if t == 114 and not a.dw15 else stand.get(t, t)
             tag = r[0x20:0x26]
             check(r[0x1C] == want and (want == t or tag[:3] == bytes([0x52, 0x56, t])),
                   "card slot %d: registered %d, the card names %d (want %d), tail %s"
                   % (slot, t, r[0x1C], want, tag.hex()))
+
+
+def resave(a, g, f, check, rd, card_dir, out, counters):
+    """Continue from another card (copied into this edition's card folder), check what the load put in SAVE_FILE,
+    save with Save Anywhere, and keep the card as --name. The card's registrations as made (card.json "types") travel
+    with it. Used for the cross-edition rule: a stock roster card through roster-15 and back."""
+    src = json.load(open(os.path.join(out, a.card, "card.json")))
+    # A card made by `card` was saved by the Save Machine, so Continue puts the tamer back on its confirm cell: a
+    # stray CROSS there registers the partner over slot 0 and saves. So no CROSS mash (Game.enter_game stops at
+    # the first sign of a partner), and the tamer walks off the cell before anything else.
+    g.enter_game()
+    g.settle(timeout_frames=1800)
+    coll = rd(MAP_COLLISION, 10000)
+    cell = lambda: (lambda q: coll[(int(q[0] / 100) + 50 - (q[0] < 0)) + (50 - int(q[2] / 100) - (q[2] > 0)) * 100]
+                    if q else 0)(f.pos())
+    for d in ("right", "up", "left", "down") * 3:
+        if not 80 <= cell() < 110:
+            break
+        g.route("30:%s,10:none" % d)
+    check(not 80 <= cell() < 110, "the tamer is off any confirm cell (collision %d)" % cell())
+    check("dw.roster.saves.regs" not in counters() and "dw.roster.saves.remapped" not in counters(),
+          "nothing was saved while entering the game (counters %s)" % counters())
+    roster = a.mods == "roster"
+    live = [rd(SAVE_FILE_S0 + 0x500 + i * 0x40 + 0x1C, 1)[0] for i in range(len(src["types"]))]
+    card_ids = [r[1] for r in src["s0"]]
+    want = [115 if a.dw15 and t == 114 else t for t in src["types"]] if roster else card_ids
+    print("LOADED %s on %s/%s: SAVE_FILE registrations %s (card %s, registered %s); counters %s" % (
+        a.card, "1.5" if a.dw15 else "stock", a.mods, live, card_ids, src["types"], counters()), flush=True)
+    check(live == want, "after the load SAVE_FILE holds %s (want %s)" % (live, want))
+    before = open(os.path.join(card_dir, "card1.mcd"), "rb").read()
+    f.save_here(card_dir, out, lambda *x: None)
+    check(open(os.path.join(card_dir, "card1.mcd"), "rb").read() != before, "Save Anywhere wrote the card")
+    live2 = [rd(SAVE_FILE_S0 + 0x500 + i * 0x40 + 0x1C, 1)[0] for i in range(len(src["types"]))]
+    for base, nm in ((SAVE_FILE_S0, "copy 0"), (SAVE_FILE_S0 + 0xF00, "copy 1")):
+        print("after the save, SAVE_FILE %s record 0: %s; counters %s" % (
+            nm, rd(base + 0x500, 0x2A).hex(), counters()), flush=True)
+    check(live2 == want, "after the save SAVE_FILE still holds %s (%s)" % (want, live2))
+    d = os.path.join(out, a.name)
+    shutil.rmtree(d, ignore_errors=True)
+    os.makedirs(d)
+    shutil.copy(os.path.join(card_dir, "card1.mcd"), d)
+    cr = card_regs(os.path.join(d, "card1.mcd"))
+    cr.update(types=src["types"], mods=a.mods, dw15=a.dw15, from_card=a.card)
+    json.dump(cr, open(os.path.join(d, "card.json"), "w"), indent=1)
+    raw = card_records(os.path.join(d, "card1.mcd"))
+    stand = mapping(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), False)
+    for slot, t in enumerate(src["types"]):
+        r = raw[slot]
+        w = 115 if t == 114 else stand.get(t, t)       # what any card must name: a species the stock game draws
+        check(r[0x1C] == w and (w == t or r[0x20:0x23] == bytes([0x52, 0x56, t])),
+              "card slot %d after the save: names %d (want %d, stock-safe), tail %s" % (slot, r[0x1C], w,
+                                                                                       r[0x20:0x26].hex()))
+    print("CARD %s: %s" % (a.name, cr), flush=True)
 
 
 def walk_to(g, f, target, done, steps=120):
@@ -412,8 +493,10 @@ def match(a, g, f, check, shot, press, until, menu, rd, u8, i16, card_dir, out, 
     for who, got, c in (("player 1", got1, p1), ("player 2", got2, p2)):
         ids = [r[1] for r in got]
         if roster:
-            check(ids == c["types"], "%s's registrations in Versus mode's buffer read as registered: %s (card %s, "
-                  "registered %s)" % (who, ids, [r[1] for r in c["s0"]], c["types"]))
+            # on 1.5 a 114 tag is the stock edition's Machinedramon (1.5 never tags its own 114, Veemon): it stays 115
+            want = [115 if a.dw15 and t == 114 else t for t in c["types"]]
+            check(ids == want, "%s's registrations in Versus mode's buffer read as registered: %s (want %s, card %s, "
+                  "registered %s)" % (who, ids, want, [r[1] for r in c["s0"]], c["types"]))
         else:
             check(ids == [r[1] for r in c["s0"]], "%s's registrations in Versus mode's buffer are the card's: %s"
                   % (who, ids))

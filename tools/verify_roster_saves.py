@@ -159,6 +159,11 @@ def main():
                     name=p[0x68:0x7C].hex(), lives=p[0x7C], para=g.d.read(PARA, 0x84).hex(),
                     triggers=triggers().hex(), pstats=g.d.read(script_state() + 100, 35).hex())
 
+    def reg_stand(t):
+        """What dw_roster_saves.c writes to the card for a registration of t: 115 for 114 on the stock edition,
+        the partner stand-in for 63-113, t itself otherwise (1.5's 114 is Veemon)."""
+        return 115 if t == 114 and not a.dw15 else stand.get(t, t)
+
     def regs(base):
         return [g.d.read(base + P_REGS + i * 0x40 + 0x1C, 1)[0] for i in range(40)]
 
@@ -322,11 +327,14 @@ def main():
         """Open (want) or close the field menu, whatever state it is in. Triangle toggles it, and a press right after a battle
         can be lost, so one blind press per step leaves the menu the wrong way round for the steps after it: press until
         TRI_STATE (-1 while the menu is open) shows the wanted state."""
+        # TRI_STATE can stay -1 after the menu closes (seen on cards 68/105/s68 after the battle, 2026-11-15), so
+        # "open" is TRI_STATE -1 with the tamer in the menu state (6); closed, the tamer is back in state 0
+        is_open = lambda: i32(TRI_STATE) == -1 and g.tamer_state == 6
         for _ in range(6):
-            if (i32(TRI_STATE) == -1) == want:
+            if is_open() == want:
                 return True
             g.route("6:triangle,40:none")
-            if f.wait_for(lambda: (i32(TRI_STATE) == -1) == want, 2):
+            if f.wait_for(lambda: is_open() == want, 2):
                 return True
         return False
 
@@ -334,8 +342,18 @@ def main():
         """The stock game's only save: sleep. The partner is made sleepy (HOUR at its sleepy hour), Sleep is
         chosen from the field menu, and "Save and go to sleep" writes the card (menu 0x2B)."""
         sleepy_h = struct.unpack("<h", g.d.read(PARA + 4, 2))[0]
+        check(set_menu(False), "the field menu is closed, so the clock runs (TRI_STATE %d, tamer %d)" % (i32(TRI_STATE), g.tamer_state))
         g.d.write_bytes(struct.pack("<hh", sleepy_h, 0), HOUR)
         f.wait_for(lambda: g.para_condition & 1, 10)
+        if not g.para_condition & 1:     # some species were seen to miss a clock set straight to the hour: let the game
+            g.d.write_bytes(struct.pack("<hh", (sleepy_h - 1) % 24, 59), HOUR)    # cross into it by itself
+            f.wait_for(lambda: g.para_condition & 1, 20)
+        if not g.para_condition & 1:
+            print("NOT SLEEPY: hour %s, partner state %d, tamer state %d, game state %d, TRI_STATE %d, menu %d, "
+                  "condition 0x%X, PartnerPara +00..+10 %s" % (
+                      struct.unpack("<hh", g.d.read(HOUR, 4)), g.partner_state, g.tamer_state, f.gstate(),
+                      i32(TRI_STATE), i32(CURRENT_MENU), g.para_condition, g.d.read(PARA, 0x10).hex()), flush=True)
+            g.artifact_shot(os.path.join(out, "not_sleepy_%d.png" % a.port))
         if not check(g.para_condition & 1, "partner sleepy at hour %d, so Sleep is offered" % sleepy_h):
             return None
         before = open(os.path.join(card_dir, "card1.mcd"), "rb").read()
@@ -433,10 +451,11 @@ def main():
                 print("SAVED %s: card type %d moves %s pstat4 %d pstat5 %d reg0 %d spare %s; live pstat5 %d" % (
                     spec, pf["type"], pf["moves"], pf["pstat4"], pf["pstat5"], pf["regs"][0], pf["spare"], pstat(5)),
                     flush=True)
-                if a.register and t == 114 and not a.dw15:
-                    check(pf["regs"][0] == 115 and regs(S0)[0] == 114 and regs(S1)[0] == 114,
-                          "registration of 114: the card says %d, SAVE_FILE still 114/114 (read %d/%d)"
-                          % (pf["regs"][0], regs(S0)[0], regs(S1)[0]))
+                if a.register and reg_stand(g.partner_type) != g.partner_type:
+                    rt = g.partner_type
+                    check(pf["regs"][0] == reg_stand(rt) and regs(S0)[0] == rt and regs(S1)[0] == rt,
+                          "registration of %d: the card says %d (want %d), SAVE_FILE still %d/%d (read %d/%d)"
+                          % (rt, pf["regs"][0], reg_stand(rt), rt, rt, regs(S0)[0], regs(S1)[0]))
         elif a.mode == "off":
             dead = alive()
             saved = json.load(open(os.path.join(out, card_name, "saved.json")))
@@ -454,9 +473,11 @@ def main():
                 check(pstat(n) not in stand, "pstat %d (%d) names no roster species" % (n, pstat(n)))
             if card_name.split("_")[0].endswith("t"):
                 check(pstat(4) == t, "the tournament entry's species (pstat 4) is the partner's, %d, so it stays" % pstat(4))
-            if saved.get("registered") and saved["record"]["type"] == 114 and not a.dw15:
-                check(regs(S0)[0] == 115 and regs(S1)[0] == 115,
-                      "the registration of 114 reads 115, the stock Machinedramon (%d/%d)" % (regs(S0)[0], regs(S1)[0]))
+            rt = saved["record"]["type"]
+            if saved.get("registered") and reg_stand(rt) != rt:
+                check(regs(S0)[0] == reg_stand(rt) and regs(S1)[0] == reg_stand(rt),
+                      "the registration of %d reads %d, a stock species, in both copies (%d/%d)"
+                      % (rt, reg_stand(rt), regs(S0)[0], regs(S1)[0]))
             st = bytes.fromhex(rec["stats"])
             ok, bad = moves_ok(t, st)
             dd = g.d.read(e["dd"] + t * 52 + 35, 16)
@@ -472,7 +493,7 @@ def main():
             won, row, bits = won_battle()
             check(won and alive() is None, "a won battle in room %s (bits +%d)" % (row, bits))
             check(set_menu(True), "the field menu opens")
-            set_menu(False)
+            check(set_menu(False), "the field menu closes again (TRI_STATE %d, tamer %d)" % (i32(TRI_STATE), g.tamer_state))
             f.wait_for(lambda: idle(g), 10)
             if pstat(5):
                 before = triggers()
@@ -489,6 +510,12 @@ def main():
             if s0 is not None:
                 pf = payload_fields(s0)
                 check(pf["type"] == g.partner_type, "the stock save holds the stock partner %d" % pf["type"])
+                if saved.get("registered") and reg_stand(rt) != rt:
+                    # with the roster off nothing may put the true id back in SAVE_FILE after the write, or the
+                    # next stock save would write it raw (an exit hook fires whatever the plan, mod_runtime.cpp)
+                    check(pf["regs"][0] == reg_stand(rt) and regs(S0)[0] == reg_stand(rt) and regs(S1)[0] == reg_stand(rt),
+                          "after the stock save the card and both copies still name %d (card %d, SAVE_FILE %d/%d)"
+                          % (reg_stand(rt), pf["regs"][0], regs(S0)[0], regs(S1)[0]))
                 keep(card_name + "_off", record(), s0)
             check(alive() is None, "still running")
         elif a.mode == "on":
@@ -506,14 +533,26 @@ def main():
                       % saved["record"]["type"])
                 check(rec["stats"][:40] == card[0x270:0x284].hex(), "its base Stats and moves are the stock save's (%s; card %s)"
                       % (rec["stats"][:40], card[0x270:0x284].hex()))
+                first = json.load(open(os.path.join(out, card_name[:-4], "saved.json")))
+                rt = first["record"]["type"]
+                if first.get("registered") and reg_stand(rt) != rt:
+                    # the stock save kept the record's tail: its tag brings the registration back (no payload hash)
+                    tail = card[P_REGS + 0x20:P_REGS + 0x23]
+                    check(card[P_REGS + 0x1C] == reg_stand(rt) and tail == bytes([0x52, 0x56, rt]),
+                          "the stock re-save kept the stand-in %d and the tag %s in the record's tail"
+                          % (card[P_REGS + 0x1C], tail.hex()))
+                    check(regs(S0)[0] == rt and regs(S1)[0] == rt and cnt.get("dw.roster.saves.regs_restored", 0) >= 1,
+                          "the registration of %d is back in both copies after the stock re-save (%d/%d, counters %s)"
+                          % (rt, regs(S0)[0], regs(S1)[0], cnt))
             else:
                 check(cnt.get("dw.roster.saves.restored", 0) >= 1, "the load hook restored the block (counters %s)" % cnt)
                 for k in ("type", "stats", "learned", "name", "lives", "triggers", "pstats"):
                     check(rec[k] == saved["record"][k], "%s restored exactly (%s)" % (k, rec[k] if k != "triggers" else "100 bytes"))
                 para_check(rec, saved["record"]["para"])
-                if saved.get("registered") and saved["record"]["type"] == 114 and not a.dw15:
-                    check(regs(S0)[0] == 114 and regs(S1)[0] == 114,
-                          "the registration reads 114 again in both copies (%d/%d)" % (regs(S0)[0], regs(S1)[0]))
+                rt = saved["record"]["type"]
+                if saved.get("registered") and reg_stand(rt) != rt:
+                    check(regs(S0)[0] == rt and regs(S1)[0] == rt,
+                          "the registration reads %d again in both copies (%d/%d)" % (rt, regs(S0)[0], regs(S1)[0]))
         elif a.mode == "mkstock":
             # The seed is a fresh file (mainState 0): Continue plays the intro, which gives the partner. Save it on
             # the stock game, so case 3 starts from a card the stock game wrote. The intro's script settles first.
@@ -527,7 +566,7 @@ def main():
             s_card = card_payload(card_dir)
             rec = record()
             pf = payload_fields(s_card)
-            check(rec["type"] == pf["type"] and 1 <= rec["type"] <= 61,
+            check(rec["type"] == pf["type"] and (1 <= rec["type"] <= 61 or a.dw15 and rec["type"] == 114),   # 1.5: Veemon is its own
                   "a stock card loads its stock partner %d unchanged with the roster on" % rec["type"])
             check(rec["stats"] == s_card[0x270:0x290].hex(), "Stats as on the card")
             para_check(rec, s_card[0x1E0:0x264].hex())
